@@ -1,0 +1,13 @@
+import { mkdir, readFile, writeFile, copyFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+const root = new URL('.', import.meta.url);
+const dist = new URL('./dist/', root);
+for (const dir of ['src/', 'vendor/three/', 'vendor/addons/controls/', 'vendor/addons/environments/', 'vendor/addons/objects/']) await mkdir(new URL(dir, dist), { recursive: true });
+let html = await readFile(new URL('index.html', root), 'utf8');
+html = html.replace('/node_modules/three/build/three.module.js', '/vendor/three/three.module.js').replace('/node_modules/three/examples/jsm/', '/vendor/addons/');
+await writeFile(new URL('index.html', dist), html);
+for (const name of ['main.js', 'style.css']) await copyFile(new URL('src/' + name, root), new URL('src/' + name, dist));
+for (const name of ['three.module.js', 'three.core.js']) await copyFile(new URL('node_modules/three/build/' + name, root), new URL('vendor/three/' + name, dist));
+for (const name of ['controls/OrbitControls.js', 'environments/RoomEnvironment.js', 'objects/Reflector.js']) await copyFile(new URL('node_modules/three/examples/jsm/' + name, root), new URL('vendor/addons/' + name, dist));
+await copyFile(new URL('node_modules/three/LICENSE', root), new URL('vendor/three/LICENSE.txt', dist));
+console.log('Static Site ready: ' + fileURLToPath(dist));
