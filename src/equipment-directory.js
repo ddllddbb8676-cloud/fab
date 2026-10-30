@@ -27,7 +27,7 @@ export function createEquipmentDirectory({ equipment, families, onSelect = () =>
   dialog.setAttribute('aria-labelledby', 'equipment-directory-title');
   dialog.innerHTML = `
     <div class="equipment-directory-head">
-      <div><div class="equipment-directory-eyebrow">EQUIPMENT DIRECTORY</div><h2 id="equipment-directory-title">장비 목록</h2><p class="equipment-directory-summary"></p><p class="equipment-directory-code-help">공정 2자리 · FAB 1자리 · BAY 2자리 · 장비번호 2자리<br><span>PHA0101 = PH 포토 · A 팹 · 01 베이 · 01번 장비</span></p><a class="capacity-link" href="/docs/capacity-plan.html" target="_blank" rel="noopener">월 1만 장 기준 장비 용량 계산표 ↗</a></div>
+      <div><div class="equipment-directory-eyebrow">EQUIPMENT DIRECTORY</div><h2 id="equipment-directory-title">장비 목록</h2><p class="equipment-directory-summary"></p><p class="equipment-directory-code-help">공정 2자리 · FAB 1자리 · BAY 2자리 · 장비번호 2자리<br><span>PHA0101 = PH 포토 · A 팹 · 01 베이 · 01번 장비</span></p><a class="capacity-link" href="/docs/capacity-plan.html" target="_blank" rel="noopener">월 3만 장 기준 장비 용량 계산표 ↗</a></div>
       <button type="button" class="equipment-directory-close" aria-label="장비 목록 닫기">×</button>
     </div>
     <div class="equipment-directory-filters">

@@ -13,7 +13,7 @@ test('bay purpose search distinguishes Cu-dedicated cleaning from general cleani
   const general = filterEquipment(equipment, '일반 세정');
   assert.equal(general.length, 20);
   assert.ok(general.every(item => item.bayId === 7 && !item.cuDedicated));
-  assert.equal(filterEquipment(equipment, '메탈').length, 40);
+  assert.equal(filterEquipment(equipment, '메탈').length, 20);
 });
 
 test('BAY queries select the exact bay, not matching tool numbers in other bays', () => {

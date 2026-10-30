@@ -54,7 +54,7 @@ test('rendered bay assignments match the catalogue and wafer sorter is distinct 
 test('Cu cleaning has a dedicated bay while numbering and other metal and cleaning uses stay distinct', () => {
   const equipment = buildEquipmentCatalog(assigned);
   assert.equal(bayPurposes.length, 18);
-  assert.deepEqual(bayPurposes.flatMap((purpose, bayId) => purpose.yellowLight ? [bayId] : []), [0, 5, 9, 12, 14]);
+  assert.deepEqual(bayPurposes.flatMap((purpose, bayId) => purpose.yellowLight ? [bayId] : []), [0, 5, 9, 14]);
   assert.deepEqual(getBayPurpose(7), { name: '일반 세정', cuDedicated: false, yellowLight: false });
   assert.deepEqual(getBayPurpose(14), { name: 'Cu 전용 세정', cuDedicated: true, yellowLight: true });
   const cuCleaners = equipment.filter(e => e.cuDedicated);
@@ -73,7 +73,7 @@ test('Cu cleaning has a dedicated bay while numbering and other metal and cleani
   const generalCleaners = equipment.filter(e => e.bayId === 7);
   assert.equal(generalCleaners.length, 20);
   assert.ok(generalCleaners.every(e => !e.cuDedicated && !e.yellowLight && e.bayPurpose === '일반 세정' && !e.typeName.includes('Cu')));
-  for (const bayId of [5, 12]) {
+  for (const bayId of [5]) {
     assert.deepEqual(getBayPurpose(bayId), { name: '메탈', cuDedicated: false, yellowLight: true });
     assert.ok(equipment.filter(e => e.bayId === bayId).every(e => e.familyKey === 'METAL' && e.bayPurpose === '메탈' && !e.cuDedicated));
   }
@@ -83,5 +83,19 @@ test('Cu cleaning has a dedicated bay while numbering and other metal and cleani
     const unchangedCode = `${processCodes[processFamilies[machine.familyIndex].key]}A${String(machine.bayId + 1).padStart(2, '0')}${String((machine.sign === 1 ? 0 : 10) + machine.column + 1).padStart(2, '0')}`;
     assert.equal(e.code, unchangedCode);
     assert.deepEqual(e.portCodes, machine.ports.map((_, i) => `${unchangedCode}L${i + 1}`));
+  }
+});
+
+test('30k planning assignment retains 18 bays and 360 tools with sufficient process-group capacity', () => {
+  const equipment = buildEquipmentCatalog(machines);
+  const counts = Object.fromEntries(processFamilies.map(family => [family.key, equipment.filter(e => e.familyKey === family.key).length]));
+  assert.deepEqual(counts, { PHOTO: 40, ETCH: 60, DEPO: 60, DIFF: 40, IMP: 20, METAL: 20, CMP: 20, CLEAN: 40, METRO: 20, INSP: 20, SORT: 20 });
+  assert.equal(equipment.length, 360);
+  assert.equal(new Set(equipment.map(e => e.bayId)).size, 18);
+  for (const [bayId, familyKey, sampleCode] of [[12, 'DIFF', 'DIA1301'], [13, 'DEPO', 'CVA1401'], [15, 'ETCH', 'ETA1601']]) {
+    const tools = equipment.filter(e => e.bayId === bayId);
+    assert.equal(tools.length, 20);
+    assert.ok(tools.every(e => e.familyKey === familyKey && !e.yellowLight && !e.cuDedicated));
+    assert.equal(tools[0].code, sampleCode);
   }
 });

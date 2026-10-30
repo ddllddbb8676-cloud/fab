@@ -65,7 +65,7 @@ export const processFamilies = [
 Object.freeze(processFamilies);
 
 // 18 existing bays; equipment footprint and transport identities stay intact.
-export const bayFamilyIndices = Object.freeze([0, 1, 2, 3, 4, 5, 6, 7, 8, 0, 1, 2, 5, 6, 7, 8, 9, 10]);
+export const bayFamilyIndices = Object.freeze([0, 1, 2, 3, 4, 5, 6, 7, 8, 0, 1, 2, 3, 2, 7, 1, 9, 10]);
 // Viewing-model bay uses and lighting, without renumbering physical locations.
 export const bayPurposes = Object.freeze(bayFamilyIndices.map((familyIndex, bayId) => {
   const family = processFamilies[familyIndex];

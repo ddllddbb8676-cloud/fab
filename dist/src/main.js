@@ -531,7 +531,7 @@ function animate(now) {
   // Read-only diagnostics for local acceptance checks.
   if (frameCount % 15 === 0) {
     const demo = vehicles[mode === 'ride' ? explorer.state.followId : 0];
-    $('world').dataset.diagnostics = JSON.stringify({ ready: true, revision: 'equipment-identities-lighting-5', mode, amberBays: bayLighting.bayIds.map(id => id + 1), amberLights: bayLighting.lights.length, amberLightsVisible: bayLighting.root.visible, entry: { active: entry.active, ...entry.state }, width: WIDTH, length: LENGTH, ceiling: HEIGHT,
+    $('world').dataset.diagnostics = JSON.stringify({ ready: true, revision: 'capacity-30000-6', mode, amberBays: bayLighting.bayIds.map(id => id + 1), amberLights: bayLighting.lights.length, amberLightsVisible: bayLighting.root.visible, entry: { active: entry.active, ...entry.state }, width: WIDTH, length: LENGTH, ceiling: HEIGHT,
       equipmentCount: equipment.length, equipmentFamilies: families.length, uniqueEquipmentCodes: new Set(equipment.map(e => e.code)).size, selectedEquipment: selectedEquipment?.code ?? null,
       machines: machinePositions.length, bays: bays.length, toolsPerRow: 10, loadports: layoutMachines.length * 3,
       frontAisle: AISLE, rearAisle: SERVICE_AISLE, sideGap: SIDE_GAP, vehicles: vehicles.length, junctions: network.junctions.length,
