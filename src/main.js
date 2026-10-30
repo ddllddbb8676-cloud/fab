@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { Reflector } from 'three/addons/objects/Reflector.js';
+import { machines as layoutMachines, bays, columns, TOUR_POINTS, isBlocked, sampleLoop, TOOL_SCALE_X, TOOL_WIDTH, PORT_Z, SEATED_FOUP_Y, VEHICLE_Y, RAIL_Y, AISLE } from './layout.js';
+import { sampleTransport } from './transport.js';
 
 const $ = (id) => document.getElementById(id);
 const mobile = matchMedia('(pointer: coarse)').matches;
@@ -122,12 +124,12 @@ for (let z = -78; z <= 78; z += 12) {
     box(M.edge, side * 59.6, .96, z, .1, .07, 8); box(M.edge, side * 59.6, 3.65, z, .1, .07, 8);
   }
 }
-for (const x of [-57, -9, 9, 57]) for (let z = -84; z <= 84; z += 24) {
+for (const { x, z } of columns) {
   box(M.white, x, 2.5, z, .5, 5, .5); box(M.edge, x, .16, z, .53, .32, .53);
   box(M.accent, x, 1.1, z + .253, .51, .075, .012);
 }
 // Subtle guidance strips in the main aisle, interrupted at cross-aisles.
-for (let z = -87; z < 88; z += 3) for (const x of [-5.9, 5.9]) box(M.accent, x, .002, z, .045, .004, 1.55);
+for (let z = -87; z < 88; z += 3) for (const x of [-2.35, 2.35]) box(M.accent, x, .002, z, .045, .004, 1.55);
 
 const families = [
   { key: 'PHOTO', name: '포토 · 빛으로 그리는 회로', short: 'LITHOGRAPHY', description: '웨이퍼 위 감광막에 빛을 비춰 미세한 회로 모양을 옮깁니다. 노광 장비와 코팅·현상 장비가 함께 배치된 구역을 표현했어요.', color: '#6a96b4', material: M.blue },
@@ -157,15 +159,16 @@ const screenTexture = canvasTexture(256, 256, (ctx, w, h) => {
 const screenMat = mat('#ffffff', .3, .1, { map: screenTexture, emissive: '#ffffff', emissiveMap: screenTexture, emissiveIntensity: .32 });
 const aoTexture = canvasTexture(128, 128, (ctx) => { const gradient = ctx.createRadialGradient(64, 64, 8, 64, 64, 64); gradient.addColorStop(0, 'rgba(22,46,58,.24)'); gradient.addColorStop(.6, 'rgba(22,46,58,.12)'); gradient.addColorStop(1, 'rgba(22,46,58,0)'); ctx.fillStyle = gradient; ctx.fillRect(0, 0, 128, 128); });
 const aoMat = new THREE.MeshBasicMaterial({ map: aoTexture, transparent: true, depthWrite: false });
-function localBox(x, z, sign, material, ox, y, oz, sx, sy, sz) { box(material, x + sign * ox, y, z + sign * oz, sx, sy, sz, sign === 1 ? 0 : Math.PI); }
+function localBox(x, z, sign, material, ox, y, oz, sx, sy, sz) { box(material, x + sign * ox * TOOL_SCALE_X, y, z + sign * oz, sx * TOOL_SCALE_X, sy, sz, sign === 1 ? 0 : Math.PI); }
 function staticFoup(x, y, z, sign = 1) {
   box(M.foup, x, y, z, .43, .38, .36);
-  box(M.foupDoor, x, y, z + sign * .187, .38, .32, .025);
+  box(M.foupDoor, x, y, z - sign * .187, .38, .32, .025);
   box(M.foupRib, x, y + .215, z, .19, .045, .13);
   for (let i = 0; i < 5; i++) for (const s of [-1, 1]) box(M.foupRib, x + s * .222, y -.13 + i * .065, z, .025, .023, .31);
   box(M.dark, x, y - .205, z, .45, .035, .38);
 }
-function machine(x, z, family, index, sign) {
+function machine(layout, family) {
+  const { x, z, id: index, sign } = layout;
   const s = sign;
   const frontZ = z + s * 2.6;
   localBox(x, z, s, M.dark, 0, .12, 0, 5.4, .24, 4.8);
@@ -190,64 +193,69 @@ function machine(x, z, family, index, sign) {
   localBox(x, z, s, M.panel, -.2, .72, 2.73, 3.3, 1.25, .77);
   localBox(x, z, s, M.dark, -.2, 1.38, 2.81, 3.4, .09, .93);
   for (let j = 0; j < 3; j++) {
-    const lx = x + s * (-1.23 + j * 1.02);
-    box(M.edge, lx, 1.43, frontZ + s * .28, .71, .065, .66);
+    const port = layout.ports[j], lx = port.x;
+    box(M.edge, lx, 1.43, port.z, .71, .065, .66);
     localBox(x, z, s, M.black, -1.23 + j * 1.02, 1.76, 2.4, .57, .64, .035);
-    if ((index + j) % 4 !== 0) staticFoup(lx, 1.67, frontZ + s * .29, s);
+    if (!port.reserved && (index + j) % 4 !== 0) staticFoup(lx, SEATED_FOUP_Y, port.z, s);
   }
   localBox(x, z, s, M.edge, 2.12, 1.61, 2.57, .065, .8, .13);
-  const monitor = mesh(scene, planeGeometry, screenMat, x + s * 2.12, 1.91, z + s * 2.66, .56, .46, 1); monitor.rotation.y = s === 1 ? 0 : Math.PI;
+  const monitor = mesh(scene, planeGeometry, screenMat, x + s * 2.12 * TOOL_SCALE_X, 1.91, z + s * 2.66, .56, .46, 1); monitor.rotation.y = s === 1 ? 0 : Math.PI;
   localBox(x, z, s, M.edge, 2.12, 1.59, 2.7, .64, .04, .33);
   const label = labelTexture(family.key, family.short, family.color);
   if (!family.labelMat) family.labelMat = mat('#ffffff', .65, .02, { map: label });
   const labelMesh = mesh(scene, planeGeometry, family.labelMat, x, 2.38, z + s * 2.37, 1.2, .3, 1); labelMesh.rotation.y = s === 1 ? 0 : Math.PI;
   localBox(x, z, s, M.dark, 2.35, 3.05, 1.8, .06, .32, .06);
-  cyl(index % 6 === 0 ? M.amber : M.green, x + s * 2.35, 3.23, z + s * 1.8, .055, .13);
+  cyl(index % 6 === 0 ? M.amber : M.green, x + s * 2.35 * TOOL_SCALE_X, 3.23, z + s * 1.8, .055, .13);
   if (family.key === 'ETCH' || family.key === 'DEPO') {
-    for (let j = -1; j <= 1; j++) { cyl(M.panel, x + j * 1.55, 2.94, z - s * .35, .57, .18); cyl(M.edge, x + j * 1.55, 3.07, z - s * .35, .45, .08); }
+    for (let j = -1; j <= 1; j++) { cyl(M.panel, x + j * 1.55 * TOOL_SCALE_X, 2.94, z - s * .35, .57, .18); cyl(M.edge, x + j * 1.55 * TOOL_SCALE_X, 3.07, z - s * .35, .45, .08); }
   } else if (family.key === 'PHOTO') {
     localBox(x, z, s, M.panel, -.8, 3.1, -.55, 3.35, .46, 2.65);
     localBox(x, z, s, M.dark, -1.2, 1.92, 2.381, 1.35, .39, .025);
   } else if (family.key === 'CLEAN') {
     for (let j = -1; j <= 1; j++) localBox(x, z, s, M.blue, j * 1.4, 2.22, 2.383, .95, .35, .018);
   }
-  const shadow = mesh(scene, planeGeometry, aoMat, x, .001, z, 7.9, 7.5, 1); shadow.rotation.x = -Math.PI / 2;
-  colliders.push({ minX: x - 2.95, maxX: x + 2.95, minZ: z - 2.6, maxZ: z + 2.6, front: frontZ, x, z, family });
+  const shadow = mesh(scene, planeGeometry, aoMat, x, .001, z, 6.5, 7.1, 1); shadow.rotation.x = -Math.PI / 2;
+  colliders.push({ ...layout.bounds, front: frontZ, x, z, family });
   machinePositions.push({ x, z, family, index, sign, frontZ });
 }
-let machineIndex = 0;
-const bankX = [-49, -33, -17, 17, 33, 49];
-for (let b = 0; b < bankX.length; b++) for (let row = 0; row < 12; row++) {
-  const z = -77 + row * 14;
-  // Twin equipment rows open onto generous shared cross-aisles.
-  machine(bankX[b], z - 3.7, families[b], machineIndex++, 1);
-  machine(bankX[b], z + 3.7, families[b], machineIndex++, -1);
-}
+for (const layout of layoutMachines) machine(layout, families[layout.familyIndex]);
 // Utility mains above equipment, below the ceiling. Cleanroom equipment is schematic.
-for (const x of bankX) {
-  for (const dx of [-1.5, 1.5]) {
-    const pipe = new THREE.Mesh(new THREE.CylinderGeometry(.075, .075, 172, 10), M.rail); pipe.rotation.x = Math.PI / 2; pipe.position.set(x + dx, 4.63, 0); roof.add(pipe);
-  }
-  for (let z = -84; z <= 84; z += 12) mesh(roof, boxGeometry, M.frame, x, 4.73, z, 4.3, .08, .09);
+for (const bay of bays) for (const sign of [-1, 1]) {
+  const z = bay.z + sign * 6.7;
+  const pipe = new THREE.Mesh(new THREE.CylinderGeometry(.075, .075, 51, 10), M.rail);
+  pipe.rotation.z = Math.PI / 2; pipe.position.set(bay.x, 4.63, z); roof.add(pipe);
+  for (let dx = -24; dx <= 24; dx += 8) mesh(roof, boxGeometry, M.frame, bay.x + dx, 4.73, z, .09, .08, 3);
 }
 
 // Hanging zone signs at human-scaled distances, not giant decorative letters.
-for (let i = 0; i < 6; i++) {
-  const sign = new THREE.Group(); sign.position.set(i % 2 === 0 ? -3.6 : 3.6, 3.42, -65 + i * 26);
+for (const bay of bays) {
+  const family = families[bay.familyIndex];
+  const sign = new THREE.Group(); sign.position.set(bay.bank === 0 ? -3.1 : 3.1, 3.42, bay.z); sign.rotation.y = bay.bank === 0 ? Math.PI / 2 : -Math.PI / 2;
   mesh(sign, boxGeometry, M.white, 0, 0, 0, 2.85, .63, .09);
-  const tex = labelTexture(String(i + 1).padStart(2, '0') + ' / ' + families[i].key, 'BAY ' + String(i + 1).padStart(2, '0') + '    →', families[i].color);
+  const tex = labelTexture('BAY ' + String(bay.id + 1).padStart(2, '0'), family.key + '    10 + 10 TOOLS', family.color);
   mesh(sign, planeGeometry, mat('#ffffff', .8, 0, { map: tex }), 0, 0, .05, 2.7, .57, 1);
   mesh(sign, boxGeometry, M.edge, -1, .75, 0, .025, .9, .025); mesh(sign, boxGeometry, M.edge, 1, .75, 0, .025, .9, .025);
   roof.add(sign);
 }
 
-// OHT rails: vehicle longitudinal axis always follows its rail. A transfer demo
-// lowers the actual carried FOUP and leaves the vehicle's middle bay empty.
-const railXs = [-49, -33, -17, -6.9, 6.9, 17, 33, 49];
-for (const x of railXs) {
-  for (const dx of [-.19, .19]) box(M.rail, x + dx, 4.26, 0, .075, .12, 174);
-  box(M.dark, x, 4.29, 0, .18, .06, 174);
-  for (let z = -84; z <= 84; z += 6) { box(M.edge, x, 4.64, z, .045, .64, .045); box(M.rail, x, 4.3, z, .58, .065, .1); }
+// Each service run is generated from the very same port centres as the tools.
+// Rounded end turns form continuous closed loops with no vehicle teleportation.
+for (const bay of bays) {
+  for (const segment of bay.loop.segments) {
+    const steps = segment.type === 'arc' ? 12 : 1;
+    for (let i = 0; i < steps; i++) {
+      const a = sampleLoop(bay.loop, segment.start + i * segment.length / steps);
+      const b = sampleLoop(bay.loop, segment.start + (i + 1) * segment.length / steps);
+      const angle = Math.atan2(b.x - a.x, b.z - a.z), length = Math.hypot(b.x - a.x, b.z - a.z);
+      for (const offset of [-.19, .19]) box(M.rail, (a.x + b.x) / 2 + Math.cos(angle) * offset, RAIL_Y, (a.z + b.z) / 2 - Math.sin(angle) * offset, .075, .12, length + .008, angle);
+      box(M.dark, (a.x + b.x) / 2, RAIL_Y + .03, (a.z + b.z) / 2, .18, .06, length + .008, angle);
+    }
+  }
+  for (let d = 0; d < bay.loop.length; d += 7) {
+    const p = sampleLoop(bay.loop, d);
+    box(M.edge, p.x, 4.64, p.z, .045, .64, .045);
+    box(M.rail, p.x, 4.3, p.z, .58, .065, .1, p.yaw);
+  }
 }
 function movingFoup(parent) {
   const foup = new THREE.Group();
@@ -259,8 +267,8 @@ function movingFoup(parent) {
   parent.add(foup); return foup;
 }
 const vehicles = [];
-function createOHT(x, z, speed, transfer = false) {
-  const root = new THREE.Group(); root.position.set(x, 3.71, z); scene.add(root);
+function createOHT(bay) {
+  const root = new THREE.Group(); root.position.set(bay.target.x, VEHICLE_Y, bay.target.z); scene.add(root);
   mesh(root, boxGeometry, M.dark, 0, .41, 0, .39, .16, 1.05);
   mesh(root, boxGeometry, M.white, 0, .25, -.49, .82, .46, .23);
   mesh(root, boxGeometry, M.white, 0, .25, .49, .82, .46, .23);
@@ -269,20 +277,15 @@ function createOHT(x, z, speed, transfer = false) {
   for (const side of [-1, 1]) mesh(root, boxGeometry, M.rail, side * .36, -.02, 0, .07, .45, .74);
   mesh(root, boxGeometry, M.accent, 0, .27, .612, .6, .08, .012);
   mesh(root, boxGeometry, M.green, .27, .31, .619, .07, .05, .014);
-  const foup = movingFoup(root); foup.position.y = -.12;
+  const foup = movingFoup(scene);
   const gripper = mesh(root, boxGeometry, M.dark, 0, .12, 0, .24, .055, .16);
-  const belts = [-1, 1].map(side => mesh(root, boxGeometry, M.edge, side * .095, .25, 0, .017, .2, .025));
-  vehicles.push({ root, foup, belts, gripper, speed, initialZ: z, transfer });
+  gripper.rotation.y = Math.PI / 2;
+  const belts = [-1, 1].map(side => mesh(root, boxGeometry, M.edge, 0, .25, side * .095, .025, .2, .017));
+  vehicles.push({ root, foup, belts, gripper, bay, offset: bay.id === 7 ? 0 : bay.id * 9.7, state: null });
 }
-for (let r = 0; r < railXs.length; r++) {
-  if (r === 3) continue; // The transfer-demo rail is reserved for its stopped hoist.
-  for (let i = 0; i < 4; i++) createOHT(railXs[r], -75 + i * 41 + r * 1.5, (r % 2 ? -1 : 1) * (1.1 + (r % 3) * .16));
-}
-// Dedicated visible load port beneath the demonstration hoist.
-box(M.white, -6.9, .65, 30, 1.05, 1.3, 1.05); box(M.edge, -6.9, 1.34, 30, .85, .08, .85);
-box(M.dark, -6.9, 1.75, 29.6, .9, .8, .1); createOHT(-6.9, 30, 0, true);
+for (const bay of bays) createOHT(bay);
 const movingBatches = new Map();
-for (const vehicle of vehicles) vehicle.root.traverse((obj) => {
+for (const vehicle of vehicles) for (const group of [vehicle.root, vehicle.foup]) group.traverse((obj) => {
   if (!obj.isMesh) return;
   const key = obj.geometry.uuid + obj.material.uuid;
   if (!movingBatches.has(key)) movingBatches.set(key, { geometry: obj.geometry, material: obj.material, sources: [] });
@@ -326,17 +329,12 @@ let yaw = .04, pitch = -.015, manualLook = false, dragging = false, dragDistance
 let pointerStart = null, currentZone = '', introVisible = true, toastTimer;
 const keys = new Set(), touchMoves = new Set();
 const walkDirection = new THREE.Vector3(), previousPosition = new THREE.Vector3();
-const tourKeyframes = [
-  { p: [1.5, EYE, 78], t: [-1.2, 2.25, 10] },
-  { p: [-.5, EYE, 36], t: [-8, 2.7, -3] },
-  { p: [-1.2, EYE, -19], t: [4, 2.2, -78] },
-  { p: [0, EYE, -69], t: [28, 2.1, -63] },
-  { p: [38, EYE, -70], t: [47, 2.5, -33] },
-  { p: [41, EYE, -19], t: [32, 2.2, 5] },
-  { p: [41, EYE, 86], t: [0, 2.15, 86] },
-  { p: [1.5, EYE, 86], t: [-1.2, 2.25, 10] },
-  { p: [1.5, EYE, 78], t: [-1.2, 2.25, 10] }
-];
+const tourKeyframes = TOUR_POINTS.map(([x, z], i) => {
+  const [nx, nz] = TOUR_POINTS[(i + 1) % (TOUR_POINTS.length - 1)];
+  const length = Math.hypot(nx - x, nz - z) || 1;
+  return { p: [x, EYE, z], t: [x + (nx - x) / length * 40, 2.2, z + (nz - z) / length * 40] };
+});
+tourKeyframes.at(-1).t = tourKeyframes[0].t;
 // Piecewise straight routes turn only in clear cross-aisles, avoiding equipment.
 const smooth = (t) => t * t * (3 - 2 * t);
 function tourPose(t) {
@@ -355,13 +353,13 @@ function setMode(next) {
   $('tool-card').classList.add('hidden');
   if (next === 'overview') {
     dismissIntro(); orbit.target.set(0, 0, 0); camera.position.set(78, 115, 125); camera.lookAt(orbit.target); orbit.update(); scene.fog.density = .0015;
-    $('view-title').textContent = '팹 전체 보기'; $('view-subtitle').textContent = '120 × 180m · CEILING HEIGHT 5m';
+    $('view-title').textContent = '팹 전체 보기'; $('view-subtitle').textContent = '16 BAYS · 320 TOOLS · 10 + 10 PER BAY';
     toast('지붕을 열어 팹 전체를 봅니다');
   } else {
     scene.fog.density = .0063;
-    if (old === 'overview') { camera.position.set(0, EYE, 73); camera.lookAt(0, 2, -50); }
+    if (old === 'overview') { const pose = tourPose(0); camera.position.copy(pose.p); camera.lookAt(pose.t); }
     if (next === 'walk') { dismissIntro(); camera.position.y = EYE; yaw = camera.rotation.y; pitch = THREE.MathUtils.clamp(camera.rotation.x, -.9, .9); toast('드래그로 시선을 돌리고, WASD로 걸어보세요'); }
-    if (next === 'tour') { if (old !== 'tour') dismissIntro(); tourTime = 0; transition = { position: camera.position.clone(), quaternion: camera.quaternion.clone(), time: 0 }; toast('천천히, 팹을 따라 산책합니다'); }
+    if (next === 'tour') { if (old !== 'tour') dismissIntro(); tourTime = 0; transition = null; const pose = tourPose(0); camera.position.copy(pose.p); camera.lookAt(pose.t); toast('긴 장비열을 따라 천천히 산책합니다'); }
     currentZone = ''; updateZone();
   }
 }
@@ -372,6 +370,14 @@ function reset() {
 }
 for (const id of ['tour', 'walk', 'overview']) $(id).addEventListener('click', () => setMode(id));
 $('explore').addEventListener('click', () => setMode('walk')); $('reset').addEventListener('click', reset);
+$('transfer-view').addEventListener('click', () => {
+  setMode('walk');
+  const v = vehicles.find(v => v.bay.id === 7), port = v.bay.target;
+  v.offset = -elapsed;
+  camera.position.set(port.x + 3.8, EYE, v.bay.z + .3);
+  camera.lookAt(port.x, 2.7, port.z); yaw = camera.rotation.y; pitch = camera.rotation.x;
+  toast('실제 로드포트에서 내려놓고, 빈 OHT가 돌아와 회수합니다');
+});
 $('help-toggle').addEventListener('click', () => $('help').classList.toggle('hidden'));
 $('help-close').addEventListener('click', () => $('help').classList.add('hidden'));
 $('close-card').addEventListener('click', () => $('tool-card').classList.add('hidden'));
@@ -420,10 +426,7 @@ for (const button of document.querySelectorAll('[data-move]')) {
   button.addEventListener('pointerup', release); button.addEventListener('pointercancel', release); button.addEventListener('lostpointercapture', release);
 }
 function blocked(x, z) {
-  if (Math.abs(x) > 58.8 || Math.abs(z) > 88.5) return true;
-  for (const c of colliders) if (x > c.minX - .25 && x < c.maxX + .25 && z > c.minZ - .45 && z < c.maxZ + .45) return true;
-  for (const cx of [-57, -9, 9, 57]) for (let cz = -84; cz <= 84; cz += 24) if (Math.abs(x - cx) < .53 && Math.abs(z - cz) < .53) return true;
-  return Math.abs(x + 6.9) < .8 && Math.abs(z - 30) < .8;
+  return isBlocked(x, z);
 }
 function move(dt) {
   let forward = Number(keys.has('w') || keys.has('arrowup') || touchMoves.has('forward')) - Number(keys.has('s') || keys.has('arrowdown') || touchMoves.has('back'));
@@ -464,8 +467,8 @@ function drawMap() {
   const mx = (x) => pad + (x + WIDTH / 2) * sx, mz = (z) => pad + (z + LENGTH / 2) * sz;
   ctx.clearRect(0, 0, w, h); ctx.fillStyle = '#eef3f2'; ctx.fillRect(pad, pad, w - pad * 2, h - pad * 2);
   ctx.strokeStyle = '#bacdd0'; ctx.lineWidth = 2; ctx.strokeRect(pad, pad, w - pad * 2, h - pad * 2);
-  ctx.fillStyle = '#dae7e7'; ctx.fillRect(mx(-7), pad, sx * 14, h - pad * 2);
-  for (const m of machinePositions) { ctx.fillStyle = m.family.color + 'aa'; ctx.fillRect(mx(m.x - 2.7), mz(m.z - 2.4), sx * 5.4, sz * 4.8); }
+  ctx.fillStyle = '#dae7e7'; ctx.fillRect(mx(-AISLE / 2), pad, sx * AISLE, h - pad * 2);
+  for (const m of machinePositions) { ctx.fillStyle = m.family.color + 'aa'; ctx.fillRect(mx(m.x - TOOL_WIDTH / 2), mz(m.z - 2.4), sx * TOOL_WIDTH, sz * 4.8); }
   if (mode !== 'overview') {
     const x = mx(camera.position.x), y = mz(camera.position.z), angle = -camera.rotation.y - Math.PI / 2;
     ctx.fillStyle = '#306d751c'; ctx.beginPath(); ctx.moveTo(x, y); ctx.arc(x, y, 29, angle - .5, angle + .5); ctx.closePath(); ctx.fill();
@@ -475,9 +478,9 @@ function drawMap() {
 function updateZone() {
   if (mode === 'overview') return;
   let text = '중앙 통로', sub = 'MAIN CONCOURSE · EYE LEVEL 1.68m';
-  if (Math.abs(camera.position.x) > 11) {
-    let closest = 0; for (let i = 1; i < bankX.length; i++) if (Math.abs(camera.position.x - bankX[i]) < Math.abs(camera.position.x - bankX[closest])) closest = i;
-    text = families[closest].name.split(' · ')[0] + ' 구역'; sub = families[closest].short + ' · EYE LEVEL 1.68m';
+  if (Math.abs(camera.position.x) > AISLE / 2) {
+    const nearest = bays.reduce((a, b) => Math.hypot(camera.position.x - a.x, camera.position.z - a.z) < Math.hypot(camera.position.x - b.x, camera.position.z - b.z) ? a : b);
+    text = 'BAY ' + String(nearest.id + 1).padStart(2, '0') + ' · ' + families[nearest.familyIndex].name.split(' · ')[0]; sub = '10 + 10 TOOLS · AISLE 5.2m';
   }
   if (text !== currentZone) { currentZone = text; $('view-title').textContent = text; $('view-subtitle').textContent = sub; $('map-location').textContent = text; }
 }
@@ -498,14 +501,12 @@ function animate(now) {
   } else if (mode === 'walk') { if ($('help').classList.contains('hidden')) move(dt); }
   else orbit.update();
   for (const v of vehicles) {
-    if (v.transfer) {
-      const cycle = elapsed % 22;
-      const lower = cycle < 4 ? 0 : cycle < 9 ? smooth((cycle - 4) / 5) : cycle < 13 ? 1 : cycle < 18 ? 1 - smooth((cycle - 13) / 5) : 0;
-      v.foup.position.y = -.12 - lower * 1.985;
-      v.gripper.position.y = v.foup.position.y + .25;
-      const upper = .32, bottom = v.gripper.position.y + .03;
-      for (const belt of v.belts) { belt.position.y = (upper + bottom) / 2; belt.scale.y = Math.max(.02, upper - bottom); }
-    } else { v.root.position.z = ((((v.initialZ + elapsed * v.speed) + 86) % 172) + 172) % 172 - 86; }
+    const state = sampleTransport(v.bay, elapsed + v.offset); v.state = state;
+    v.root.position.set(state.car.x, VEHICLE_Y, state.car.z); v.root.rotation.y = state.car.yaw;
+    v.foup.position.set(state.foup.x, state.foup.y, state.foup.z); v.foup.rotation.y = state.foup.yaw;
+    v.gripper.position.y = state.gripperY - VEHICLE_Y;
+    const upper = .32, bottom = v.gripper.position.y + .0275;
+    for (const belt of v.belts) { belt.position.y = (upper + bottom) / 2; belt.scale.y = Math.max(.02, upper - bottom); }
   }
   if (frameCount % 5 === 0) { drawMap(); updateZone(); }
   scene.updateMatrixWorld(true);
@@ -514,7 +515,11 @@ function animate(now) {
   frameCount++;
   if (now - fpsStart > 1500) { displayedFPS = Math.round(frameCount * 1000 / (now - fpsStart)); frameCount = 0; fpsStart = now; }
   // Read-only diagnostics for local acceptance checks.
-  if (frameCount % 15 === 0) $('world').dataset.diagnostics = JSON.stringify({ ready: true, mode, width: WIDTH, length: LENGTH, ceiling: HEIGHT, eyeHeight: EYE, machines: machinePositions.length, vehicles: vehicles.length, instances: staticInstances, fps: displayedFPS, calls: renderer.info.render.calls, position: { x: camera.position.x, y: camera.position.y, z: camera.position.z }, roofVisible: roof.visible, loadedFoups: vehicles.filter(v => v.foup.position.y > -.5).length, transferDrop: vehicles.at(-1).foup.position.y, tourTime });
+  if (frameCount % 15 === 0) {
+    const demo = vehicles.find(v => v.bay.id === 7);
+    $('world').dataset.diagnostics = JSON.stringify({ ready: true, revision: 'bay-layout-2', mode, width: WIDTH, length: LENGTH, ceiling: HEIGHT, eyeHeight: EYE, machines: machinePositions.length, bays: bays.length, toolsPerRow: 10, loadports: layoutMachines.length * 3, aisleWidth: AISLE, sideGap: .4, vehicles: vehicles.length, instances: staticInstances, fps: displayedFPS, calls: renderer.info.render.calls, position: { x: camera.position.x, y: camera.position.y, z: camera.position.z }, roofVisible: roof.visible, parkedFoups: vehicles.filter(v => v.state.parked).length, transfer: { ...demo.state, target: demo.bay.target }, tourTime });
+    $('transfer-status').textContent = demo.state.label;
+  }
 }
 window.addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); $('mobile-pad').classList.toggle('hidden', mode !== 'walk' || !(mobile || innerWidth < 700)); });
 reset(); requestAnimationFrame(animate);
