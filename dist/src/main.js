@@ -13,6 +13,8 @@ import { processFamilies, buildEquipmentCatalog, getBayPurpose } from './equipme
 import { createEquipmentLabels } from './equipment-labels.js';
 import { createEquipmentDirectory } from './equipment-directory.js';
 import { createBayLighting, applyBayWhiteLightMask } from './bay-lighting.js';
+import { createAmbience } from './ambience.js';
+import { setRuntimeObstacles } from './runtime-obstacles.js';
 
 const $ = (id) => document.getElementById(id);
 const mobile = matchMedia('(pointer: coarse)').matches;
@@ -369,6 +371,8 @@ const explorer = createExplorer({ THREE, camera, scene, canvas: renderer.domElem
   onToast: toast, onInspect: showMachine,
   onMode(next) {
     mode = next; document.body.classList.add('exploring'); $('intro').classList.add('hidden');
+    document.body.dataset.viewMode = next;
+    $('transfer-view').setAttribute('aria-pressed', String(next === 'transfer'));
     for (const id of ['tour', 'walk', 'ride', 'overview']) { $(id).classList.toggle('active', id === next); $(id).setAttribute('aria-pressed', String(id === next)); }
     roof.visible = walls.visible = next !== 'overview'; if (reflector) reflector.visible = next !== 'overview';
     bayLighting.setOverview(next === 'overview');
@@ -405,10 +409,12 @@ const entryCopy = {
   shower: ['깨끗한 바람으로 준비 중', '양옆 노즐에서 바람이 나옵니다. 잠시만 기다려주세요.'],
   settle: ['에어샤워 완료', '바람이 잦아들면 앞문이 열립니다.'],
   opening: ['자동문이 열립니다.', '문 너머로 넓은 팹이 펼쳐집니다.'],
-  entering: ['FAB에 오신 걸 환영해요.', '캐릭터를 따라 안으로 들어갑니다.']
+  entering: ['FAB에 오신 걸 환영해요.', '캐릭터를 따라 안으로 들어갑니다.'],
+  closing: ['입장 완료 · 문이 닫힙니다.', '캐릭터가 모두 나온 뒤 출입문을 닫습니다.']
 };
 let entryStage = '';
 function startEntry() {
+  setRuntimeObstacles([]);
   explorer.lock(false); explorer.setMode('walk');
   explorer.state.position.set(AIR_SHOWER.start.x, 0, AIR_SHOWER.start.z);
   explorer.state.yaw = 0; explorer.state.heading = Math.PI;
@@ -422,6 +428,7 @@ function startEntry() {
 }
 function finishEntry() {
   entry.finish(); explorer.state.position.set(AIR_SHOWER.exit.x, 0, AIR_SHOWER.exit.z);
+  setRuntimeObstacles(AIR_SHOWER.closedDoorBounds);
   explorer.state.speed = 0; explorer.state.distance = 4.4; explorer.state.elevation = .36;
   camera.fov = 64; camera.updateProjectionMatrix();
   explorer.lock(false); document.body.classList.remove('entering'); $('entry-overlay').classList.add('hidden');
@@ -444,7 +451,7 @@ function updateEntry(dt) {
     const [title, description] = entryCopy[s.stage];
     $('entry-title').textContent = title; $('entry-description').textContent = description;
     $('entry-step-air').classList.toggle('active', ['ready', 'shower', 'settle'].includes(s.stage));
-    $('entry-step-door').classList.toggle('active', s.stage === 'opening');
+    $('entry-step-door').classList.toggle('active', s.stage === 'opening' || s.stage === 'closing');
     $('entry-step-walk').classList.toggle('active', s.stage === 'entering');
   }
   $('entry-progress-fill').style.transform = `scaleX(${s.progress})`;
@@ -454,24 +461,33 @@ function skipEntry() { if (!entry.active) return; airShower.update(entry.skip())
 $('entry-skip').addEventListener('click', skipEntry);
 window.addEventListener('keydown', e => { if (entry.active && e.key === 'Escape') skipEntry(); });
 
-// Optional quiet ventilation ambience is synthesized locally, after user input.
-let audio = null;
-$('sound').setAttribute('aria-pressed', 'false');
+// Browsers require a user gesture; the first touch starts the intended ambience.
+const audio = createAmbience();
+function updateSoundButton() {
+  const s = audio.state, button = $('sound');
+  button.setAttribute('aria-pressed', String(s.enabled));
+  button.setAttribute('aria-label', s.enabled ? '공조 소리 끄기' : '공조 소리 켜기');
+  button.dataset.soundState = s.status;
+  $('sound-label').textContent = s.enabled ? '공조 켜짐' : !s.desired ? '공조 꺼짐' : s.error ? '소리 재시도' : '터치로 소리 켜기';
+  button.title = s.enabled ? '공조 소리 끄기' : '화면을 터치하면 공조 소리가 시작됩니다';
+}
+async function activateSound(event) {
+  if (!event.isTrusted || event.target.closest?.('#sound')) return;
+  await audio.activate(); updateSoundButton();
+}
+document.addEventListener('pointerdown', activateSound, { capture: true, passive: true });
+document.addEventListener('keydown', activateSound, { capture: true });
 $('sound').addEventListener('click', async () => {
-  try {
-    if (!audio) {
-      const Context = window.AudioContext || window.webkitAudioContext, context = new Context();
-      const buffer = context.createBuffer(1, context.sampleRate * 3, context.sampleRate);
-      const data = buffer.getChannelData(0); let brown = 0;
-      for (let i = 0; i < data.length; i++) { brown = (brown + (Math.random() * 2 - 1) * .02) / 1.02; data[i] = brown * 3.5; }
-      const source = context.createBufferSource(); source.buffer = buffer; source.loop = true;
-      const filter = context.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 650;
-      const gain = context.createGain(); gain.gain.value = .13; source.connect(filter).connect(gain).connect(context.destination); source.start();
-      audio = { context, gain, enabled: true }; await context.resume();
-    } else { audio.enabled = !audio.enabled; if (audio.enabled) await audio.context.resume(); audio.gain.gain.setTargetAtTime(audio.enabled ? .13 : 0, audio.context.currentTime, .3); }
-    $('sound').setAttribute('aria-pressed', String(audio.enabled)); $('sound').setAttribute('aria-label', audio.enabled ? '공간 소리 끄기' : '공간 소리 켜기'); toast(audio.enabled ? '은은한 공조 소리를 켰어요' : '공간 소리를 껐어요');
-  } catch { toast('이 브라우저에서는 소리를 켤 수 없어요'); }
+  if (audio.state.desired && !audio.state.enabled) await audio.activate();
+  else await audio.toggle();
+  updateSoundButton();
+  toast(audio.state.enabled ? '공조 소리를 켰어요' : audio.state.desired ? '소리를 시작하려면 다시 눌러주세요' : '공조 소리를 껐어요');
 });
+document.addEventListener('visibilitychange', () => { audio.update({ hidden: document.hidden }); updateSoundButton(); });
+updateSoundButton();
+
+function observedVehicle() { return vehicles[mode === 'transfer' ? explorer.state.transferVehicleId : mode === 'ride' ? explorer.state.followId : 0] ?? vehicles[0]; }
+function viewFocus() { return mode === 'ride' ? observedVehicle().state.car : mode === 'transfer' ? (explorer.state.transferTarget ?? observedVehicle().state.target) : explorer.state.position; }
 
 const mapCanvas = $('minimap'), mapCtx = mapCanvas.getContext('2d');
 function drawMap() {
@@ -486,7 +502,7 @@ function drawMap() {
   for (const path of railPaths) { if (path.kind === 'switch') continue; ctx.beginPath(); path.points.forEach((p, i) => i ? ctx.lineTo(mx(p.x), mz(p.z)) : ctx.moveTo(mx(p.x), mz(p.z))); ctx.stroke(); }
   ctx.fillStyle = '#bd874a'; for (const v of vehicles) { ctx.beginPath(); ctx.arc(mx(v.state.car.x), mz(v.state.car.z), 1.6, 0, Math.PI * 2); ctx.fill(); }
   if (mode !== 'overview') {
-    const focus = mode === 'ride' ? vehicles[explorer.state.followId].state.car : explorer.state.position;
+    const focus = viewFocus();
     const x = mx(focus.x), y = mz(focus.z), angle = -camera.rotation.y - Math.PI / 2;
     ctx.fillStyle = '#306d751c'; ctx.beginPath(); ctx.moveTo(x, y); ctx.arc(x, y, 29, angle - .5, angle + .5); ctx.closePath(); ctx.fill();
     ctx.fillStyle = '#2d7379'; ctx.beginPath(); ctx.arc(x, y, 5.5, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = 'white'; ctx.lineWidth = 2; ctx.stroke();
@@ -495,7 +511,7 @@ function drawMap() {
 function updateZone() {
   if (mode === 'overview') return;
   let text = '중앙 통로', sub = 'CONNECTED FAB · THIRD PERSON';
-  const focus = mode === 'ride' ? vehicles[explorer.state.followId].state.car : explorer.state.position;
+  const focus = viewFocus();
   if (Math.abs(focus.x) > AISLE / 2) {
     const nearest = bays.reduce((a, b) => Math.hypot(focus.x - a.x, focus.z - a.z) < Math.hypot(focus.x - b.x, focus.z - b.z) ? a : b);
     text = 'BAY ' + String(nearest.id + 1).padStart(2, '0') + ' · ' + getBayPurpose(nearest.id).name; sub = '10 + 10 TOOLS · AISLE 5.2m';
@@ -504,7 +520,9 @@ function updateZone() {
     else if (offsetZ > 2.6 && offsetZ < 8.2 && Math.abs(focus.x) < 54.8) { text = '옆 장비 사이 통로'; sub = 'TOOL SIDE CLEARANCE · 0.65m'; }
   }
   if (mode === 'ride') { const v = vehicles[explorer.state.followId]; text = 'OHT ' + String(explorer.state.followId + 1).padStart(2, '0') + ' · ' + v.state.label; sub = 'BAY ' + (v.state.origin.bayId + 1) + ' → BAY ' + (v.state.destination.bayId + 1); }
-  if (text !== currentZone) { currentZone = text; $('view-title').textContent = text; $('view-subtitle').textContent = sub; $('map-location').textContent = mode === 'ride' ? 'OHT ' + String(explorer.state.followId + 1).padStart(2, '0') : text.split(' · ')[0]; }
+  if (mode === 'transfer') { const v = observedVehicle(); text = 'FOUP 반송 · OHT ' + String(explorer.state.transferVehicleId + 1).padStart(2, '0'); sub = 'BAY ' + String(focus.bayId + 1).padStart(2, '0') + ' · ' + (explorer.state.transferLabel || v.state.label); }
+  if (text !== currentZone) { currentZone = text; $('view-title').textContent = text; $('map-location').textContent = mode === 'ride' ? 'OHT ' + String(explorer.state.followId + 1).padStart(2, '0') : text.split(' · ')[0]; }
+  if ($('view-subtitle').textContent !== sub) $('view-subtitle').textContent = sub;
 }
 let frameCount = 0, fpsStart = 0, displayedFPS = 0;
 function animate(now) {
@@ -521,7 +539,7 @@ function animate(now) {
     for (const belt of v.belts) { belt.position.y = (upper + bottom) / 2; belt.scale.y = Math.max(.02, upper - bottom); }
   }
   updateEntry(dt); explorer.update(dt);
-  if (audio?.enabled) audio.gain.gain.setTargetAtTime(entry.active ? .13 + entry.state.jet * .22 : .13, audio.context.currentTime, .12);
+  audio.update({ jet: entry.active ? entry.state.jet : 0, hidden: false });
   if (frameCount % 5 === 0) { drawMap(); updateZone(); }
   scene.updateMatrixWorld(true);
   for (const batch of movingBatches.values()) { batch.sources.forEach((source, i) => batch.instance.setMatrixAt(i, source.matrixWorld)); batch.instance.instanceMatrix.needsUpdate = true; }
@@ -530,8 +548,9 @@ function animate(now) {
   if (now - fpsStart > 1500) { displayedFPS = Math.round(frameCount * 1000 / (now - fpsStart)); frameCount = 0; fpsStart = now; }
   // Read-only diagnostics for local acceptance checks.
   if (frameCount % 15 === 0) {
-    const demo = vehicles[mode === 'ride' ? explorer.state.followId : 0];
-    $('world').dataset.diagnostics = JSON.stringify({ ready: true, revision: 'capacity-30000-6', mode, amberBays: bayLighting.bayIds.map(id => id + 1), amberLights: bayLighting.lights.length, amberLightsVisible: bayLighting.root.visible, entry: { active: entry.active, ...entry.state }, width: WIDTH, length: LENGTH, ceiling: HEIGHT,
+    const demo = observedVehicle();
+    updateSoundButton();
+    $('world').dataset.diagnostics = JSON.stringify({ ready: true, revision: 'experience-fixes-7', mode, audio: audio.state, amberBays: bayLighting.bayIds.map(id => id + 1), amberLights: bayLighting.lights.length, amberLightsVisible: bayLighting.root.visible, entry: { active: entry.active, ...entry.state }, width: WIDTH, length: LENGTH, ceiling: HEIGHT,
       equipmentCount: equipment.length, equipmentFamilies: families.length, uniqueEquipmentCodes: new Set(equipment.map(e => e.code)).size, selectedEquipment: selectedEquipment?.code ?? null,
       machines: machinePositions.length, bays: bays.length, toolsPerRow: 10, loadports: layoutMachines.length * 3,
       frontAisle: AISLE, rearAisle: SERVICE_AISLE, sideGap: SIDE_GAP, vehicles: vehicles.length, junctions: network.junctions.length,
@@ -539,8 +558,8 @@ function animate(now) {
       calls: renderer.info.render.calls, position: { x: explorer.state.position.x, y: 0, z: explorer.state.position.z },
       camera: { x: camera.position.x, y: camera.position.y, z: camera.position.z }, character: { visible: avatar.root.visible, height: avatar.height, speed: explorer.state.speed, heading: explorer.state.heading },
       walkPathPoints: explorer.state.path.length, cameraDistance: explorer.state.distance, cameraYaw: explorer.state.yaw,
-      roofVisible: roof.visible, parkedFoups: vehicles.filter(v => v.state.parked).length, transfer: demo.state, followId: explorer.state.followId, tourTime: explorer.state.tourTime });
-    $('transfer-status').textContent = vehicles[0].state.label;
+      roofVisible: roof.visible, parkedFoups: vehicles.filter(v => v.state.parked).length, transfer: demo.state, transferVehicleId: explorer.state.transferVehicleId, transferTarget: explorer.state.transferTarget, transferWaiting: explorer.state.transferWaiting, transferInTransit: explorer.state.transferInTransit, transferLabel: explorer.state.transferLabel, followId: explorer.state.followId, tourTime: explorer.state.tourTime });
+    $('transfer-status').textContent = mode === 'transfer' ? (explorer.state.transferLabel || demo.state.label) : demo.state.label;
 
   }
 }

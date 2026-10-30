@@ -1,6 +1,8 @@
 import { machines, bays, BAY_CENTERS, TOOL_WIDTH, isBlocked } from './layout.js';
+import { canTraverseRuntimeObstacles } from './runtime-obstacles.js';
 export const WALK_RADIUS = .23;
 export function canWalkSegment(a, b) {
+  if (!canTraverseRuntimeObstacles(a, b, WALK_RADIUS)) return false;
   const length = Math.hypot(b.x - a.x, b.z - a.z), steps = Math.max(1, Math.ceil(length / .12));
   for (let i = 0; i <= steps; i++) {
     const f = i / steps;
@@ -48,6 +50,7 @@ export function findWalkPath(start, target) {
     open.delete(id);
     if (endCosts.has(id) && costs.get(id) + endCosts.get(id) < best) { best = costs.get(id) + endCosts.get(id); found = id; }
     for (const edge of walkNodes[id].links) {
+      if (!canTraverseRuntimeObstacles(walkNodes[id], walkNodes[edge.id], WALK_RADIUS)) continue;
       const next = costs.get(id) + edge.cost;
       if (next < (costs.get(edge.id) ?? Infinity)) { costs.set(edge.id, next); previous.set(edge.id, id); open.add(edge.id); }
     }

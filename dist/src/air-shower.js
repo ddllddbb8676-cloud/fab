@@ -1,10 +1,13 @@
 // An entrance vestibule in the open end of the central concourse. Metres.
-// The sliding leaves are omitted from the permanent colliders: input is locked
-// during the entry sequence and they remain open afterwards.
+// Sliding leaves are separate from permanent colliders. Input is locked during
+// entry; use closedDoorBounds when the doors close after the avatar has exited.
 export const AIR_SHOWER = Object.freeze({
   start: { x: 0, z: 85.8 },
   exit: { x: 0, z: 78.8 },
   doorZ: 82.2,
+  closedDoorBounds: Object.freeze([
+    Object.freeze({ minX: -1.2, maxX: 1.2, minZ: 82.1, maxZ: 82.35, minY: 0, maxY: 2.65 })
+  ]),
   bounds: [
     { minX: -2.02, maxX: -1.78, minZ: 82.2, maxZ: 88.92 },
     { minX: 1.78, maxX: 2.02, minZ: 82.2, maxZ: 88.92 },
@@ -201,7 +204,7 @@ export function createAirShower(THREE) {
     }
   }
   update();
-  return { root, roof, doors, jets, indicator, update, bounds: AIR_SHOWER.bounds,
+  return { root, roof, doors, jets, indicator, update, bounds: AIR_SHOWER.bounds, closedDoorBounds: AIR_SHOWER.closedDoorBounds,
     dispose() {
       const geometries = new Set(); root.traverse(o => { if (o.geometry) geometries.add(o.geometry); });
       for (const g of geometries) g.dispose();

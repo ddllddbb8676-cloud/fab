@@ -1,5 +1,6 @@
 import { AIR_SHOWER } from './air-shower.js';
 import { bayFamilyIndices } from './equipment-catalog.js';
+import { isRuntimeBlocked } from './runtime-obstacles.js';
 // Metres. A viewing model informed by bay-layout research, not a construction plan.
 export const HALL = { width: 120, length: 180, height: 5 };
 export const AISLE = 5.2, SERVICE_AISLE = 1.4, SIDE_GAP = .65, TOOL_SCALE_X = 103 / 120;
@@ -58,6 +59,7 @@ for (let bank = 0; bank < 2; bank++) for (let b = 0; b < BAY_CENTERS.length; b++
 export const columns = [-59.2, 59.2].flatMap(x => Array.from({ length: 8 }, (_, i) => ({ x, z: -84 + i * 24 })));
 export function isBlocked(x, z, margin = .28) {
   if (Math.abs(x) > 58.8 || Math.abs(z) > 88.5) return true;
+  if (isRuntimeBlocked(x, z, margin)) return true;
   if (AIR_SHOWER.bounds.some(c => x > c.minX - margin && x < c.maxX + margin && z > c.minZ - margin && z < c.maxZ + margin)) return true;
   if (columns.some(c => Math.abs(x - c.x) < .27 + margin && Math.abs(z - c.z) < .27 + margin)) return true;
   return machines.some(({ bounds: c }) => x > c.minX - margin && x < c.maxX + margin && z > c.minZ - margin && z < c.maxZ + margin);
