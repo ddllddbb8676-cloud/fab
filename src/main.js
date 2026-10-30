@@ -9,6 +9,10 @@ import { createAvatar } from './avatar.js';
 import { createExplorer } from './explorer.js';
 import { AIR_SHOWER, createAirShower } from './air-shower.js';
 import { createEntrySequence } from './entry-sequence.js';
+import { processFamilies, buildEquipmentCatalog, getBayPurpose } from './equipment-catalog.js';
+import { createEquipmentLabels } from './equipment-labels.js';
+import { createEquipmentDirectory } from './equipment-directory.js';
+import { createBayLighting, applyBayWhiteLightMask } from './bay-lighting.js';
 
 const $ = (id) => document.getElementById(id);
 const mobile = matchMedia('(pointer: coarse)').matches;
@@ -110,8 +114,9 @@ const ceilingTexture = canvasTexture(256, 256, (ctx, w, h) => {
 ceilingTexture.wrapS = ceilingTexture.wrapT = THREE.RepeatWrapping; ceilingTexture.repeat.set(WIDTH / 3, LENGTH / 3);
 const ceilingSurface = new THREE.Mesh(new THREE.PlaneGeometry(WIDTH, LENGTH), mat('#e5edf0', .8, 0, { map: ceilingTexture, emissive: '#b3c7d0', emissiveIntensity: .12 }));
 ceilingSurface.rotation.x = Math.PI / 2; ceilingSurface.position.y = HEIGHT; roof.add(ceilingSurface);
+const bayLighting = createBayLighting(THREE, { bays, families: processFamilies, yellowBayIds: bays.filter(b => getBayPurpose(b.id).yellowLight).map(b => b.id), roof, scene, ceilingTexture });
 for (let x = -57; x <= 57; x += 6) for (let z = -87; z <= 87; z += 6) {
-  const strip = mesh(roof, boxGeometry, M.light, x, 4.975, z, .14, .025, 2.6);
+  const strip = mesh(roof, boxGeometry, bayLighting.isAmberAt(x, z) ? bayLighting.luminaireMaterial : M.light, x, 4.975, z, .14, .025, 2.6);
 }
 for (let x = -60; x <= 60; x += 6) mesh(roof, boxGeometry, M.frame, x, 4.95, 0, .04, .07, LENGTH);
 for (let z = -90; z <= 90; z += 6) mesh(roof, boxGeometry, M.frame, 0, 4.95, z, WIDTH, .07, .04);
@@ -136,14 +141,8 @@ for (const { x, z } of columns) {
 // Subtle guidance strips in the main aisle, interrupted at cross-aisles.
 for (let z = -87; z < 88; z += 3) for (const x of [-2.35, 2.35]) box(M.accent, x, .002, z, .045, .004, 1.55);
 
-const families = [
-  { key: 'PHOTO', name: '포토 · 빛으로 그리는 회로', short: 'LITHOGRAPHY', description: '웨이퍼 위 감광막에 빛을 비춰 미세한 회로 모양을 옮깁니다. 노광 장비와 코팅·현상 장비가 함께 배치된 구역을 표현했어요.', color: '#6a96b4', material: M.blue },
-  { key: 'ETCH', name: '식각 · 필요한 모양만 남기기', short: 'PLASMA ETCH', description: '패턴을 따라 얇은 막의 일부를 제거합니다. 여러 공정 챔버를 가진 장비와 웨이퍼를 받아들이는 로드포트를 볼 수 있어요.', color: '#73a99f', material: M.accent },
-  { key: 'DEPO', name: '증착 · 아주 얇은 막 쌓기', short: 'THIN FILM', description: '웨이퍼 위에 공정에 필요한 얇은 막을 형성합니다. 서로 다른 막과 조건에 맞춰 여러 종류의 장비가 사용됩니다.', color: '#a58daf', material: M.purple },
-  { key: 'CLEAN', name: '세정 · 다음 공정을 위한 준비', short: 'WET CLEAN', description: '웨이퍼 표면의 입자와 잔류물을 제거합니다. 다음 공정이 안정적으로 이루어질 수 있도록 표면을 준비하는 단계예요.', color: '#7fa7bc', material: M.blue },
-  { key: 'CMP', name: 'CMP · 표면을 고르게', short: 'PLANARIZATION', description: '화학 반응과 기계적인 연마를 이용해 웨이퍼 표면을 평탄하게 만듭니다. 여러 층을 쌓는 공정에서 중요한 역할을 합니다.', color: '#b5a17b', material: M.yellow },
-  { key: 'METRO', name: '계측 · 작은 차이 들여다보기', short: 'METROLOGY', description: '막의 두께와 패턴의 치수 등 공정 결과를 확인합니다. 이 모형은 실제 특정 제조사의 장비나 팹 배치를 재현한 설계가 아닙니다.', color: '#8a9cb7', material: M.blue }
-];
+const families = processFamilies.map(f => ({ ...f, material: M[f.materialKey] }));
+const equipment = buildEquipmentCatalog(layoutMachines), equipmentById = new Map(equipment.map(e => [e.id, e]));
 const machinePositions = [], colliders = [];
 const labelTextures = [];
 const labelCache = new Map();
@@ -212,9 +211,6 @@ function machine(layout, family) {
   localBox(x, z, s, M.edge, 2.12, 1.61, 2.57, .065, .8, .13);
   const monitor = mesh(scene, planeGeometry, screenMat, x + s * 2.12 * TOOL_SCALE_X, 1.91, z + s * 2.66, .56, .46, 1); monitor.rotation.y = s === 1 ? 0 : Math.PI;
   localBox(x, z, s, M.edge, 2.12, 1.59, 2.7, .64, .04, .33);
-  const label = labelTexture(family.key, family.short, family.color);
-  if (!family.labelMat) family.labelMat = mat('#ffffff', .65, .02, { map: label });
-  const labelMesh = mesh(scene, planeGeometry, family.labelMat, x, 2.38, z + s * 2.37, 1.2, .3, 1); labelMesh.rotation.y = s === 1 ? 0 : Math.PI;
   localBox(x, z, s, M.dark, 2.35, 3.05, 1.8, .06, .32, .06);
   cyl(index % 6 === 0 ? M.amber : M.green, x + s * 2.35 * TOOL_SCALE_X, 3.23, z + s * 1.8, .055, .13);
   if (family.key === 'ETCH' || family.key === 'DEPO') {
@@ -226,10 +222,11 @@ function machine(layout, family) {
     for (let j = -1; j <= 1; j++) localBox(x, z, s, M.blue, j * 1.4, 2.22, 2.383, .95, .35, .018);
   }
   const shadow = mesh(scene, planeGeometry, aoMat, x, .001, z, 6.5, 7.1, 1); shadow.rotation.x = -Math.PI / 2;
-  colliders.push({ ...layout.bounds, front: frontZ, x, z, family });
-  machinePositions.push({ x, z, family, index, sign, frontZ });
+  colliders.push({ ...layout.bounds, front: frontZ, x, z, family, equipment: equipmentById.get(index) });
+  machinePositions.push({ x, z, family, equipment: equipmentById.get(index), index, sign, frontZ });
 }
 for (const layout of layoutMachines) machine(layout, families[layout.familyIndex]);
+scene.add(createEquipmentLabels(THREE, layoutMachines, equipment, families));
 // Utility mains above equipment, below the ceiling. Cleanroom equipment is schematic.
 for (const bay of bays) for (const sign of [-1, 1]) {
   const z = bay.z + sign * 6.7;
@@ -243,7 +240,7 @@ for (const bay of bays) {
   const family = families[bay.familyIndex];
   const sign = new THREE.Group(); sign.position.set(bay.bank === 0 ? -3.1 : 3.1, 3.42, bay.z); sign.rotation.y = bay.bank === 0 ? Math.PI / 2 : -Math.PI / 2;
   mesh(sign, boxGeometry, M.white, 0, 0, 0, 2.85, .63, .09);
-  const tex = labelTexture('BAY ' + String(bay.id + 1).padStart(2, '0'), family.key + '    10 + 10 TOOLS', family.color);
+  const tex = labelTexture('BAY ' + String(bay.id + 1).padStart(2, '0'), 'FAB A  ·  ' + family.processCode + '  ' + getBayPurpose(bay.id).name, family.color);
   mesh(sign, planeGeometry, mat('#ffffff', .8, 0, { map: tex }), 0, 0, .05, 2.7, .57, 1);
   mesh(sign, boxGeometry, M.edge, -1, .75, 0, .025, .9, .025); mesh(sign, boxGeometry, M.edge, 1, .75, 0, .025, .9, .025);
   roof.add(sign);
@@ -350,19 +347,32 @@ orbit.enabled = false; orbit.enableDamping = true; orbit.dampingFactor = .06;
 orbit.minDistance = 16; orbit.maxDistance = 700; orbit.maxPolarAngle = Math.PI * .46; orbit.target.set(0, 0, 0);
 const avatar = createAvatar(THREE); scene.add(avatar.root);
 const airShower = createAirShower(THREE); scene.add(airShower.root);
+const bayWhiteMask = applyBayWhiteLightMask(THREE, scene, bays, { yellowBayIds: bayLighting.bayIds });
 colliders.push(...AIR_SHOWER.bounds.map(b => ({ ...b, maxY: 3.15 })));
 colliders.push({ minX: -2.02, maxX: 2.02, minZ: 82.2, maxZ: 88.92, minY: 3.07, maxY: 3.23 },
   { minX: -2.58, maxX: 2.58, minZ: 82.02, maxZ: 82.38, minY: 2.65, maxY: 3.23 });
 const entry = createEntrySequence({ reducedMotion });
-let mode = 'walk', elapsed = 0, lastTime = 0, currentZone = '', toastTimer;
+let mode = 'walk', elapsed = 0, lastTime = 0, currentZone = '', toastTimer, selectedEquipment = null;
 function toast(text) { $('zone-toast').textContent = text; $('zone-toast').classList.add('visible'); clearTimeout(toastTimer); toastTimer = setTimeout(() => $('zone-toast').classList.remove('visible'), 3200); }
-function showMachine(family) { $('tool-family').textContent = family.short; $('tool-name').textContent = family.name; $('tool-description').textContent = family.description; $('tool-card').classList.remove('hidden'); }
+function showMachine(item) {
+  selectedEquipment = item;
+  $('tool-family').textContent = `${item.processCode} · ${item.familyName}`;
+  $('tool-name').textContent = item.code; $('tool-type').textContent = item.typeName;
+  $('tool-location').textContent = `${item.fabName} · ${item.bayLabel} ${item.bayPurpose} · ${String(item.ordinal).padStart(2, '0')}번 장비`;
+  $('tool-description').textContent = item.description;
+  $('tool-code-process').textContent = item.processCode; $('tool-code-fab').textContent = item.fabCode;
+  $('tool-code-bay').textContent = item.code.slice(3, 5); $('tool-code-number').textContent = item.code.slice(5);
+  $('tool-ports').textContent = '로드포트 ' + item.portCodes.join(' · ');
+  $('tool-card').classList.remove('hidden');
+}
 const explorer = createExplorer({ THREE, camera, scene, canvas: renderer.domElement, avatar, orbit, colliders, vehicles,
   onToast: toast, onInspect: showMachine,
   onMode(next) {
     mode = next; document.body.classList.add('exploring'); $('intro').classList.add('hidden');
     for (const id of ['tour', 'walk', 'ride', 'overview']) { $(id).classList.toggle('active', id === next); $(id).setAttribute('aria-pressed', String(id === next)); }
     roof.visible = walls.visible = next !== 'overview'; if (reflector) reflector.visible = next !== 'overview';
+    bayLighting.setOverview(next === 'overview');
+    bayWhiteMask.setOverview(next === 'overview');
     railOverview.visible = next === 'overview';
     airShower.root.visible = next !== 'overview';
     scene.fog.density = next === 'overview' ? .0015 : .0063;
@@ -374,6 +384,11 @@ const explorer = createExplorer({ THREE, camera, scene, canvas: renderer.domElem
     currentZone = '';
   }
 });
+const directory = createEquipmentDirectory({ equipment, families,
+  onToggle(open) { explorer.lock(open); if (open) { $('help').classList.add('hidden'); $('tool-card').classList.add('hidden'); } },
+  onSelect(item) { explorer.focusEquipment(layoutMachines.find(m => m.id === item.id)); showMachine(item); }
+});
+$('equipment-list').addEventListener('click', () => { if (!entry.active) directory.open(); });
 for (const id of ['tour', 'walk', 'ride', 'overview']) $(id).addEventListener('click', () => explorer.setMode(id));
 $('explore').addEventListener('click', () => explorer.setMode('walk')); $('reset').addEventListener('click', startEntry);
 $('transfer-view').addEventListener('click', () => explorer.focusTransfer());
@@ -483,7 +498,7 @@ function updateZone() {
   const focus = mode === 'ride' ? vehicles[explorer.state.followId].state.car : explorer.state.position;
   if (Math.abs(focus.x) > AISLE / 2) {
     const nearest = bays.reduce((a, b) => Math.hypot(focus.x - a.x, focus.z - a.z) < Math.hypot(focus.x - b.x, focus.z - b.z) ? a : b);
-    text = 'BAY ' + String(nearest.id + 1).padStart(2, '0') + ' · ' + families[nearest.familyIndex].name.split(' · ')[0]; sub = '10 + 10 TOOLS · AISLE 5.2m';
+    text = 'BAY ' + String(nearest.id + 1).padStart(2, '0') + ' · ' + getBayPurpose(nearest.id).name; sub = '10 + 10 TOOLS · AISLE 5.2m';
     const offsetZ = Math.abs(focus.z - nearest.z);
     if (offsetZ > 8.2 && Math.abs(focus.x) < 54.8) { text = '장비 뒤쪽 통로'; sub = 'REAR SERVICE AISLE · 1.4m'; }
     else if (offsetZ > 2.6 && offsetZ < 8.2 && Math.abs(focus.x) < 54.8) { text = '옆 장비 사이 통로'; sub = 'TOOL SIDE CLEARANCE · 0.65m'; }
@@ -516,7 +531,8 @@ function animate(now) {
   // Read-only diagnostics for local acceptance checks.
   if (frameCount % 15 === 0) {
     const demo = vehicles[mode === 'ride' ? explorer.state.followId : 0];
-    $('world').dataset.diagnostics = JSON.stringify({ ready: true, revision: 'air-shower-fleet-4', mode, entry: { active: entry.active, ...entry.state }, width: WIDTH, length: LENGTH, ceiling: HEIGHT,
+    $('world').dataset.diagnostics = JSON.stringify({ ready: true, revision: 'equipment-identities-lighting-5', mode, amberBays: bayLighting.bayIds.map(id => id + 1), amberLights: bayLighting.lights.length, amberLightsVisible: bayLighting.root.visible, entry: { active: entry.active, ...entry.state }, width: WIDTH, length: LENGTH, ceiling: HEIGHT,
+      equipmentCount: equipment.length, equipmentFamilies: families.length, uniqueEquipmentCodes: new Set(equipment.map(e => e.code)).size, selectedEquipment: selectedEquipment?.code ?? null,
       machines: machinePositions.length, bays: bays.length, toolsPerRow: 10, loadports: layoutMachines.length * 3,
       frontAisle: AISLE, rearAisle: SERVICE_AISLE, sideGap: SIDE_GAP, vehicles: vehicles.length, junctions: network.junctions.length,
       networkNodes: network.nodes.length, networkEdges: network.edges.length, traffic: fleet.stats, instances: staticInstances, fps: displayedFPS,

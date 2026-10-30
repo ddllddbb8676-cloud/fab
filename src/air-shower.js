@@ -138,8 +138,8 @@ export function createAirShower(THREE) {
   box(root, steel, 0, 2.678, AIR_SHOWER.doorZ + .245, 2.48, .055, .05);
   box(root, dark, 0, 2.67, AIR_SHOWER.doorZ - .17, 2.4, .06, .025);
   const indicator = box(root, status, 0, 2.698, AIR_SHOWER.doorZ + .285, 1.3, .036, .024);
-  sign(root, 'AIR SHOWER', 'CLEANROOM ENTRY  /  FAB 01', 0, 2.965, AIR_SHOWER.doorZ + .232, 2.1, .42);
-  sign(root, 'FAB 01', 'CLEANROOM', 0, 2.97, AIR_SHOWER.doorZ - .232, 2.1, .42, Math.PI);
+  sign(root, 'AIR SHOWER', 'CLEANROOM ENTRY  /  FAB A', 0, 2.965, AIR_SHOWER.doorZ + .232, 2.1, .42);
+  sign(root, 'FAB A', 'CLEANROOM', 0, 2.97, AIR_SHOWER.doorZ - .232, 2.1, .42, Math.PI);
   // A small local control panel on the interior pocket.
   box(root, dark, 1.52, 1.55, AIR_SHOWER.doorZ + .235, .33, .53, .06);
   box(root, black, 1.52, 1.63, AIR_SHOWER.doorZ + .27, .25, .24, .025);

@@ -1,4 +1,5 @@
 import { AIR_SHOWER } from './air-shower.js';
+import { bayFamilyIndices } from './equipment-catalog.js';
 // Metres. A viewing model informed by bay-layout research, not a construction plan.
 export const HALL = { width: 120, length: 180, height: 5 };
 export const AISLE = 5.2, SERVICE_AISLE = 1.4, SIDE_GAP = .65, TOOL_SCALE_X = 103 / 120;
@@ -38,7 +39,7 @@ export function sampleLoop(loop, distance) {
 }
 for (let bank = 0; bank < 2; bank++) for (let b = 0; b < BAY_CENTERS.length; b++) {
   const x = BANK_CENTERS[bank], z = BAY_CENTERS[b], id = bank * BAY_CENTERS.length + b;
-  const bay = { id, bank, z, x, familyIndex: (b + bank * 3) % 6, machines: [] };
+  const bay = { id, bank, z, x, familyIndex: bayFamilyIndices[id], machines: [] };
   bay.loop = makeLoop(x - 26.9, x + 26.9, z - ROW_OFFSET + PORT_Z, z + ROW_OFFSET - PORT_Z);
   for (const sign of [1, -1]) for (let column = 0; column < 10; column++) {
     const m = { id: machines.length, bayId: id, bank, column, sign, familyIndex: bay.familyIndex,

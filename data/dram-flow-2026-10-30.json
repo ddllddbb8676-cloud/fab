@@ -1,0 +1,3737 @@
+{
+  "counters": "PHOTO37ETCH76CVD47METAL15DIFF18IMP14CMP12CLN100",
+  "rows": [
+    {
+      "color": "background:#7b8794",
+      "index": 1,
+      "label": "입고 검사",
+      "mi": true,
+      "module": "start",
+      "name": "Incoming Inspection",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 2,
+      "label": "초기 세정",
+      "mi": false,
+      "module": "start",
+      "name": "Pre-Diffusion Clean",
+      "number": "1",
+      "tool": "Wet Bench"
+    },
+    {
+      "color": "background:#cf4310",
+      "index": 3,
+      "label": "패드 산화막",
+      "mi": false,
+      "module": "start",
+      "name": "Pad Oxidation",
+      "number": "2",
+      "tool": "Furnace"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 4,
+      "label": "두께 측정",
+      "mi": true,
+      "module": "start",
+      "name": "Pad Ox THK",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 5,
+      "label": "질화막 전 세정",
+      "mi": false,
+      "module": "start",
+      "name": "Pre-Dep Clean",
+      "number": "3",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 6,
+      "label": "패드 질화막 증착",
+      "mi": false,
+      "module": "start",
+      "name": "Pad Nitride Dep",
+      "number": "4",
+      "tool": "LPCVD Furnace"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 7,
+      "label": "Hard Mask 산화막",
+      "mi": false,
+      "module": "sti",
+      "name": "HM Oxide Dep",
+      "number": "5",
+      "tool": "CVD"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 8,
+      "label": "Hard Mask Poly",
+      "mi": false,
+      "module": "sti",
+      "name": "HM Poly Dep",
+      "number": "6",
+      "tool": "LPCVD Furnace"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 9,
+      "label": "심(Mandrel) 탄소막",
+      "mi": false,
+      "module": "sti",
+      "name": "Mandrel ACL Dep",
+      "number": "7",
+      "tool": "CVD"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 10,
+      "label": "SiON 덮개",
+      "mi": false,
+      "module": "sti",
+      "name": "SiON Cap Dep",
+      "number": "8",
+      "tool": "CVD"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 11,
+      "label": "뒷면 세정",
+      "mi": false,
+      "module": "sti",
+      "name": "Backside Scrub",
+      "number": "9",
+      "tool": "Scrubber"
+    },
+    {
+      "color": "background:#c2306c",
+      "index": 12,
+      "label": "Active 심 노광",
+      "mi": false,
+      "module": "sti",
+      "name": "AA Mandrel Photo",
+      "number": "10",
+      "tool": "Scanner"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 13,
+      "label": "현상 후 CD",
+      "mi": true,
+      "module": "sti",
+      "name": "Mandrel ADI CD",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 14,
+      "label": "심 식각",
+      "mi": false,
+      "module": "sti",
+      "name": "Mandrel Etch",
+      "number": "11",
+      "tool": "Plasma Etcher"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 15,
+      "label": "PR 제거",
+      "mi": false,
+      "module": "sti",
+      "name": "PR Strip (Ash)",
+      "number": "12",
+      "tool": "Asher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 16,
+      "label": "습식 세정",
+      "mi": false,
+      "module": "sti",
+      "name": "Wet Clean",
+      "number": "13",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 17,
+      "label": "Spacer 산화막",
+      "mi": false,
+      "module": "sti",
+      "name": "Spacer Oxide Dep",
+      "number": "14",
+      "tool": "ALD"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 18,
+      "label": "Spacer 식각",
+      "mi": false,
+      "module": "sti",
+      "name": "Spacer Etch-back",
+      "number": "15",
+      "tool": "Plasma Etcher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 19,
+      "label": "식각 후 세정",
+      "mi": false,
+      "module": "sti",
+      "name": "Post-Etch Clean",
+      "number": "16",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 20,
+      "label": "심 제거",
+      "mi": false,
+      "module": "sti",
+      "name": "Mandrel Strip",
+      "number": "17",
+      "tool": "Asher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 21,
+      "label": "습식 세정",
+      "mi": false,
+      "module": "sti",
+      "name": "Wet Clean",
+      "number": "18",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 22,
+      "label": "Spacer 선폭",
+      "mi": true,
+      "module": "sti",
+      "name": "Spacer CD",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#c2306c",
+      "index": 23,
+      "label": "SOC 도포",
+      "mi": false,
+      "module": "sti",
+      "name": "SOC Coat",
+      "number": "19",
+      "tool": "Track"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 24,
+      "label": "SiON Hard Mask",
+      "mi": false,
+      "module": "sti",
+      "name": "MFHM Dep",
+      "number": "20",
+      "tool": "CVD"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 25,
+      "label": "뒷면 세정",
+      "mi": false,
+      "module": "sti",
+      "name": "Backside Scrub",
+      "number": "21",
+      "tool": "Scrubber"
+    },
+    {
+      "color": "background:#c2306c",
+      "index": 26,
+      "label": "Active 끊기·Peri Active 노광",
+      "mi": false,
+      "module": "sti",
+      "name": "AA Cut · Peri Active Photo",
+      "number": "22",
+      "tool": "Scanner"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 27,
+      "label": "현상 후 CD",
+      "mi": true,
+      "module": "sti",
+      "name": "Cut ADI CD",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 28,
+      "label": "Overlay",
+      "mi": true,
+      "module": "sti",
+      "name": "Cut Overlay",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 29,
+      "label": "SOC 식각",
+      "mi": false,
+      "module": "sti",
+      "name": "MFHM/SOC Etch",
+      "number": "23",
+      "tool": "Plasma Etcher"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 30,
+      "label": "Spacer 끊기·Hard Mask 식각",
+      "mi": false,
+      "module": "sti",
+      "name": "Spacer Cut & HM Etch",
+      "number": "24",
+      "tool": "Plasma Etcher"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 31,
+      "label": "SOC·PR 제거",
+      "mi": false,
+      "module": "sti",
+      "name": "SOC Strip",
+      "number": "25",
+      "tool": "Asher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 32,
+      "label": "습식 세정",
+      "mi": false,
+      "module": "sti",
+      "name": "Wet Clean",
+      "number": "26",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 33,
+      "label": "질화막·패드 산화막 식각",
+      "mi": false,
+      "module": "sti",
+      "name": "Nitride/Pad Ox Etch",
+      "number": "27",
+      "tool": "Plasma Etcher"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 34,
+      "label": "트렌치 식각",
+      "mi": false,
+      "module": "sti",
+      "name": "STI Si Etch",
+      "number": "28",
+      "tool": "Plasma Etcher"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 35,
+      "label": "트렌치 깊이",
+      "mi": true,
+      "module": "sti",
+      "name": "STI Depth OCD",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 36,
+      "label": "Poly Hard Mask 제거",
+      "mi": false,
+      "module": "sti",
+      "name": "HM Poly Strip",
+      "number": "29",
+      "tool": "Plasma Etcher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 37,
+      "label": "산화막 Hard Mask 제거",
+      "mi": false,
+      "module": "sti",
+      "name": "HM Oxide Strip",
+      "number": "30",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 38,
+      "label": "식각 후 세정",
+      "mi": false,
+      "module": "sti",
+      "name": "Post-Etch Clean",
+      "number": "31",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 39,
+      "label": "Liner 전 세정",
+      "mi": false,
+      "module": "sti",
+      "name": "Pre-Diffusion Clean",
+      "number": "32",
+      "tool": "Wet Bench"
+    },
+    {
+      "color": "background:#cf4310",
+      "index": 40,
+      "label": "라이너 산화",
+      "mi": false,
+      "module": "sti",
+      "name": "Liner Oxidation",
+      "number": "33",
+      "tool": "Furnace"
+    },
+    {
+      "color": "background:#c2306c",
+      "index": 41,
+      "label": "트렌치 바닥 노광",
+      "mi": false,
+      "module": "sti",
+      "name": "STI Bottom Photo",
+      "number": "34",
+      "tool": "Scanner"
+    },
+    {
+      "color": "background:#2f6fe4",
+      "index": 42,
+      "label": "트렌치 바닥 주입",
+      "mi": false,
+      "module": "sti",
+      "name": "STI Bottom IMP",
+      "number": "35",
+      "tool": "Implanter"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 43,
+      "label": "트렌치 바닥 PR 제거",
+      "mi": false,
+      "module": "sti",
+      "name": "PR Strip (Ash)",
+      "number": "36",
+      "tool": "Asher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 44,
+      "label": "트렌치 바닥 후 세정",
+      "mi": false,
+      "module": "sti",
+      "name": "Wet Clean",
+      "number": "37",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 45,
+      "label": "라이너 질화막",
+      "mi": false,
+      "module": "sti",
+      "name": "Liner Nitride Dep",
+      "number": "38",
+      "tool": "LPCVD Furnace"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 46,
+      "label": "트렌치 매립",
+      "mi": false,
+      "module": "sti",
+      "name": "STI Gap Fill",
+      "number": "39",
+      "tool": "CVD"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 47,
+      "label": "매립 두께",
+      "mi": true,
+      "module": "sti",
+      "name": "Gap Fill THK",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 48,
+      "label": "어닐 전 세정",
+      "mi": false,
+      "module": "sti",
+      "name": "Pre-Diffusion Clean",
+      "number": "40",
+      "tool": "Wet Bench"
+    },
+    {
+      "color": "background:#cf4310",
+      "index": 49,
+      "label": "치밀화 열처리",
+      "mi": false,
+      "module": "sti",
+      "name": "STI Densify Anneal",
+      "number": "41",
+      "tool": "Furnace"
+    },
+    {
+      "color": "background:#c45a00",
+      "index": 50,
+      "label": "산화막 CMP",
+      "mi": false,
+      "module": "sti",
+      "name": "STI CMP",
+      "number": "42",
+      "tool": "CMP"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 51,
+      "label": "CMP 후 세정",
+      "mi": false,
+      "module": "sti",
+      "name": "Post-CMP Scrub",
+      "number": "43",
+      "tool": "Scrubber"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 52,
+      "label": "CMP 후 HF 담그기",
+      "mi": false,
+      "module": "sti",
+      "name": "Post-CMP HF Dip",
+      "number": "44",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 53,
+      "label": "남은 두께·단차",
+      "mi": true,
+      "module": "sti",
+      "name": "STI CMP THK",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 54,
+      "label": "질화막 제거",
+      "mi": false,
+      "module": "sti",
+      "name": "Nitride Strip",
+      "number": "45",
+      "tool": "Wet Bench"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 55,
+      "label": "패드 산화막 제거",
+      "mi": false,
+      "module": "sti",
+      "name": "Pad Oxide Strip",
+      "number": "46",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 56,
+      "label": "결함 검사",
+      "mi": true,
+      "module": "sti",
+      "name": "STI Defect Inspection",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 57,
+      "label": "산화 전 세정",
+      "mi": false,
+      "module": "well",
+      "name": "Pre-Diffusion Clean",
+      "number": "47",
+      "tool": "Wet Bench"
+    },
+    {
+      "color": "background:#cf4310",
+      "index": 58,
+      "label": "희생(Screen) 산화막",
+      "mi": false,
+      "module": "well",
+      "name": "Screen Oxidation",
+      "number": "48",
+      "tool": "Furnace"
+    },
+    {
+      "color": "background:#c2306c",
+      "index": 59,
+      "label": "P-Well 노광",
+      "mi": false,
+      "module": "well",
+      "name": "P-Well (Cell·LV) Photo",
+      "number": "49",
+      "tool": "Scanner"
+    },
+    {
+      "color": "background:#2f6fe4",
+      "index": 60,
+      "label": "P-Well 주입",
+      "mi": false,
+      "module": "well",
+      "name": "P-Well (Cell·LV) IMP",
+      "number": "50",
+      "tool": "Implanter"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 61,
+      "label": "P-Well PR 제거",
+      "mi": false,
+      "module": "well",
+      "name": "PR Strip (Ash)",
+      "number": "51",
+      "tool": "Asher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 62,
+      "label": "P-Well 후 세정",
+      "mi": false,
+      "module": "well",
+      "name": "Wet Clean",
+      "number": "52",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 63,
+      "label": "주입 확인",
+      "mi": true,
+      "module": "well",
+      "name": "Well TW",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#c2306c",
+      "index": 64,
+      "label": "HV P-Well 노광",
+      "mi": false,
+      "module": "well",
+      "name": "HV P-Well Photo",
+      "number": "53",
+      "tool": "Scanner"
+    },
+    {
+      "color": "background:#2f6fe4",
+      "index": 65,
+      "label": "HV P-Well 주입",
+      "mi": false,
+      "module": "well",
+      "name": "HV P-Well IMP",
+      "number": "54",
+      "tool": "Implanter"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 66,
+      "label": "HV P-Well PR 제거",
+      "mi": false,
+      "module": "well",
+      "name": "PR Strip (Ash)",
+      "number": "55",
+      "tool": "Asher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 67,
+      "label": "HV P-Well 후 세정",
+      "mi": false,
+      "module": "well",
+      "name": "Wet Clean",
+      "number": "56",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#c2306c",
+      "index": 68,
+      "label": "HV N-Well 노광",
+      "mi": false,
+      "module": "well",
+      "name": "HV N-Well Photo",
+      "number": "57",
+      "tool": "Scanner"
+    },
+    {
+      "color": "background:#2f6fe4",
+      "index": 69,
+      "label": "HV N-Well 주입",
+      "mi": false,
+      "module": "well",
+      "name": "HV N-Well IMP",
+      "number": "58",
+      "tool": "Implanter"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 70,
+      "label": "HV N-Well PR 제거",
+      "mi": false,
+      "module": "well",
+      "name": "PR Strip (Ash)",
+      "number": "59",
+      "tool": "Asher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 71,
+      "label": "HV N-Well 후 세정",
+      "mi": false,
+      "module": "well",
+      "name": "Wet Clean",
+      "number": "60",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#c2306c",
+      "index": 72,
+      "label": "LV NMOS Vt 노광",
+      "mi": false,
+      "module": "well",
+      "name": "LV NMOS Vt Photo",
+      "number": "61",
+      "tool": "Scanner"
+    },
+    {
+      "color": "background:#2f6fe4",
+      "index": 73,
+      "label": "LV NMOS Vt 주입",
+      "mi": false,
+      "module": "well",
+      "name": "LV NMOS Vt IMP",
+      "number": "62",
+      "tool": "Implanter"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 74,
+      "label": "LV NMOS Vt PR 제거",
+      "mi": false,
+      "module": "well",
+      "name": "PR Strip (Ash)",
+      "number": "63",
+      "tool": "Asher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 75,
+      "label": "LV NMOS Vt 후 세정",
+      "mi": false,
+      "module": "well",
+      "name": "Wet Clean",
+      "number": "64",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 76,
+      "label": "Overlay",
+      "mi": true,
+      "module": "well",
+      "name": "Vt Mask Overlay",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#c2306c",
+      "index": 77,
+      "label": "HV NMOS Vt 노광",
+      "mi": false,
+      "module": "well",
+      "name": "HV NMOS Vt Photo",
+      "number": "65",
+      "tool": "Scanner"
+    },
+    {
+      "color": "background:#2f6fe4",
+      "index": 78,
+      "label": "HV NMOS Vt 주입",
+      "mi": false,
+      "module": "well",
+      "name": "HV NMOS Vt IMP",
+      "number": "66",
+      "tool": "Implanter"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 79,
+      "label": "HV NMOS Vt PR 제거",
+      "mi": false,
+      "module": "well",
+      "name": "PR Strip (Ash)",
+      "number": "67",
+      "tool": "Asher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 80,
+      "label": "HV NMOS Vt 후 세정",
+      "mi": false,
+      "module": "well",
+      "name": "Wet Clean",
+      "number": "68",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#c2306c",
+      "index": 81,
+      "label": "HV PMOS Vt 노광",
+      "mi": false,
+      "module": "well",
+      "name": "HV PMOS Vt Photo",
+      "number": "69",
+      "tool": "Scanner"
+    },
+    {
+      "color": "background:#2f6fe4",
+      "index": 82,
+      "label": "HV PMOS Vt 주입",
+      "mi": false,
+      "module": "well",
+      "name": "HV PMOS Vt IMP",
+      "number": "70",
+      "tool": "Implanter"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 83,
+      "label": "HV PMOS Vt PR 제거",
+      "mi": false,
+      "module": "well",
+      "name": "PR Strip (Ash)",
+      "number": "71",
+      "tool": "Asher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 84,
+      "label": "HV PMOS Vt 후 세정",
+      "mi": false,
+      "module": "well",
+      "name": "Wet Clean",
+      "number": "72",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 85,
+      "label": "어닐 전 세정",
+      "mi": false,
+      "module": "well",
+      "name": "Pre-Diffusion Clean",
+      "number": "73",
+      "tool": "Wet Bench"
+    },
+    {
+      "color": "background:#cf4310",
+      "index": 86,
+      "label": "Well 열처리",
+      "mi": false,
+      "module": "well",
+      "name": "Well Anneal",
+      "number": "74",
+      "tool": "Furnace"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 87,
+      "label": "면저항",
+      "mi": true,
+      "module": "well",
+      "name": "Well Rs (Monitor)",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 88,
+      "label": "Screen 산화막 제거",
+      "mi": false,
+      "module": "well",
+      "name": "Screen Oxide Strip",
+      "number": "75",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 89,
+      "label": "퍼니스 전 세정",
+      "mi": false,
+      "module": "wl",
+      "name": "Pre-Diffusion Clean",
+      "number": "76",
+      "tool": "Wet Bench"
+    },
+    {
+      "color": "background:#cf4310",
+      "index": 90,
+      "label": "패드 산화막",
+      "mi": false,
+      "module": "wl",
+      "name": "Pad Oxidation",
+      "number": "77",
+      "tool": "Furnace"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 91,
+      "label": "질화막 전 세정",
+      "mi": false,
+      "module": "wl",
+      "name": "Pre-Dep Clean",
+      "number": "78",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 92,
+      "label": "WL Hard Mask 질화막",
+      "mi": false,
+      "module": "wl",
+      "name": "WL HM Nitride Dep",
+      "number": "79",
+      "tool": "LPCVD Furnace"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 93,
+      "label": "Poly 전 세정",
+      "mi": false,
+      "module": "wl",
+      "name": "Pre-Dep Clean",
+      "number": "80",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 94,
+      "label": "심 Poly 증착",
+      "mi": false,
+      "module": "wl",
+      "name": "Mandrel Poly Dep",
+      "number": "81",
+      "tool": "LPCVD Furnace"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 95,
+      "label": "뒷면 세정",
+      "mi": false,
+      "module": "wl",
+      "name": "Backside Scrub",
+      "number": "82",
+      "tool": "Scrubber"
+    },
+    {
+      "color": "background:#c2306c",
+      "index": 96,
+      "label": "WL 심 노광",
+      "mi": false,
+      "module": "wl",
+      "name": "WL Mandrel Photo",
+      "number": "83",
+      "tool": "Scanner"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 97,
+      "label": "현상 후 CD",
+      "mi": true,
+      "module": "wl",
+      "name": "WL Mandrel ADI CD",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 98,
+      "label": "심 식각",
+      "mi": false,
+      "module": "wl",
+      "name": "Mandrel Etch",
+      "number": "84",
+      "tool": "Plasma Etcher"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 99,
+      "label": "PR 제거",
+      "mi": false,
+      "module": "wl",
+      "name": "PR Strip (Ash)",
+      "number": "85",
+      "tool": "Asher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 100,
+      "label": "습식 세정",
+      "mi": false,
+      "module": "wl",
+      "name": "Wet Clean",
+      "number": "86",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 101,
+      "label": "Spacer 산화막",
+      "mi": false,
+      "module": "wl",
+      "name": "Spacer Oxide Dep",
+      "number": "87",
+      "tool": "ALD"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 102,
+      "label": "Spacer 식각",
+      "mi": false,
+      "module": "wl",
+      "name": "Spacer Etch-back",
+      "number": "88",
+      "tool": "Plasma Etcher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 103,
+      "label": "식각 후 세정",
+      "mi": false,
+      "module": "wl",
+      "name": "Post-Etch Clean",
+      "number": "89",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 104,
+      "label": "심 제거",
+      "mi": false,
+      "module": "wl",
+      "name": "Mandrel Strip",
+      "number": "90",
+      "tool": "Plasma Etcher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 105,
+      "label": "식각 후 세정",
+      "mi": false,
+      "module": "wl",
+      "name": "Post-Etch Clean",
+      "number": "91",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 106,
+      "label": "Spacer 선폭",
+      "mi": true,
+      "module": "wl",
+      "name": "Spacer CD OCD",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#c2306c",
+      "index": 107,
+      "label": "Peri 가림 노광",
+      "mi": false,
+      "module": "wl",
+      "name": "WL Peri Block Photo",
+      "number": "92",
+      "tool": "Scanner"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 108,
+      "label": "Hard Mask 식각",
+      "mi": false,
+      "module": "wl",
+      "name": "WL HM Etch",
+      "number": "93",
+      "tool": "Plasma Etcher"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 109,
+      "label": "PR 제거",
+      "mi": false,
+      "module": "wl",
+      "name": "PR Strip (Ash)",
+      "number": "94",
+      "tool": "Asher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 110,
+      "label": "습식 세정",
+      "mi": false,
+      "module": "wl",
+      "name": "Wet Clean",
+      "number": "95",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 111,
+      "label": "WL 홈 식각",
+      "mi": false,
+      "module": "wl",
+      "name": "WL Trench Etch",
+      "number": "96",
+      "tool": "Plasma Etcher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 112,
+      "label": "WL 홈 세정",
+      "mi": false,
+      "module": "wl",
+      "name": "Post-Etch Clean",
+      "number": "97",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 113,
+      "label": "홈 깊이·CD",
+      "mi": true,
+      "module": "wl",
+      "name": "WL Trench OCD",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 114,
+      "label": "Cell Gate 산화막(ALD)",
+      "mi": false,
+      "module": "wl",
+      "name": "Gate Oxide ALD",
+      "number": "98",
+      "tool": "ALD"
+    },
+    {
+      "color": "background:#cf4310",
+      "index": 115,
+      "label": "라디칼 산화(ISSG)",
+      "mi": false,
+      "module": "wl",
+      "name": "ISSG Oxidation",
+      "number": "99",
+      "tool": "RTP"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 116,
+      "label": "Gate 산화막 두께",
+      "mi": true,
+      "module": "wl",
+      "name": "Cell Gox THK",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 117,
+      "label": "TiN Barrier",
+      "mi": false,
+      "module": "wl",
+      "name": "WL TiN Dep",
+      "number": "100",
+      "tool": "ALD"
+    },
+    {
+      "color": "background:#9a6a00",
+      "index": 118,
+      "label": "W 채움",
+      "mi": false,
+      "module": "wl",
+      "name": "WL W Dep",
+      "number": "101",
+      "tool": "W CVD"
+    },
+    {
+      "color": "background:#c45a00",
+      "index": 119,
+      "label": "W CMP",
+      "mi": false,
+      "module": "wl",
+      "name": "WL W CMP",
+      "number": "102",
+      "tool": "CMP"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 120,
+      "label": "CMP 후 세정",
+      "mi": false,
+      "module": "wl",
+      "name": "Post-CMP Scrub",
+      "number": "103",
+      "tool": "Scrubber"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 121,
+      "label": "W Recess",
+      "mi": false,
+      "module": "wl",
+      "name": "WL Recess Etch",
+      "number": "104",
+      "tool": "Plasma Etcher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 122,
+      "label": "금속 잔사 세정",
+      "mi": false,
+      "module": "wl",
+      "name": "Post-Etch Clean",
+      "number": "105",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 123,
+      "label": "Recess 깊이",
+      "mi": true,
+      "module": "wl",
+      "name": "WL Recess OCD",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#cf4310",
+      "index": 124,
+      "label": "W 표면 산화",
+      "mi": false,
+      "module": "wl",
+      "name": "W Surface Oxidation",
+      "number": "106",
+      "tool": "RTP"
+    },
+    {
+      "color": "background:#cf4310",
+      "index": 125,
+      "label": "플라즈마 질화",
+      "mi": false,
+      "module": "wl",
+      "name": "Plasma Nitridation",
+      "number": "107",
+      "tool": "RTP"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 126,
+      "label": "잔류물 제거",
+      "mi": false,
+      "module": "wl",
+      "name": "HF Wet Strip",
+      "number": "108",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 127,
+      "label": "n⁺ Poly 증착",
+      "mi": false,
+      "module": "wl",
+      "name": "n+ Poly Dep",
+      "number": "109",
+      "tool": "LPCVD Furnace"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 128,
+      "label": "Poly Recess",
+      "mi": false,
+      "module": "wl",
+      "name": "Poly Recess",
+      "number": "110",
+      "tool": "Plasma Etcher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 129,
+      "label": "식각 후 세정",
+      "mi": false,
+      "module": "wl",
+      "name": "Post-Etch Clean",
+      "number": "111",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 130,
+      "label": "Capping 질화막",
+      "mi": false,
+      "module": "wl",
+      "name": "WL Capping Nitride Dep",
+      "number": "112",
+      "tool": "CVD"
+    },
+    {
+      "color": "background:#c45a00",
+      "index": 131,
+      "label": "Capping CMP",
+      "mi": false,
+      "module": "wl",
+      "name": "Capping CMP",
+      "number": "113",
+      "tool": "CMP"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 132,
+      "label": "CMP 후 세정",
+      "mi": false,
+      "module": "wl",
+      "name": "Post-CMP Scrub",
+      "number": "114",
+      "tool": "Scrubber"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 133,
+      "label": "남은 두께",
+      "mi": true,
+      "module": "wl",
+      "name": "Capping THK",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#c2306c",
+      "index": 134,
+      "label": "Cell S/D 노광",
+      "mi": false,
+      "module": "wl",
+      "name": "Cell S/D Photo",
+      "number": "115",
+      "tool": "Scanner"
+    },
+    {
+      "color": "background:#2f6fe4",
+      "index": 135,
+      "label": "Cell S/D 주입",
+      "mi": false,
+      "module": "wl",
+      "name": "Cell S/D IMP",
+      "number": "116",
+      "tool": "Implanter"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 136,
+      "label": "Cell S/D PR 제거",
+      "mi": false,
+      "module": "wl",
+      "name": "PR Strip (Ash)",
+      "number": "117",
+      "tool": "Asher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 137,
+      "label": "Cell S/D 후 세정",
+      "mi": false,
+      "module": "wl",
+      "name": "Wet Clean",
+      "number": "118",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 138,
+      "label": "결함 검사",
+      "mi": true,
+      "module": "wl",
+      "name": "WL Defect Inspection",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#c2306c",
+      "index": 139,
+      "label": "Peri 열기 노광",
+      "mi": false,
+      "module": "gox",
+      "name": "Peri Open Photo",
+      "number": "119",
+      "tool": "Scanner"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 140,
+      "label": "Peri 산화막 제거",
+      "mi": false,
+      "module": "gox",
+      "name": "Peri Pad Ox Etch",
+      "number": "120",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 141,
+      "label": "PR 제거",
+      "mi": false,
+      "module": "gox",
+      "name": "PR Strip (Ash)",
+      "number": "121",
+      "tool": "Asher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 142,
+      "label": "습식 세정",
+      "mi": false,
+      "module": "gox",
+      "name": "Wet Clean",
+      "number": "122",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#cf4310",
+      "index": 143,
+      "label": "희생 산화",
+      "mi": false,
+      "module": "gox",
+      "name": "Sacrificial Oxidation",
+      "number": "123",
+      "tool": "Furnace"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 144,
+      "label": "희생 산화막 제거",
+      "mi": false,
+      "module": "gox",
+      "name": "Sacrificial Ox Strip",
+      "number": "124",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 145,
+      "label": "Gate 전 세정",
+      "mi": false,
+      "module": "gox",
+      "name": "Pre-Gate Clean",
+      "number": "125",
+      "tool": "Wet Bench"
+    },
+    {
+      "color": "background:#cf4310",
+      "index": 146,
+      "label": "HV Gate 산화(두꺼운 막)",
+      "mi": false,
+      "module": "gox",
+      "name": "HV Gate Oxidation",
+      "number": "126",
+      "tool": "Furnace"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 147,
+      "label": "두꺼운 막 두께",
+      "mi": true,
+      "module": "gox",
+      "name": "HV Gox THK",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#c2306c",
+      "index": 148,
+      "label": "LV 열기 노광",
+      "mi": false,
+      "module": "gox",
+      "name": "LV Open Photo",
+      "number": "127",
+      "tool": "Scanner"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 149,
+      "label": "LV 쪽 두꺼운 막 제거",
+      "mi": false,
+      "module": "gox",
+      "name": "HV Ox Wet Etch",
+      "number": "128",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 150,
+      "label": "PR 제거",
+      "mi": false,
+      "module": "gox",
+      "name": "PR Strip (Ash)",
+      "number": "129",
+      "tool": "Asher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 151,
+      "label": "HF 없는 세정",
+      "mi": false,
+      "module": "gox",
+      "name": "HF-free Clean",
+      "number": "130",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#cf4310",
+      "index": 152,
+      "label": "LV Gate 산화(얇은 막)",
+      "mi": false,
+      "module": "gox",
+      "name": "LV Gate Oxidation",
+      "number": "131",
+      "tool": "RTP"
+    },
+    {
+      "color": "background:#cf4310",
+      "index": 153,
+      "label": "플라즈마 질화(DPN)",
+      "mi": false,
+      "module": "gox",
+      "name": "Plasma Nitridation",
+      "number": "132",
+      "tool": "RTP"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 154,
+      "label": "두 막 두께",
+      "mi": true,
+      "module": "gox",
+      "name": "Dual Gox THK",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 155,
+      "label": "Peri Gate Poly",
+      "mi": false,
+      "module": "gox",
+      "name": "Peri Poly Dep",
+      "number": "133",
+      "tool": "LPCVD Furnace"
+    },
+    {
+      "color": "background:#c2306c",
+      "index": 156,
+      "label": "Cell 열기 노광",
+      "mi": false,
+      "module": "bl",
+      "name": "Cell Open Photo",
+      "number": "134",
+      "tool": "Scanner"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 157,
+      "label": "Cell Poly 제거",
+      "mi": false,
+      "module": "bl",
+      "name": "Cell Poly Etch",
+      "number": "135",
+      "tool": "Plasma Etcher"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 158,
+      "label": "PR 제거",
+      "mi": false,
+      "module": "bl",
+      "name": "PR Strip (Ash)",
+      "number": "136",
+      "tool": "Asher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 159,
+      "label": "습식 세정",
+      "mi": false,
+      "module": "bl",
+      "name": "Wet Clean",
+      "number": "137",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 160,
+      "label": "Cell 절연막",
+      "mi": false,
+      "module": "bl",
+      "name": "Cell Insulator Dep",
+      "number": "138",
+      "tool": "CVD"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 161,
+      "label": "뒷면 세정",
+      "mi": false,
+      "module": "bl",
+      "name": "Backside Scrub",
+      "number": "139",
+      "tool": "Scrubber"
+    },
+    {
+      "color": "background:#c2306c",
+      "index": 162,
+      "label": "Bit Line Contact 노광",
+      "mi": false,
+      "module": "bl",
+      "name": "DC Photo",
+      "number": "140",
+      "tool": "Scanner"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 163,
+      "label": "현상 후 CD",
+      "mi": true,
+      "module": "bl",
+      "name": "DC ADI CD",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 164,
+      "label": "DC 식각",
+      "mi": false,
+      "module": "bl",
+      "name": "DC Etch",
+      "number": "141",
+      "tool": "Plasma Etcher"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 165,
+      "label": "PR 제거",
+      "mi": false,
+      "module": "bl",
+      "name": "PR Strip (Ash)",
+      "number": "142",
+      "tool": "Asher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 166,
+      "label": "Poly 전 세정",
+      "mi": false,
+      "module": "bl",
+      "name": "Post-Etch Clean",
+      "number": "143",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 167,
+      "label": "DC Poly 채움",
+      "mi": false,
+      "module": "bl",
+      "name": "DC Poly Dep",
+      "number": "144",
+      "tool": "LPCVD Furnace"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 168,
+      "label": "DC Poly 되깎기",
+      "mi": false,
+      "module": "bl",
+      "name": "DC Poly Etch-back",
+      "number": "145",
+      "tool": "Plasma Etcher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 169,
+      "label": "식각 후 세정",
+      "mi": false,
+      "module": "bl",
+      "name": "Post-Etch Clean",
+      "number": "146",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#c2306c",
+      "index": 170,
+      "label": "Peri 절연막 열기 노광",
+      "mi": false,
+      "module": "bl",
+      "name": "Peri Insulator Open Photo",
+      "number": "147",
+      "tool": "Scanner"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 171,
+      "label": "Peri 질화막 제거",
+      "mi": false,
+      "module": "bl",
+      "name": "Peri Nitride Etch",
+      "number": "148",
+      "tool": "Plasma Etcher"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 172,
+      "label": "PR 제거",
+      "mi": false,
+      "module": "bl",
+      "name": "PR Strip (Ash)",
+      "number": "149",
+      "tool": "Asher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 173,
+      "label": "습식 세정",
+      "mi": false,
+      "module": "bl",
+      "name": "Wet Clean",
+      "number": "150",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#9a6a00",
+      "index": 174,
+      "label": "Barrier TiN",
+      "mi": false,
+      "module": "bl",
+      "name": "BL Barrier Dep",
+      "number": "151",
+      "tool": "PVD"
+    },
+    {
+      "color": "background:#9a6a00",
+      "index": 175,
+      "label": "W 증착",
+      "mi": false,
+      "module": "bl",
+      "name": "BL W Dep",
+      "number": "152",
+      "tool": "PVD"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 176,
+      "label": "Cap 질화막",
+      "mi": false,
+      "module": "bl",
+      "name": "BL Cap Nitride Dep",
+      "number": "153",
+      "tool": "CVD"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 177,
+      "label": "면저항",
+      "mi": true,
+      "module": "bl",
+      "name": "BL W Rs",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 178,
+      "label": "심 탄소막",
+      "mi": false,
+      "module": "bl",
+      "name": "BL Mandrel Dep",
+      "number": "154",
+      "tool": "CVD"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 179,
+      "label": "SiON 덮개",
+      "mi": false,
+      "module": "bl",
+      "name": "SiON Cap Dep",
+      "number": "155",
+      "tool": "CVD"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 180,
+      "label": "뒷면 세정",
+      "mi": false,
+      "module": "bl",
+      "name": "Backside Scrub",
+      "number": "156",
+      "tool": "Scrubber"
+    },
+    {
+      "color": "background:#c2306c",
+      "index": 181,
+      "label": "BL 심 노광",
+      "mi": false,
+      "module": "bl",
+      "name": "BL Mandrel Photo",
+      "number": "157",
+      "tool": "Scanner"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 182,
+      "label": "현상 후 CD",
+      "mi": true,
+      "module": "bl",
+      "name": "BL Mandrel ADI CD",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 183,
+      "label": "심 식각",
+      "mi": false,
+      "module": "bl",
+      "name": "Mandrel Etch",
+      "number": "158",
+      "tool": "Plasma Etcher"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 184,
+      "label": "PR 제거",
+      "mi": false,
+      "module": "bl",
+      "name": "PR Strip (Ash)",
+      "number": "159",
+      "tool": "Asher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 185,
+      "label": "습식 세정",
+      "mi": false,
+      "module": "bl",
+      "name": "Wet Clean",
+      "number": "160",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 186,
+      "label": "Spacer 산화막",
+      "mi": false,
+      "module": "bl",
+      "name": "Spacer Oxide Dep",
+      "number": "161",
+      "tool": "ALD"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 187,
+      "label": "Spacer 식각",
+      "mi": false,
+      "module": "bl",
+      "name": "Spacer Etch-back",
+      "number": "162",
+      "tool": "Plasma Etcher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 188,
+      "label": "식각 후 세정",
+      "mi": false,
+      "module": "bl",
+      "name": "Post-Etch Clean",
+      "number": "163",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 189,
+      "label": "심 제거",
+      "mi": false,
+      "module": "bl",
+      "name": "Mandrel Strip",
+      "number": "164",
+      "tool": "Asher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 190,
+      "label": "습식 세정",
+      "mi": false,
+      "module": "bl",
+      "name": "Wet Clean",
+      "number": "165",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 191,
+      "label": "뒷면 세정",
+      "mi": false,
+      "module": "bl",
+      "name": "Backside Scrub",
+      "number": "166",
+      "tool": "Scrubber"
+    },
+    {
+      "color": "background:#c2306c",
+      "index": 192,
+      "label": "Bit Line·Peri Gate 노광",
+      "mi": false,
+      "module": "bl",
+      "name": "BL Cut · Peri Gate Photo",
+      "number": "167",
+      "tool": "Scanner"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 193,
+      "label": "현상 후 CD",
+      "mi": true,
+      "module": "bl",
+      "name": "Gate ADI CD",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 194,
+      "label": "Overlay",
+      "mi": true,
+      "module": "bl",
+      "name": "BL Overlay",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 195,
+      "label": "Cap 질화막 식각",
+      "mi": false,
+      "module": "bl",
+      "name": "Cap Nitride Etch",
+      "number": "168",
+      "tool": "Plasma Etcher"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 196,
+      "label": "PR 제거",
+      "mi": false,
+      "module": "bl",
+      "name": "PR Strip (Ash)",
+      "number": "169",
+      "tool": "Asher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 197,
+      "label": "Spacer 산화막 제거",
+      "mi": false,
+      "module": "bl",
+      "name": "Spacer Oxide Strip",
+      "number": "170",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 198,
+      "label": "Bit Line·Gate 식각",
+      "mi": false,
+      "module": "bl",
+      "name": "BL · Gate Etch",
+      "number": "171",
+      "tool": "Plasma Etcher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 199,
+      "label": "식각 후 세정",
+      "mi": false,
+      "module": "bl",
+      "name": "Post-Etch Clean",
+      "number": "172",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 200,
+      "label": "식각 후 CD·모양",
+      "mi": true,
+      "module": "bl",
+      "name": "BL ACI OCD",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 201,
+      "label": "결함 검사",
+      "mi": true,
+      "module": "bl",
+      "name": "BL Defect Inspection",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 202,
+      "label": "결함 Review",
+      "mi": true,
+      "module": "bl",
+      "name": "BL Defect Review",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#c2306c",
+      "index": 203,
+      "label": "Halo 노광",
+      "mi": false,
+      "module": "psd",
+      "name": "LV NMOS Halo Photo",
+      "number": "173",
+      "tool": "Scanner"
+    },
+    {
+      "color": "background:#2f6fe4",
+      "index": 204,
+      "label": "Halo 주입",
+      "mi": false,
+      "module": "psd",
+      "name": "LV NMOS Halo IMP",
+      "number": "174",
+      "tool": "Implanter"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 205,
+      "label": "Halo PR 제거",
+      "mi": false,
+      "module": "psd",
+      "name": "PR Strip (Ash)",
+      "number": "175",
+      "tool": "Asher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 206,
+      "label": "Halo 후 세정",
+      "mi": false,
+      "module": "psd",
+      "name": "Wet Clean",
+      "number": "176",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#c2306c",
+      "index": 207,
+      "label": "LV N-LDD 노광",
+      "mi": false,
+      "module": "psd",
+      "name": "LV N-LDD Photo",
+      "number": "177",
+      "tool": "Scanner"
+    },
+    {
+      "color": "background:#2f6fe4",
+      "index": 208,
+      "label": "LV N-LDD 주입",
+      "mi": false,
+      "module": "psd",
+      "name": "LV N-LDD IMP",
+      "number": "178",
+      "tool": "Implanter"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 209,
+      "label": "LV N-LDD PR 제거",
+      "mi": false,
+      "module": "psd",
+      "name": "PR Strip (Ash)",
+      "number": "179",
+      "tool": "Asher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 210,
+      "label": "LV N-LDD 후 세정",
+      "mi": false,
+      "module": "psd",
+      "name": "Wet Clean",
+      "number": "180",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#c2306c",
+      "index": 211,
+      "label": "HV N-LDD 노광",
+      "mi": false,
+      "module": "psd",
+      "name": "HV N-LDD Photo",
+      "number": "181",
+      "tool": "Scanner"
+    },
+    {
+      "color": "background:#2f6fe4",
+      "index": 212,
+      "label": "HV N-LDD 주입",
+      "mi": false,
+      "module": "psd",
+      "name": "HV N-LDD IMP",
+      "number": "182",
+      "tool": "Implanter"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 213,
+      "label": "HV N-LDD PR 제거",
+      "mi": false,
+      "module": "psd",
+      "name": "PR Strip (Ash)",
+      "number": "183",
+      "tool": "Asher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 214,
+      "label": "HV N-LDD 후 세정",
+      "mi": false,
+      "module": "psd",
+      "name": "Wet Clean",
+      "number": "184",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#c2306c",
+      "index": 215,
+      "label": "HV P-LDD 노광",
+      "mi": false,
+      "module": "psd",
+      "name": "HV P-LDD Photo",
+      "number": "185",
+      "tool": "Scanner"
+    },
+    {
+      "color": "background:#2f6fe4",
+      "index": 216,
+      "label": "HV P-LDD 주입",
+      "mi": false,
+      "module": "psd",
+      "name": "HV P-LDD IMP",
+      "number": "186",
+      "tool": "Implanter"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 217,
+      "label": "HV P-LDD PR 제거",
+      "mi": false,
+      "module": "psd",
+      "name": "PR Strip (Ash)",
+      "number": "187",
+      "tool": "Asher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 218,
+      "label": "HV P-LDD 후 세정",
+      "mi": false,
+      "module": "psd",
+      "name": "Wet Clean",
+      "number": "188",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 219,
+      "label": "주입 확인",
+      "mi": true,
+      "module": "psd",
+      "name": "LDD TW",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 220,
+      "label": "Spacer 질화막 1",
+      "mi": false,
+      "module": "psd",
+      "name": "Spacer Nitride Dep 1",
+      "number": "189",
+      "tool": "ALD"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 221,
+      "label": "Spacer 산화막",
+      "mi": false,
+      "module": "psd",
+      "name": "Spacer Oxide Dep",
+      "number": "190",
+      "tool": "CVD"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 222,
+      "label": "Spacer 질화막 2",
+      "mi": false,
+      "module": "psd",
+      "name": "Spacer Nitride Dep 2",
+      "number": "191",
+      "tool": "ALD"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 223,
+      "label": "Spacer 식각",
+      "mi": false,
+      "module": "psd",
+      "name": "Spacer Etch",
+      "number": "192",
+      "tool": "Plasma Etcher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 224,
+      "label": "식각 후 세정",
+      "mi": false,
+      "module": "psd",
+      "name": "Post-Etch Clean",
+      "number": "193",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 225,
+      "label": "Spacer 폭",
+      "mi": true,
+      "module": "psd",
+      "name": "Spacer CD",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#c2306c",
+      "index": 226,
+      "label": "N⁺ S/D 노광",
+      "mi": false,
+      "module": "psd",
+      "name": "N+ S/D Photo",
+      "number": "194",
+      "tool": "Scanner"
+    },
+    {
+      "color": "background:#2f6fe4",
+      "index": 227,
+      "label": "N⁺ S/D 주입",
+      "mi": false,
+      "module": "psd",
+      "name": "N+ S/D IMP",
+      "number": "195",
+      "tool": "Implanter"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 228,
+      "label": "N⁺ S/D PR 제거",
+      "mi": false,
+      "module": "psd",
+      "name": "PR Strip (Ash)",
+      "number": "196",
+      "tool": "Asher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 229,
+      "label": "N⁺ S/D 후 세정",
+      "mi": false,
+      "module": "psd",
+      "name": "Wet Clean",
+      "number": "197",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#c2306c",
+      "index": 230,
+      "label": "P⁺ S/D 노광",
+      "mi": false,
+      "module": "psd",
+      "name": "P+ S/D Photo",
+      "number": "198",
+      "tool": "Scanner"
+    },
+    {
+      "color": "background:#2f6fe4",
+      "index": 231,
+      "label": "P⁺ S/D 주입",
+      "mi": false,
+      "module": "psd",
+      "name": "P+ S/D IMP",
+      "number": "199",
+      "tool": "Implanter"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 232,
+      "label": "P⁺ S/D PR 제거",
+      "mi": false,
+      "module": "psd",
+      "name": "PR Strip (Ash)",
+      "number": "200",
+      "tool": "Asher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 233,
+      "label": "P⁺ S/D 후 세정",
+      "mi": false,
+      "module": "psd",
+      "name": "Wet Clean",
+      "number": "201",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 234,
+      "label": "주입 확인",
+      "mi": true,
+      "module": "psd",
+      "name": "S/D TW",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 235,
+      "label": "RTP 전 세정",
+      "mi": false,
+      "module": "psd",
+      "name": "Pre-Diffusion Clean",
+      "number": "202",
+      "tool": "Wet Bench"
+    },
+    {
+      "color": "background:#cf4310",
+      "index": 236,
+      "label": "활성화 열처리",
+      "mi": false,
+      "module": "psd",
+      "name": "S/D Activation RTP",
+      "number": "203",
+      "tool": "RTP"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 237,
+      "label": "면저항",
+      "mi": true,
+      "module": "psd",
+      "name": "S/D Rs (Monitor)",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 238,
+      "label": "층간 절연막",
+      "mi": false,
+      "module": "psd",
+      "name": "ILD Dep",
+      "number": "204",
+      "tool": "CVD"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 239,
+      "label": "퍼니스 전 세정(금속용)",
+      "mi": false,
+      "module": "psd",
+      "name": "Pre-Furnace Clean",
+      "number": "205",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#cf4310",
+      "index": 240,
+      "label": "치밀화 열처리",
+      "mi": false,
+      "module": "psd",
+      "name": "ILD Densify Anneal",
+      "number": "206",
+      "tool": "Furnace"
+    },
+    {
+      "color": "background:#c45a00",
+      "index": 241,
+      "label": "층간막 CMP",
+      "mi": false,
+      "module": "psd",
+      "name": "ILD CMP",
+      "number": "207",
+      "tool": "CMP"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 242,
+      "label": "CMP 후 세정",
+      "mi": false,
+      "module": "psd",
+      "name": "Post-CMP Scrub",
+      "number": "208",
+      "tool": "Scrubber"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 243,
+      "label": "남은 두께",
+      "mi": true,
+      "module": "psd",
+      "name": "ILD CMP THK",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 244,
+      "label": "뒷면 세정",
+      "mi": false,
+      "module": "snc",
+      "name": "Backside Scrub",
+      "number": "209",
+      "tool": "Scrubber"
+    },
+    {
+      "color": "background:#c2306c",
+      "index": 245,
+      "label": "SNC 노광",
+      "mi": false,
+      "module": "snc",
+      "name": "SNC Photo",
+      "number": "210",
+      "tool": "Scanner"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 246,
+      "label": "SNC 식각",
+      "mi": false,
+      "module": "snc",
+      "name": "SNC Etch",
+      "number": "211",
+      "tool": "Plasma Etcher"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 247,
+      "label": "PR 제거",
+      "mi": false,
+      "module": "snc",
+      "name": "PR Strip (Ash)",
+      "number": "212",
+      "tool": "Asher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 248,
+      "label": "Poly 전 세정",
+      "mi": false,
+      "module": "snc",
+      "name": "Post-Etch Clean",
+      "number": "213",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 249,
+      "label": "식각 후 CD",
+      "mi": true,
+      "module": "snc",
+      "name": "SNC ACI CD",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 250,
+      "label": "SNC Poly 채움",
+      "mi": false,
+      "module": "snc",
+      "name": "SNC Poly Dep",
+      "number": "214",
+      "tool": "LPCVD Furnace"
+    },
+    {
+      "color": "background:#c45a00",
+      "index": 251,
+      "label": "Poly CMP",
+      "mi": false,
+      "module": "snc",
+      "name": "SNC Poly CMP",
+      "number": "215",
+      "tool": "CMP"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 252,
+      "label": "CMP 후 세정",
+      "mi": false,
+      "module": "snc",
+      "name": "Post-CMP Scrub",
+      "number": "216",
+      "tool": "Scrubber"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 253,
+      "label": "Poly Recess",
+      "mi": false,
+      "module": "snc",
+      "name": "SNC Poly Recess",
+      "number": "217",
+      "tool": "Plasma Etcher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 254,
+      "label": "식각 후 세정",
+      "mi": false,
+      "module": "snc",
+      "name": "Post-Etch Clean",
+      "number": "218",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#c2306c",
+      "index": 255,
+      "label": "Peri 콘택 노광",
+      "mi": false,
+      "module": "snc",
+      "name": "Peri Contact Photo",
+      "number": "219",
+      "tool": "Scanner"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 256,
+      "label": "Peri 콘택 식각",
+      "mi": false,
+      "module": "snc",
+      "name": "Peri Contact Etch",
+      "number": "220",
+      "tool": "Plasma Etcher"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 257,
+      "label": "PR 제거",
+      "mi": false,
+      "module": "snc",
+      "name": "PR Strip (Ash)",
+      "number": "221",
+      "tool": "Asher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 258,
+      "label": "금속 전 세정",
+      "mi": false,
+      "module": "snc",
+      "name": "Post-Etch Clean",
+      "number": "222",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 259,
+      "label": "전자빔 검사",
+      "mi": true,
+      "module": "snc",
+      "name": "Contact e-beam Inspection",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#9a6a00",
+      "index": 260,
+      "label": "Co 증착",
+      "mi": false,
+      "module": "snc",
+      "name": "Co Dep",
+      "number": "223",
+      "tool": "PVD"
+    },
+    {
+      "color": "background:#cf4310",
+      "index": 261,
+      "label": "실리사이드 열처리",
+      "mi": false,
+      "module": "snc",
+      "name": "Silicide RTP",
+      "number": "224",
+      "tool": "RTP"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 262,
+      "label": "남은 Co 제거",
+      "mi": false,
+      "module": "snc",
+      "name": "Unreacted Co Strip",
+      "number": "225",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#9a6a00",
+      "index": 263,
+      "label": "Barrier Ti/TiN",
+      "mi": false,
+      "module": "snc",
+      "name": "Ti/TiN Dep",
+      "number": "226",
+      "tool": "PVD"
+    },
+    {
+      "color": "background:#9a6a00",
+      "index": 264,
+      "label": "W 증착",
+      "mi": false,
+      "module": "snc",
+      "name": "LP W Dep",
+      "number": "227",
+      "tool": "W CVD"
+    },
+    {
+      "color": "background:#c45a00",
+      "index": 265,
+      "label": "W CMP",
+      "mi": false,
+      "module": "snc",
+      "name": "LP W CMP",
+      "number": "228",
+      "tool": "CMP"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 266,
+      "label": "CMP 후 세정",
+      "mi": false,
+      "module": "snc",
+      "name": "Post-CMP Scrub",
+      "number": "229",
+      "tool": "Scrubber"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 267,
+      "label": "면저항",
+      "mi": true,
+      "module": "snc",
+      "name": "LP W Rs",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 268,
+      "label": "뒷면 세정",
+      "mi": false,
+      "module": "snc",
+      "name": "Backside Scrub",
+      "number": "230",
+      "tool": "Scrubber"
+    },
+    {
+      "color": "background:#c2306c",
+      "index": 269,
+      "label": "Landing Pad·Peri 배선 노광",
+      "mi": false,
+      "module": "snc",
+      "name": "LP · Peri Wiring Photo",
+      "number": "231",
+      "tool": "Scanner"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 270,
+      "label": "Overlay",
+      "mi": true,
+      "module": "snc",
+      "name": "LP Overlay",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 271,
+      "label": "W 식각",
+      "mi": false,
+      "module": "snc",
+      "name": "LP W Etch",
+      "number": "232",
+      "tool": "Plasma Etcher"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 272,
+      "label": "PR 제거",
+      "mi": false,
+      "module": "snc",
+      "name": "PR Strip (Ash)",
+      "number": "233",
+      "tool": "Asher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 273,
+      "label": "식각 후 세정",
+      "mi": false,
+      "module": "snc",
+      "name": "Post-Etch Clean",
+      "number": "234",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 274,
+      "label": "Pad 분리 질화막",
+      "mi": false,
+      "module": "snc",
+      "name": "LP Isolation Dep",
+      "number": "235",
+      "tool": "CVD"
+    },
+    {
+      "color": "background:#c45a00",
+      "index": 275,
+      "label": "질화막 CMP",
+      "mi": false,
+      "module": "snc",
+      "name": "LP Isolation CMP",
+      "number": "236",
+      "tool": "CMP"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 276,
+      "label": "CMP 후 세정",
+      "mi": false,
+      "module": "snc",
+      "name": "Post-CMP Scrub",
+      "number": "237",
+      "tool": "Scrubber"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 277,
+      "label": "결함 검사",
+      "mi": true,
+      "module": "snc",
+      "name": "LP Defect Inspection",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 278,
+      "label": "Mold 전 세정",
+      "mi": false,
+      "module": "cap",
+      "name": "Pre-Dep Clean",
+      "number": "238",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 279,
+      "label": "식각 멈춤 질화막",
+      "mi": false,
+      "module": "cap",
+      "name": "Etch Stop Nitride Dep",
+      "number": "239",
+      "tool": "CVD"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 280,
+      "label": "Mold 산화막 1",
+      "mi": false,
+      "module": "cap",
+      "name": "Mold 1 Dep",
+      "number": "240",
+      "tool": "CVD"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 281,
+      "label": "Supporter 질화막 1",
+      "mi": false,
+      "module": "cap",
+      "name": "Supporter 1 Dep",
+      "number": "241",
+      "tool": "CVD"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 282,
+      "label": "Mold 산화막 2",
+      "mi": false,
+      "module": "cap",
+      "name": "Mold 2 Dep",
+      "number": "242",
+      "tool": "CVD"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 283,
+      "label": "Supporter 질화막 2",
+      "mi": false,
+      "module": "cap",
+      "name": "Supporter 2 Dep",
+      "number": "243",
+      "tool": "CVD"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 284,
+      "label": "적층 두께",
+      "mi": true,
+      "module": "cap",
+      "name": "Mold Stack THK",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 285,
+      "label": "웨이퍼 휨",
+      "mi": true,
+      "module": "cap",
+      "name": "Wafer Bow",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 286,
+      "label": "Hard Mask(탄소막)",
+      "mi": false,
+      "module": "cap",
+      "name": "Cap HM Dep",
+      "number": "244",
+      "tool": "CVD"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 287,
+      "label": "SiON 덮개",
+      "mi": false,
+      "module": "cap",
+      "name": "SiON Cap Dep",
+      "number": "245",
+      "tool": "CVD"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 288,
+      "label": "뒷면 세정",
+      "mi": false,
+      "module": "cap",
+      "name": "Backside Scrub",
+      "number": "246",
+      "tool": "Scrubber"
+    },
+    {
+      "color": "background:#c2306c",
+      "index": 289,
+      "label": "Capacitor 구멍 노광",
+      "mi": false,
+      "module": "cap",
+      "name": "SN Hole Photo",
+      "number": "247",
+      "tool": "Scanner"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 290,
+      "label": "현상 후 CD",
+      "mi": true,
+      "module": "cap",
+      "name": "SN Hole ADI CD",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 291,
+      "label": "Hard Mask 열기",
+      "mi": false,
+      "module": "cap",
+      "name": "HM Open Etch",
+      "number": "248",
+      "tool": "Plasma Etcher"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 292,
+      "label": "PR 제거",
+      "mi": false,
+      "module": "cap",
+      "name": "PR Strip (Ash)",
+      "number": "249",
+      "tool": "Asher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 293,
+      "label": "습식 세정",
+      "mi": false,
+      "module": "cap",
+      "name": "Wet Clean",
+      "number": "250",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 294,
+      "label": "깊은 구멍 식각",
+      "mi": false,
+      "module": "cap",
+      "name": "HARC Etch",
+      "number": "251",
+      "tool": "Plasma Etcher"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 295,
+      "label": "구멍 모양",
+      "mi": true,
+      "module": "cap",
+      "name": "Hole Profile CD-SAXS",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 296,
+      "label": "Hard Mask 제거",
+      "mi": false,
+      "module": "cap",
+      "name": "Cap HM Strip",
+      "number": "252",
+      "tool": "Asher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 297,
+      "label": "구멍 세정",
+      "mi": false,
+      "module": "cap",
+      "name": "Post-Etch Clean",
+      "number": "253",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 298,
+      "label": "식각 후 CD",
+      "mi": true,
+      "module": "cap",
+      "name": "SN Hole ACI CD",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 299,
+      "label": "하부전극 TiN",
+      "mi": false,
+      "module": "cap",
+      "name": "Bottom Electrode TiN",
+      "number": "254",
+      "tool": "ALD"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 300,
+      "label": "희생 산화막 채움",
+      "mi": false,
+      "module": "cap",
+      "name": "Sacrificial Ox Fill",
+      "number": "255",
+      "tool": "CVD"
+    },
+    {
+      "color": "background:#c45a00",
+      "index": 301,
+      "label": "노드 분리 CMP",
+      "mi": false,
+      "module": "cap",
+      "name": "Node Separation CMP",
+      "number": "256",
+      "tool": "CMP"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 302,
+      "label": "CMP 후 세정",
+      "mi": false,
+      "module": "cap",
+      "name": "Post-CMP Scrub",
+      "number": "257",
+      "tool": "Scrubber"
+    },
+    {
+      "color": "background:#c2306c",
+      "index": 303,
+      "label": "Supporter 열기 노광",
+      "mi": false,
+      "module": "cap",
+      "name": "Supporter Open Photo",
+      "number": "258",
+      "tool": "Scanner"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 304,
+      "label": "위 Supporter 식각",
+      "mi": false,
+      "module": "cap",
+      "name": "Supporter 2 Etch",
+      "number": "259",
+      "tool": "Plasma Etcher"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 305,
+      "label": "PR 제거",
+      "mi": false,
+      "module": "cap",
+      "name": "PR Strip (Ash)",
+      "number": "260",
+      "tool": "Asher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 306,
+      "label": "습식 세정",
+      "mi": false,
+      "module": "cap",
+      "name": "Wet Clean",
+      "number": "261",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 307,
+      "label": "위 Mold 녹이기",
+      "mi": false,
+      "module": "cap",
+      "name": "Mold 2 Dip-out",
+      "number": "262",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 308,
+      "label": "가운데 Supporter 식각",
+      "mi": false,
+      "module": "cap",
+      "name": "Supporter 1 Etch",
+      "number": "263",
+      "tool": "Plasma Etcher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 309,
+      "label": "아래 Mold 녹이기",
+      "mi": false,
+      "module": "cap",
+      "name": "Mold 1 Dip-out",
+      "number": "264",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 310,
+      "label": "헹굼·건조",
+      "mi": false,
+      "module": "cap",
+      "name": "Rinse & Dry",
+      "number": "265",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 311,
+      "label": "쓰러짐 검사",
+      "mi": true,
+      "module": "cap",
+      "name": "Leaning Inspection",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 312,
+      "label": "유전막(ZAZ)",
+      "mi": false,
+      "module": "cap",
+      "name": "High-k Dielectric ALD",
+      "number": "266",
+      "tool": "ALD"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 313,
+      "label": "유전막 두께",
+      "mi": true,
+      "module": "cap",
+      "name": "Dielectric THK",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 314,
+      "label": "상부전극 TiN",
+      "mi": false,
+      "module": "cap",
+      "name": "Top Electrode TiN",
+      "number": "267",
+      "tool": "ALD"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 315,
+      "label": "Plate SiGe",
+      "mi": false,
+      "module": "cap",
+      "name": "Plate SiGe Dep",
+      "number": "268",
+      "tool": "LPCVD Furnace"
+    },
+    {
+      "color": "background:#9a6a00",
+      "index": 316,
+      "label": "Plate W",
+      "mi": false,
+      "module": "cap",
+      "name": "Plate W Dep",
+      "number": "269",
+      "tool": "PVD"
+    },
+    {
+      "color": "background:#c2306c",
+      "index": 317,
+      "label": "Plate 노광",
+      "mi": false,
+      "module": "cap",
+      "name": "Plate Photo",
+      "number": "270",
+      "tool": "Scanner"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 318,
+      "label": "Plate 식각",
+      "mi": false,
+      "module": "cap",
+      "name": "Plate Etch",
+      "number": "271",
+      "tool": "Plasma Etcher"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 319,
+      "label": "PR 제거",
+      "mi": false,
+      "module": "cap",
+      "name": "PR Strip (Ash)",
+      "number": "272",
+      "tool": "Asher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 320,
+      "label": "식각 후 세정",
+      "mi": false,
+      "module": "cap",
+      "name": "Post-Etch Clean",
+      "number": "273",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 321,
+      "label": "층간 절연막",
+      "mi": false,
+      "module": "cap",
+      "name": "ILD Dep",
+      "number": "274",
+      "tool": "CVD"
+    },
+    {
+      "color": "background:#c45a00",
+      "index": 322,
+      "label": "층간막 CMP",
+      "mi": false,
+      "module": "cap",
+      "name": "ILD CMP",
+      "number": "275",
+      "tool": "CMP"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 323,
+      "label": "CMP 후 세정",
+      "mi": false,
+      "module": "cap",
+      "name": "Post-CMP Scrub",
+      "number": "276",
+      "tool": "Scrubber"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 324,
+      "label": "남은 두께",
+      "mi": true,
+      "module": "cap",
+      "name": "ILD CMP THK",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 325,
+      "label": "뒷면 세정",
+      "mi": false,
+      "module": "metal",
+      "name": "Backside Scrub",
+      "number": "277",
+      "tool": "Scrubber"
+    },
+    {
+      "color": "background:#c2306c",
+      "index": 326,
+      "label": "금속 콘택 노광",
+      "mi": false,
+      "module": "metal",
+      "name": "Metal Contact Photo",
+      "number": "278",
+      "tool": "Scanner"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 327,
+      "label": "현상 후 CD",
+      "mi": true,
+      "module": "metal",
+      "name": "MC ADI CD",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 328,
+      "label": "깊은 콘택 식각",
+      "mi": false,
+      "module": "metal",
+      "name": "Metal Contact Etch",
+      "number": "279",
+      "tool": "Plasma Etcher"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 329,
+      "label": "PR 제거",
+      "mi": false,
+      "module": "metal",
+      "name": "PR Strip (Ash)",
+      "number": "280",
+      "tool": "Asher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 330,
+      "label": "금속 전 세정",
+      "mi": false,
+      "module": "metal",
+      "name": "Post-Etch Clean",
+      "number": "281",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#9a6a00",
+      "index": 331,
+      "label": "Barrier Ti/TiN",
+      "mi": false,
+      "module": "metal",
+      "name": "Contact Ti/TiN Dep",
+      "number": "282",
+      "tool": "PVD"
+    },
+    {
+      "color": "background:#9a6a00",
+      "index": 332,
+      "label": "W 채움",
+      "mi": false,
+      "module": "metal",
+      "name": "Contact W Dep",
+      "number": "283",
+      "tool": "W CVD"
+    },
+    {
+      "color": "background:#c45a00",
+      "index": 333,
+      "label": "W CMP",
+      "mi": false,
+      "module": "metal",
+      "name": "Contact W CMP",
+      "number": "284",
+      "tool": "CMP"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 334,
+      "label": "CMP 후 세정",
+      "mi": false,
+      "module": "metal",
+      "name": "Post-CMP Scrub",
+      "number": "285",
+      "tool": "Scrubber"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 335,
+      "label": "식각 멈춤막",
+      "mi": false,
+      "module": "metal",
+      "name": "M1 Etch Stop Dep",
+      "number": "286",
+      "tool": "CVD"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 336,
+      "label": "Metal 1 절연막",
+      "mi": false,
+      "module": "metal",
+      "name": "M1 IMD Dep",
+      "number": "287",
+      "tool": "CVD"
+    },
+    {
+      "color": "background:#c2306c",
+      "index": 337,
+      "label": "Metal 1 홈 노광",
+      "mi": false,
+      "module": "metal",
+      "name": "M1 Trench Photo",
+      "number": "288",
+      "tool": "Scanner"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 338,
+      "label": "현상 후 CD",
+      "mi": true,
+      "module": "metal",
+      "name": "M1 ADI CD",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 339,
+      "label": "Metal 1 홈 식각",
+      "mi": false,
+      "module": "metal",
+      "name": "M1 Trench Etch",
+      "number": "289",
+      "tool": "Plasma Etcher"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 340,
+      "label": "PR 제거",
+      "mi": false,
+      "module": "metal",
+      "name": "PR Strip (Ash)",
+      "number": "290",
+      "tool": "Asher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 341,
+      "label": "식각 후 세정",
+      "mi": false,
+      "module": "metal",
+      "name": "Post-Etch Clean",
+      "number": "291",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#9a6a00",
+      "index": 342,
+      "label": "Ta/TaN Barrier",
+      "mi": false,
+      "module": "metal",
+      "name": "Barrier PVD",
+      "number": "292",
+      "tool": "PVD"
+    },
+    {
+      "color": "background:#9a6a00",
+      "index": 343,
+      "label": "Cu Seed",
+      "mi": false,
+      "module": "metal",
+      "name": "Cu Seed PVD",
+      "number": "293",
+      "tool": "PVD"
+    },
+    {
+      "color": "background:#9a6a00",
+      "index": 344,
+      "label": "Cu 전해 도금",
+      "mi": false,
+      "module": "metal",
+      "name": "Cu ECP",
+      "number": "294",
+      "tool": "ECP"
+    },
+    {
+      "color": "background:#cf4310",
+      "index": 345,
+      "label": "Cu 열처리",
+      "mi": false,
+      "module": "metal",
+      "name": "Cu Anneal",
+      "number": "295",
+      "tool": "Furnace"
+    },
+    {
+      "color": "background:#c45a00",
+      "index": 346,
+      "label": "Cu CMP",
+      "mi": false,
+      "module": "metal",
+      "name": "Cu CMP",
+      "number": "296",
+      "tool": "CMP"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 347,
+      "label": "CMP 후 세정",
+      "mi": false,
+      "module": "metal",
+      "name": "Post-CMP Scrub",
+      "number": "297",
+      "tool": "Scrubber"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 348,
+      "label": "배선 저항",
+      "mi": true,
+      "module": "metal",
+      "name": "M1 Rs",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 349,
+      "label": "Cu Cap 질화막",
+      "mi": false,
+      "module": "metal",
+      "name": "Cu Cap Dep",
+      "number": "298",
+      "tool": "CVD"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 350,
+      "label": "Metal 2 절연막",
+      "mi": false,
+      "module": "metal",
+      "name": "IMD 2 Dep",
+      "number": "299",
+      "tool": "CVD"
+    },
+    {
+      "color": "background:#c2306c",
+      "index": 351,
+      "label": "Via 노광",
+      "mi": false,
+      "module": "metal",
+      "name": "Via Photo",
+      "number": "300",
+      "tool": "Scanner"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 352,
+      "label": "Via 식각",
+      "mi": false,
+      "module": "metal",
+      "name": "Via Etch",
+      "number": "301",
+      "tool": "Plasma Etcher"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 353,
+      "label": "PR 제거",
+      "mi": false,
+      "module": "metal",
+      "name": "PR Strip (Ash)",
+      "number": "302",
+      "tool": "Asher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 354,
+      "label": "금속 후 세정",
+      "mi": false,
+      "module": "metal",
+      "name": "Post-Etch Clean",
+      "number": "303",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#9a6a00",
+      "index": 355,
+      "label": "Via Barrier",
+      "mi": false,
+      "module": "metal",
+      "name": "Via Ti/TiN Dep",
+      "number": "304",
+      "tool": "PVD"
+    },
+    {
+      "color": "background:#9a6a00",
+      "index": 356,
+      "label": "Via W 채움",
+      "mi": false,
+      "module": "metal",
+      "name": "Via W Dep",
+      "number": "305",
+      "tool": "W CVD"
+    },
+    {
+      "color": "background:#c45a00",
+      "index": 357,
+      "label": "Via CMP",
+      "mi": false,
+      "module": "metal",
+      "name": "Via W CMP",
+      "number": "306",
+      "tool": "CMP"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 358,
+      "label": "CMP 후 세정",
+      "mi": false,
+      "module": "metal",
+      "name": "Post-CMP Scrub",
+      "number": "307",
+      "tool": "Scrubber"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 359,
+      "label": "금속 전 세정",
+      "mi": false,
+      "module": "metal",
+      "name": "Pre-Metal Clean",
+      "number": "308",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#9a6a00",
+      "index": 360,
+      "label": "Metal 2 Al",
+      "mi": false,
+      "module": "metal",
+      "name": "M2 Al Stack PVD",
+      "number": "309",
+      "tool": "PVD"
+    },
+    {
+      "color": "background:#c2306c",
+      "index": 361,
+      "label": "Metal 2 노광",
+      "mi": false,
+      "module": "metal",
+      "name": "M2 Photo",
+      "number": "310",
+      "tool": "Scanner"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 362,
+      "label": "현상 후 CD",
+      "mi": true,
+      "module": "metal",
+      "name": "M2 ADI CD",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 363,
+      "label": "Al 식각",
+      "mi": false,
+      "module": "metal",
+      "name": "M2 Al Etch",
+      "number": "311",
+      "tool": "Plasma Etcher"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 364,
+      "label": "PR 제거",
+      "mi": false,
+      "module": "metal",
+      "name": "PR Strip (Ash)",
+      "number": "312",
+      "tool": "Asher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 365,
+      "label": "금속 식각 후 세정",
+      "mi": false,
+      "module": "metal",
+      "name": "Post-Etch Clean",
+      "number": "313",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 366,
+      "label": "결함 검사",
+      "mi": true,
+      "module": "metal",
+      "name": "M2 Defect Inspection",
+      "number": "계측",
+      "tool": "Metrology"
+    },
+    {
+      "color": "background:#3f8c12",
+      "index": 367,
+      "label": "보호막",
+      "mi": false,
+      "module": "metal",
+      "name": "Passivation Dep",
+      "number": "314",
+      "tool": "CVD"
+    },
+    {
+      "color": "background:#c2306c",
+      "index": 368,
+      "label": "Pad 열기 노광",
+      "mi": false,
+      "module": "metal",
+      "name": "Pad Photo",
+      "number": "315",
+      "tool": "Scanner"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 369,
+      "label": "Pad 식각",
+      "mi": false,
+      "module": "metal",
+      "name": "Pad Etch",
+      "number": "316",
+      "tool": "Plasma Etcher"
+    },
+    {
+      "color": "background:#6b3fc6",
+      "index": 370,
+      "label": "PR 제거",
+      "mi": false,
+      "module": "metal",
+      "name": "PR Strip (Ash)",
+      "number": "317",
+      "tool": "Asher"
+    },
+    {
+      "color": "background:#0b8577",
+      "index": 371,
+      "label": "Pad 세정",
+      "mi": false,
+      "module": "metal",
+      "name": "Post-Etch Clean",
+      "number": "318",
+      "tool": "Single Wet"
+    },
+    {
+      "color": "background:#cf4310",
+      "index": 372,
+      "label": "Alloy 열처리",
+      "mi": false,
+      "module": "metal",
+      "name": "Alloy Anneal",
+      "number": "319",
+      "tool": "Furnace"
+    },
+    {
+      "color": "background:#7b8794",
+      "index": 373,
+      "label": "최종 검사",
+      "mi": true,
+      "module": "metal",
+      "name": "Final Inspection",
+      "number": "계측",
+      "tool": "Metrology"
+    }
+  ],
+  "summary": "공정 319 STEP계측 54곳은 따로(세지 않음)노광 36번8대 공정학습용 단순화",
+  "url": "https://study.semitoon.com/flow/"
+}

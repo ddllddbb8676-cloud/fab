@@ -115,7 +115,7 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
       const p = cast.ray.intersectBox(colliderBoxes[i], cameraHit);
       if (p && camera.position.distanceTo(p) < nearestDistance) { nearest = colliders[i]; nearestDistance = camera.position.distanceTo(p); }
     }
-    if (nearest) { if (nearest.family) onInspect(nearest.family); return; }
+    if (nearest) { if (nearest.equipment) onInspect(nearest.equipment); return; }
     if (!floorHit || Math.abs(floorHit.x) >= 58.8 || Math.abs(floorHit.z) >= 88.5) return;
     const destination = { x: floorHit.x, z: floorHit.z }, route = findWalkPath(state.position, destination);
     if (!route) { onToast('장비를 피해 통로 바닥을 눌러주세요'); return; }
@@ -176,6 +176,14 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
   }
   return { state, setMode, reset, update, focusTransfer,
     lock(value) { state.locked = value; clearInput(); state.path = []; targetRing.visible = false; cameraSnap = true; },
+    focusEquipment(machine) {
+      if (state.locked) return;
+      setMode('walk'); const bay = bays[machine.bayId];
+      state.position.set(machine.x, 0, bay.z);
+      state.yaw = machine.sign === 1 ? .15 : Math.PI + .15;
+      state.heading = machine.sign === 1 ? Math.PI : 0;
+      state.distance = 3.6; state.elevation = .12;
+    },
     focusRear() {
       setMode('walk'); const bay = bays[7], previous = bays[6];
       state.position.set(-28.7, 0, (bay.z + previous.z) / 2); state.yaw = Math.PI / 2; state.heading = -Math.PI / 2; state.distance = 4.2; state.elevation = .3;
