@@ -6,7 +6,7 @@ for (const dir of ['src/', 'vendor/three/', 'vendor/addons/controls/', 'vendor/a
 let html = await readFile(new URL('index.html', root), 'utf8');
 html = html.replace('/node_modules/three/build/three.module.js', '/vendor/three/three.module.js').replace('/node_modules/three/examples/jsm/', '/vendor/addons/');
 await writeFile(new URL('index.html', dist), html);
-for (const name of ['main.js', 'layout.js', 'transport.js', 'style.css']) await copyFile(new URL('src/' + name, root), new URL('src/' + name, dist));
+for (const name of ['main.js', 'layout.js', 'transport.js', 'rail-network.js', 'network-transport.js', 'avatar.js', 'walking.js', 'explorer.js', 'style.css']) await copyFile(new URL('src/' + name, root), new URL('src/' + name, dist));
 for (const name of ['three.module.js', 'three.core.js']) await copyFile(new URL('node_modules/three/build/' + name, root), new URL('vendor/three/' + name, dist));
 for (const name of ['controls/OrbitControls.js', 'environments/RoomEnvironment.js', 'objects/Reflector.js']) await copyFile(new URL('node_modules/three/examples/jsm/' + name, root), new URL('vendor/addons/' + name, dist));
 await copyFile(new URL('node_modules/three/LICENSE', root), new URL('vendor/three/LICENSE.txt', dist));

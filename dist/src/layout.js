@@ -1,13 +1,13 @@
 // Metres. A viewing model informed by bay-layout research, not a construction plan.
 export const HALL = { width: 120, length: 180, height: 5 };
-export const AISLE = 5.2, SIDE_GAP = .4, TOOL_SCALE_X = .9;
+export const AISLE = 5.2, SERVICE_AISLE = 1.4, SIDE_GAP = .65, TOOL_SCALE_X = 103 / 120;
 export const TOOL_WIDTH = 5.4 * TOOL_SCALE_X, TOOL_BACK = 2.4, TOOL_FRONT = 3.275;
 export const PORT_Z = 2.89, PORT_SURFACE_Y = 1.4625;
 export const FOUP_BASE_OFFSET = .2225, SEATED_FOUP_Y = PORT_SURFACE_Y + FOUP_BASE_OFFSET;
 export const CARRIED_FOUP_Y = 3.59, VEHICLE_Y = 3.71, RAIL_Y = 4.26;
 export const ROW_OFFSET = TOOL_FRONT + AISLE / 2;
-export const BAY_PITCH = ROW_OFFSET * 2 + TOOL_BACK * 2 + AISLE;
-export const BAY_CENTERS = Array.from({ length: 8 }, (_, i) => (i - 3.5) * BAY_PITCH);
+export const BAY_PITCH = ROW_OFFSET * 2 + TOOL_BACK * 2 + SERVICE_AISLE;
+export const BAY_CENTERS = Array.from({ length: 9 }, (_, i) => (i - 4) * BAY_PITCH);
 export const BANK_CENTERS = [-28.7, 28.7];
 export const machines = [], bays = [], ports = [];
 
@@ -36,7 +36,7 @@ export function sampleLoop(loop, distance) {
   return { x: s.x + Math.cos(a) * s.radius, z: s.z + Math.sin(a) * s.radius, yaw: Math.atan2(-Math.sin(a), Math.cos(a)) };
 }
 for (let bank = 0; bank < 2; bank++) for (let b = 0; b < BAY_CENTERS.length; b++) {
-  const x = BANK_CENTERS[bank], z = BAY_CENTERS[b], id = bank * 8 + b;
+  const x = BANK_CENTERS[bank], z = BAY_CENTERS[b], id = bank * BAY_CENTERS.length + b;
   const bay = { id, bank, z, x, familyIndex: (b + bank * 3) % 6, machines: [] };
   bay.loop = makeLoop(x - 26.9, x + 26.9, z - ROW_OFFSET + PORT_Z, z + ROW_OFFSET - PORT_Z);
   for (const sign of [1, -1]) for (let column = 0; column < 10; column++) {

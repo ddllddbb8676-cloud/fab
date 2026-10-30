@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  HALL, AISLE, SIDE_GAP, PORT_SURFACE_Y, FOUP_BASE_OFFSET,
+  HALL, AISLE, SERVICE_AISLE, SIDE_GAP, PORT_SURFACE_Y, FOUP_BASE_OFFSET,
   SEATED_FOUP_Y, CARRIED_FOUP_Y, RAIL_Y, VEHICLE_Y,
   machines, bays, ports, TOUR_POINTS, sampleLoop, isBlocked
 } from '../src/layout.js';
@@ -17,13 +17,13 @@ function atPhase(bay, phase, fraction = .5) {
   return sampleTransport(bay, phaseStart(bay, phase) + transportSchedule(bay).durations[phase] * fraction);
 }
 
-test('the 120 × 180 × 5 m hall contains 16 bays of two facing ten-tool rows', () => {
+test('the 120 × 180 × 5 m hall contains 18 bays of two facing ten-tool rows', () => {
   assert.deepEqual(HALL, { width: 120, length: 180, height: 5 });
-  assert.equal(bays.length, 16);
-  assert.equal(machines.length, 320);
-  assert.equal(ports.length, 960);
-  assert.equal(new Set(machines.map(m => m.id)).size, 320);
-  assert.equal(new Set(ports.map(p => p.id)).size, 960);
+  assert.equal(bays.length, 18);
+  assert.equal(machines.length, 360);
+  assert.equal(ports.length, 1080);
+  assert.equal(new Set(machines.map(m => m.id)).size, 360);
+  assert.equal(new Set(ports.map(p => p.id)).size, 1080);
   for (const bay of bays) {
     assert.equal(bay.machines.length, 20);
     for (const sign of [-1, 1]) {
@@ -38,7 +38,7 @@ test('the 120 × 180 × 5 m hall contains 16 bays of two facing ten-tool rows', 
   }
 });
 
-test('all 960 load-port centres lie directly under a straight service rail', () => {
+test('all 1080 load-port centres lie directly under a straight service rail', () => {
   for (const port of ports) {
     const bay = bays.find(b => b.id === port.bayId);
     const railZ = port.sign === 1 ? bay.loop.minZ : bay.loop.maxZ;
@@ -52,14 +52,14 @@ test('all 960 load-port centres lie directly under a straight service rail', () 
   assert.ok(RAIL_Y < HALL.height && RAIL_Y > VEHICLE_Y && VEHICLE_Y > CARRIED_FOUP_Y);
 });
 
-test('front, rear, central and nominal perimeter aisles are 5.2 m; tool side gaps are 0.4 m', () => {
-  near(AISLE, 5.2); near(SIDE_GAP, .4);
+test('front and central aisles are 5.2 m, rear service aisles 1.4 m, and side gaps 0.65 m', () => {
+  near(AISLE, 5.2); near(SERVICE_AISLE, 1.4); near(SIDE_GAP, .65);
   for (const bay of bays) {
     const forward = bay.machines.filter(m => m.sign === 1).sort((a, b) => a.x - b.x);
     const backward = bay.machines.filter(m => m.sign === -1).sort((a, b) => a.x - b.x);
     near(backward[0].bounds.minZ - forward[0].bounds.maxZ, 5.2, 1e-8, `bay ${bay.id} front aisle`);
     for (const row of [forward, backward]) for (let i = 1; i < row.length; i++) {
-      near(row[i].bounds.minX - row[i - 1].bounds.maxX, .4, 1e-8, `bay ${bay.id} side gap`);
+      near(row[i].bounds.minX - row[i - 1].bounds.maxX, .65, 1e-8, `bay ${bay.id} side gap`);
     }
   }
   for (const bank of [0, 1]) {
@@ -67,7 +67,7 @@ test('front, rear, central and nominal perimeter aisles are 5.2 m; tool side gap
     for (let i = 1; i < bankBays.length; i++) {
       const previousEnd = Math.max(...bankBays[i - 1].machines.map(m => m.bounds.maxZ));
       const nextStart = Math.min(...bankBays[i].machines.map(m => m.bounds.minZ));
-      near(nextStart - previousEnd, 5.2, 1e-8, `bank ${bank} rear aisle`);
+      near(nextStart - previousEnd, 1.4, 1e-8, `bank ${bank} rear aisle`);
     }
   }
   const leftEdge = Math.min(...machines.map(m => m.bounds.minX));

@@ -2,8 +2,11 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { Reflector } from 'three/addons/objects/Reflector.js';
-import { machines as layoutMachines, bays, columns, TOUR_POINTS, isBlocked, sampleLoop, TOOL_SCALE_X, TOOL_WIDTH, PORT_Z, SEATED_FOUP_Y, VEHICLE_Y, RAIL_Y, AISLE } from './layout.js';
-import { sampleTransport } from './transport.js';
+import { machines as layoutMachines, bays, columns, TOUR_POINTS, isBlocked, TOOL_SCALE_X, TOOL_WIDTH, SEATED_FOUP_Y, VEHICLE_Y, RAIL_Y, AISLE, SERVICE_AISLE, SIDE_GAP } from './layout.js';
+import { network, railPaths } from './rail-network.js';
+import { createFleet, reservedPortIds } from './network-transport.js';
+import { createAvatar } from './avatar.js';
+import { createExplorer } from './explorer.js';
 
 const $ = (id) => document.getElementById(id);
 const mobile = matchMedia('(pointer: coarse)').matches;
@@ -189,6 +192,12 @@ function machine(layout, family) {
     localBox(x, z, s, M.edge, j * 1.02, 1.4, 2.363, .016, 2.35, .018);
     localBox(x, z, s, M.edge, j * 1.02 + .38, 1.3, 2.39, .035, .2, .045);
   }
+  // Rear maintenance doors face the narrow service aisle; there are no load ports here.
+  for (let j = -1; j <= 1; j++) {
+    localBox(x, z, s, M.panel, j * 1.7, 1.46, -2.357, 1.64, 2.34, .018);
+    localBox(x, z, s, M.edge, j * 1.7 + .64, 1.43, -2.381, .035, .23, .024);
+    for (let v = 0; v < 6; v++) localBox(x, z, s, M.dark, j * 1.7, .43 + v * .055, -2.373, .94, .018, .015);
+  }
   // Wafer front-end module, real FOUP-sized loadports, equipment monitor.
   localBox(x, z, s, M.panel, -.2, .72, 2.73, 3.3, 1.25, .77);
   localBox(x, z, s, M.dark, -.2, 1.38, 2.81, 3.4, .09, .93);
@@ -196,7 +205,7 @@ function machine(layout, family) {
     const port = layout.ports[j], lx = port.x;
     box(M.edge, lx, 1.43, port.z, .71, .065, .66);
     localBox(x, z, s, M.black, -1.23 + j * 1.02, 1.76, 2.4, .57, .64, .035);
-    if (!port.reserved && (index + j) % 4 !== 0) staticFoup(lx, SEATED_FOUP_Y, port.z, s);
+    if (!reservedPortIds.has(port.id) && (index + j) % 4 !== 0) staticFoup(lx, SEATED_FOUP_Y, port.z, s);
   }
   localBox(x, z, s, M.edge, 2.12, 1.61, 2.57, .065, .8, .13);
   const monitor = mesh(scene, planeGeometry, screenMat, x + s * 2.12 * TOOL_SCALE_X, 1.91, z + s * 2.66, .56, .46, 1); monitor.rotation.y = s === 1 ? 0 : Math.PI;
@@ -238,25 +247,38 @@ for (const bay of bays) {
   roof.add(sign);
 }
 
-// Each service run is generated from the very same port centres as the tools.
-// Rounded end turns form continuous closed loops with no vehicle teleportation.
-for (const bay of bays) {
-  for (const segment of bay.loop.segments) {
-    const steps = segment.type === 'arc' ? 12 : 1;
-    for (let i = 0; i < steps; i++) {
-      const a = sampleLoop(bay.loop, segment.start + i * segment.length / steps);
-      const b = sampleLoop(bay.loop, segment.start + (i + 1) * segment.length / steps);
+// Service lines and inter-bay trunks share actual routing geometry with vehicles.
+for (const path of railPaths) {
+    for (let i = 0; i < path.points.length - 1; i++) {
+      const a = path.points[i], b = path.points[i + 1];
       const angle = Math.atan2(b.x - a.x, b.z - a.z), length = Math.hypot(b.x - a.x, b.z - a.z);
       for (const offset of [-.19, .19]) box(M.rail, (a.x + b.x) / 2 + Math.cos(angle) * offset, RAIL_Y, (a.z + b.z) / 2 - Math.sin(angle) * offset, .075, .12, length + .008, angle);
       box(M.dark, (a.x + b.x) / 2, RAIL_Y + .03, (a.z + b.z) / 2, .18, .06, length + .008, angle);
+      if (path.kind !== 'switch') for (let d = 0; d < length; d += 7) {
+        const f = d / length, x = a.x + (b.x - a.x) * f, z = a.z + (b.z - a.z) * f;
+        box(M.edge, x, 4.64, z, .045, .64, .045);
+        box(M.rail, x, 4.3, z, .58, .065, .1, angle);
+      }
     }
-  }
-  for (let d = 0; d < bay.loop.length; d += 7) {
-    const p = sampleLoop(bay.loop, d);
-    box(M.edge, p.x, 4.64, p.z, .045, .64, .045);
-    box(M.rail, p.x, 4.3, p.z, .58, .065, .1, p.yaw);
-  }
 }
+// Compact switch enclosures distinguish actual crossings and merge points.
+for (const node of network.junctions) {
+  box(M.dark, node.x, 4.43, node.z, .46, .13, .46);
+  box(M.accent, node.x, 4.505, node.z, .3, .025, .3);
+  box(M.green, node.x + .21, 4.43, node.z + .21, .045, .04, .045);
+}
+// A plan-view highlight keeps the real rail network legible at hall-wide scale.
+const railOverview = new THREE.Group(); railOverview.visible = false; scene.add(railOverview);
+const railVertices = [];
+for (const path of railPaths) for (let i = 1; i < path.points.length; i++) {
+  const a = path.points[i - 1], b = path.points[i]; railVertices.push(a.x, 4.52, a.z, b.x, 4.52, b.z);
+}
+const routeGeometry = new THREE.BufferGeometry(); routeGeometry.setAttribute('position', new THREE.Float32BufferAttribute(railVertices, 3));
+const routeLines = new THREE.LineSegments(routeGeometry, new THREE.LineBasicMaterial({ color: '#226a7b', transparent: true, opacity: .8, depthTest: false }));
+routeLines.renderOrder = 10; railOverview.add(routeLines);
+const junctionGeometry = new THREE.BufferGeometry(); junctionGeometry.setAttribute('position', new THREE.Float32BufferAttribute(network.junctions.flatMap(p => [p.x, 4.53, p.z]), 3));
+const junctionDots = new THREE.Points(junctionGeometry, new THREE.PointsMaterial({ color: '#bf8946', size: 3, sizeAttenuation: false, depthTest: false }));
+junctionDots.renderOrder = 11; railOverview.add(junctionDots);
 function movingFoup(parent) {
   const foup = new THREE.Group();
   mesh(foup, boxGeometry, M.foup, 0, 0, 0, .43, .38, .36);
@@ -266,9 +288,9 @@ function movingFoup(parent) {
   for (let i = 0; i < 5; i++) for (const side of [-1, 1]) mesh(foup, boxGeometry, M.foupRib, side * .222, -.13 + i * .065, 0, .025, .024, .31);
   parent.add(foup); return foup;
 }
-const vehicles = [];
-function createOHT(bay) {
-  const root = new THREE.Group(); root.position.set(bay.target.x, VEHICLE_Y, bay.target.z); scene.add(root);
+const fleet = createFleet(), vehicles = [];
+function createOHT(controller) {
+  const root = new THREE.Group(); root.position.set(controller.state.car.x, VEHICLE_Y, controller.state.car.z); scene.add(root);
   mesh(root, boxGeometry, M.dark, 0, .41, 0, .39, .16, 1.05);
   mesh(root, boxGeometry, M.white, 0, .25, -.49, .82, .46, .23);
   mesh(root, boxGeometry, M.white, 0, .25, .49, .82, .46, .23);
@@ -281,9 +303,9 @@ function createOHT(bay) {
   const gripper = mesh(root, boxGeometry, M.dark, 0, .12, 0, .24, .055, .16);
   gripper.rotation.y = Math.PI / 2;
   const belts = [-1, 1].map(side => mesh(root, boxGeometry, M.edge, 0, .25, side * .095, .025, .2, .017));
-  vehicles.push({ root, foup, belts, gripper, bay, offset: bay.id === 7 ? 0 : bay.id * 9.7, state: null });
+  vehicles.push({ root, foup, belts, gripper, controller, state: controller.state });
 }
-for (const bay of bays) createOHT(bay);
+for (const controller of fleet.vehicles) createOHT(controller);
 const movingBatches = new Map();
 for (const vehicle of vehicles) for (const group of [vehicle.root, vehicle.foup]) group.traverse((obj) => {
   if (!obj.isMesh) return;
@@ -323,123 +345,36 @@ consolidate(roof); consolidate(walls); consolidate(scene);
 
 const orbit = new OrbitControls(camera, renderer.domElement);
 orbit.enabled = false; orbit.enableDamping = true; orbit.dampingFactor = .06;
-orbit.minDistance = 16; orbit.maxDistance = 240; orbit.maxPolarAngle = Math.PI * .46; orbit.target.set(0, 0, 0);
-let mode = reducedMotion ? 'walk' : 'tour', elapsed = 0, lastTime = 0, tourTime = 0, transition = null;
-let yaw = .04, pitch = -.015, manualLook = false, dragging = false, dragDistance = 0;
-let pointerStart = null, currentZone = '', introVisible = true, toastTimer;
-const keys = new Set(), touchMoves = new Set();
-const walkDirection = new THREE.Vector3(), previousPosition = new THREE.Vector3();
-const tourKeyframes = TOUR_POINTS.map(([x, z], i) => {
-  const [nx, nz] = TOUR_POINTS[(i + 1) % (TOUR_POINTS.length - 1)];
-  const length = Math.hypot(nx - x, nz - z) || 1;
-  return { p: [x, EYE, z], t: [x + (nx - x) / length * 40, 2.2, z + (nz - z) / length * 40] };
-});
-tourKeyframes.at(-1).t = tourKeyframes[0].t;
-// Piecewise straight routes turn only in clear cross-aisles, avoiding equipment.
-const smooth = (t) => t * t * (3 - 2 * t);
-function tourPose(t) {
-  const segment = (t / 24) % (tourKeyframes.length - 1), i = Math.floor(segment), f = smooth(segment - i);
-  const a = tourKeyframes[i], b = tourKeyframes[i + 1];
-  return { p: new THREE.Vector3(...a.p).lerp(new THREE.Vector3(...b.p), f), t: new THREE.Vector3(...a.t).lerp(new THREE.Vector3(...b.t), f) };
-}
-function toast(text) { $('zone-toast').textContent = text; $('zone-toast').classList.add('visible'); clearTimeout(toastTimer); toastTimer = setTimeout(() => $('zone-toast').classList.remove('visible'), 2800); }
-function dismissIntro() { if (introVisible) { document.body.classList.add('exploring'); introVisible = false; } }
-function setMode(next) {
-  const old = mode; mode = next; manualLook = false; dragging = false; keys.clear(); touchMoves.clear();
-  for (const id of ['tour', 'walk', 'overview']) { $(id).classList.toggle('active', id === next); $(id).setAttribute('aria-pressed', String(id === next)); }
-  orbit.enabled = next === 'overview'; roof.visible = next !== 'overview'; walls.visible = next !== 'overview';
-  if (reflector) reflector.visible = next !== 'overview';
-  $('walk-hint').classList.toggle('hidden', next !== 'walk'); $('mobile-pad').classList.toggle('hidden', next !== 'walk' || !(mobile || innerWidth < 700));
-  $('tool-card').classList.add('hidden');
-  if (next === 'overview') {
-    dismissIntro(); orbit.target.set(0, 0, 0); camera.position.set(78, 115, 125); camera.lookAt(orbit.target); orbit.update(); scene.fog.density = .0015;
-    $('view-title').textContent = '팹 전체 보기'; $('view-subtitle').textContent = '16 BAYS · 320 TOOLS · 10 + 10 PER BAY';
-    toast('지붕을 열어 팹 전체를 봅니다');
-  } else {
-    scene.fog.density = .0063;
-    if (old === 'overview') { const pose = tourPose(0); camera.position.copy(pose.p); camera.lookAt(pose.t); }
-    if (next === 'walk') { dismissIntro(); camera.position.y = EYE; yaw = camera.rotation.y; pitch = THREE.MathUtils.clamp(camera.rotation.x, -.9, .9); toast('드래그로 시선을 돌리고, WASD로 걸어보세요'); }
-    if (next === 'tour') { if (old !== 'tour') dismissIntro(); tourTime = 0; transition = null; const pose = tourPose(0); camera.position.copy(pose.p); camera.lookAt(pose.t); toast('긴 장비열을 따라 천천히 산책합니다'); }
-    currentZone = ''; updateZone();
+orbit.minDistance = 16; orbit.maxDistance = 700; orbit.maxPolarAngle = Math.PI * .46; orbit.target.set(0, 0, 0);
+const avatar = createAvatar(THREE); scene.add(avatar.root);
+let mode = 'walk', elapsed = 0, lastTime = 0, currentZone = '', toastTimer;
+function toast(text) { $('zone-toast').textContent = text; $('zone-toast').classList.add('visible'); clearTimeout(toastTimer); toastTimer = setTimeout(() => $('zone-toast').classList.remove('visible'), 3200); }
+function showMachine(family) { $('tool-family').textContent = family.short; $('tool-name').textContent = family.name; $('tool-description').textContent = family.description; $('tool-card').classList.remove('hidden'); }
+const explorer = createExplorer({ THREE, camera, scene, canvas: renderer.domElement, avatar, orbit, colliders, vehicles,
+  onToast: toast, onInspect: showMachine,
+  onMode(next) {
+    mode = next; document.body.classList.add('exploring'); $('intro').classList.add('hidden');
+    for (const id of ['tour', 'walk', 'ride', 'overview']) { $(id).classList.toggle('active', id === next); $(id).setAttribute('aria-pressed', String(id === next)); }
+    roof.visible = walls.visible = next !== 'overview'; if (reflector) reflector.visible = next !== 'overview';
+    railOverview.visible = next === 'overview';
+    scene.fog.density = next === 'overview' ? .0015 : .0063;
+    camera.far = next === 'overview' ? 1000 : 420; camera.updateProjectionMatrix();
+    $('walk-hint').classList.toggle('hidden', next !== 'walk'); $('mobile-pad').classList.toggle('hidden', next !== 'walk' || !(mobile || innerWidth < 700));
+    $('next-oht').classList.toggle('hidden', next !== 'ride'); $('tool-card').classList.add('hidden');
+    if (next === 'overview') { $('view-title').textContent = '연결된 팹 전체 보기'; $('view-subtitle').textContent = `${bays.length} BAYS · ${layoutMachines.length} TOOLS · ${network.junctions.length} JUNCTIONS`; }
+    if (next === 'ride') toast('교차로를 지나 다른 구역으로 향하는 OHT를 따라갑니다');
+    currentZone = '';
   }
-}
-function reset() {
-  introVisible = true; document.body.classList.remove('exploring'); mode = 'tour'; tourTime = 0; transition = null;
-  const pose = tourPose(0); camera.position.copy(pose.p); camera.lookAt(pose.t); setMode(reducedMotion ? 'walk' : 'tour');
-  if (!reducedMotion) { introVisible = true; document.body.classList.remove('exploring'); }
-}
-for (const id of ['tour', 'walk', 'overview']) $(id).addEventListener('click', () => setMode(id));
-$('explore').addEventListener('click', () => setMode('walk')); $('reset').addEventListener('click', reset);
-$('transfer-view').addEventListener('click', () => {
-  setMode('walk');
-  const v = vehicles.find(v => v.bay.id === 7), port = v.bay.target;
-  v.offset = -elapsed;
-  camera.position.set(port.x + 3.8, EYE, v.bay.z + .3);
-  camera.lookAt(port.x, 2.7, port.z); yaw = camera.rotation.y; pitch = camera.rotation.x;
-  toast('실제 로드포트에서 내려놓고, 빈 OHT가 돌아와 회수합니다');
 });
+for (const id of ['tour', 'walk', 'ride', 'overview']) $(id).addEventListener('click', () => explorer.setMode(id));
+$('explore').addEventListener('click', () => explorer.setMode('walk')); $('reset').addEventListener('click', () => explorer.reset());
+$('transfer-view').addEventListener('click', () => explorer.focusTransfer());
+$('rear-view').addEventListener('click', () => explorer.focusRear());
+$('next-oht').addEventListener('click', () => explorer.nextVehicle());
 $('help-toggle').addEventListener('click', () => $('help').classList.toggle('hidden'));
 $('help-close').addEventListener('click', () => $('help').classList.add('hidden'));
 $('close-card').addEventListener('click', () => $('tool-card').classList.add('hidden'));
-
-renderer.domElement.addEventListener('pointerdown', (event) => {
-  if (mode === 'overview') return;
-  dragging = true; dragDistance = 0; pointerStart = { x: event.clientX, y: event.clientY }; renderer.domElement.setPointerCapture(event.pointerId);
-  yaw = camera.rotation.y; pitch = camera.rotation.x;
-});
-renderer.domElement.addEventListener('pointermove', (event) => {
-  if (!dragging || mode === 'overview') return;
-  const dx = event.clientX - pointerStart.x, dy = event.clientY - pointerStart.y;
-  pointerStart = { x: event.clientX, y: event.clientY }; dragDistance += Math.abs(dx) + Math.abs(dy);
-  if (dragDistance > 4) { manualLook = true; yaw -= dx * .003; pitch = THREE.MathUtils.clamp(pitch - dy * .0025, -1.15, 1.15); camera.rotation.set(pitch, yaw, 0); }
-});
-const raycaster = new THREE.Raycaster();
-renderer.domElement.addEventListener('pointerup', (event) => {
-  if (mode === 'overview') return;
-  dragging = false;
-  if (dragDistance < 6) {
-    const rect = renderer.domElement.getBoundingClientRect();
-    raycaster.setFromCamera(new THREE.Vector2(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1), camera);
-    let nearest = null, nearestDistance = 28;
-    for (const c of colliders) {
-      const hit = raycaster.ray.intersectBox(new THREE.Box3(new THREE.Vector3(c.minX, 0, c.minZ), new THREE.Vector3(c.maxX, 3.4, c.maxZ)), new THREE.Vector3());
-      if (hit && hit.distanceTo(camera.position) < nearestDistance) { nearest = c; nearestDistance = hit.distanceTo(camera.position); }
-    }
-    if (nearest) showMachine(nearest.family);
-  }
-});
-renderer.domElement.addEventListener('pointercancel', () => { dragging = false; });
-function showMachine(family) { $('tool-family').textContent = family.short; $('tool-name').textContent = family.name; $('tool-description').textContent = family.description; $('tool-card').classList.remove('hidden'); dismissIntro(); }
-const movementKeys = ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'shift'];
-window.addEventListener('keydown', (event) => {
-  const key = event.key.toLowerCase();
-  if (key === 'escape') { $('tool-card').classList.add('hidden'); $('help').classList.add('hidden'); }
-  if (!movementKeys.includes(key) || event.target.closest('input,textarea,select,[contenteditable=true]')) return;
-  event.preventDefault(); if (mode !== 'walk') setMode('walk'); keys.add(key);
-});
-window.addEventListener('keyup', (event) => keys.delete(event.key.toLowerCase()));
-window.addEventListener('blur', () => { keys.clear(); touchMoves.clear(); dragging = false; });
-document.addEventListener('visibilitychange', () => { if (document.hidden) { keys.clear(); touchMoves.clear(); } lastTime = 0; });
-for (const button of document.querySelectorAll('[data-move]')) {
-  const release = () => { touchMoves.delete(button.dataset.move); button.classList.remove('pressed'); };
-  button.addEventListener('pointerdown', (event) => { event.preventDefault(); button.setPointerCapture(event.pointerId); touchMoves.add(button.dataset.move); button.classList.add('pressed'); });
-  button.addEventListener('pointerup', release); button.addEventListener('pointercancel', release); button.addEventListener('lostpointercapture', release);
-}
-function blocked(x, z) {
-  return isBlocked(x, z);
-}
-function move(dt) {
-  let forward = Number(keys.has('w') || keys.has('arrowup') || touchMoves.has('forward')) - Number(keys.has('s') || keys.has('arrowdown') || touchMoves.has('back'));
-  let right = Number(keys.has('d') || keys.has('arrowright') || touchMoves.has('right')) - Number(keys.has('a') || keys.has('arrowleft') || touchMoves.has('left'));
-  if (!forward && !right) return;
-  const norm = Math.hypot(forward, right); forward /= norm; right /= norm;
-  const speed = keys.has('shift') ? 6 : 2.8;
-  const dx = (-Math.sin(yaw) * forward + Math.cos(yaw) * right) * dt * speed;
-  const dz = (-Math.cos(yaw) * forward - Math.sin(yaw) * right) * dt * speed;
-  if (!blocked(camera.position.x + dx, camera.position.z)) camera.position.x += dx;
-  if (!blocked(camera.position.x, camera.position.z + dz)) camera.position.z += dz;
-  camera.position.y = EYE; camera.rotation.set(pitch, yaw, 0);
-}
+document.addEventListener('visibilitychange', () => { lastTime = 0; });
 
 // Optional quiet ventilation ambience is synthesized locally, after user input.
 let audio = null;
@@ -469,45 +404,45 @@ function drawMap() {
   ctx.strokeStyle = '#bacdd0'; ctx.lineWidth = 2; ctx.strokeRect(pad, pad, w - pad * 2, h - pad * 2);
   ctx.fillStyle = '#dae7e7'; ctx.fillRect(mx(-AISLE / 2), pad, sx * AISLE, h - pad * 2);
   for (const m of machinePositions) { ctx.fillStyle = m.family.color + 'aa'; ctx.fillRect(mx(m.x - TOOL_WIDTH / 2), mz(m.z - 2.4), sx * TOOL_WIDTH, sz * 4.8); }
+  ctx.strokeStyle = '#397e8c88'; ctx.lineWidth = .8;
+  for (const path of railPaths) { if (path.kind === 'switch') continue; ctx.beginPath(); path.points.forEach((p, i) => i ? ctx.lineTo(mx(p.x), mz(p.z)) : ctx.moveTo(mx(p.x), mz(p.z))); ctx.stroke(); }
+  ctx.fillStyle = '#bd874a'; for (const v of vehicles) { ctx.beginPath(); ctx.arc(mx(v.state.car.x), mz(v.state.car.z), 1.6, 0, Math.PI * 2); ctx.fill(); }
   if (mode !== 'overview') {
-    const x = mx(camera.position.x), y = mz(camera.position.z), angle = -camera.rotation.y - Math.PI / 2;
+    const focus = mode === 'ride' ? vehicles[explorer.state.followId].state.car : explorer.state.position;
+    const x = mx(focus.x), y = mz(focus.z), angle = -camera.rotation.y - Math.PI / 2;
     ctx.fillStyle = '#306d751c'; ctx.beginPath(); ctx.moveTo(x, y); ctx.arc(x, y, 29, angle - .5, angle + .5); ctx.closePath(); ctx.fill();
     ctx.fillStyle = '#2d7379'; ctx.beginPath(); ctx.arc(x, y, 5.5, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = 'white'; ctx.lineWidth = 2; ctx.stroke();
   }
 }
 function updateZone() {
   if (mode === 'overview') return;
-  let text = '중앙 통로', sub = 'MAIN CONCOURSE · EYE LEVEL 1.68m';
-  if (Math.abs(camera.position.x) > AISLE / 2) {
-    const nearest = bays.reduce((a, b) => Math.hypot(camera.position.x - a.x, camera.position.z - a.z) < Math.hypot(camera.position.x - b.x, camera.position.z - b.z) ? a : b);
+  let text = '중앙 통로', sub = 'CONNECTED FAB · THIRD PERSON';
+  const focus = mode === 'ride' ? vehicles[explorer.state.followId].state.car : explorer.state.position;
+  if (Math.abs(focus.x) > AISLE / 2) {
+    const nearest = bays.reduce((a, b) => Math.hypot(focus.x - a.x, focus.z - a.z) < Math.hypot(focus.x - b.x, focus.z - b.z) ? a : b);
     text = 'BAY ' + String(nearest.id + 1).padStart(2, '0') + ' · ' + families[nearest.familyIndex].name.split(' · ')[0]; sub = '10 + 10 TOOLS · AISLE 5.2m';
+    const offsetZ = Math.abs(focus.z - nearest.z);
+    if (offsetZ > 8.2 && Math.abs(focus.x) < 54.8) { text = '장비 뒤쪽 통로'; sub = 'REAR SERVICE AISLE · 1.4m'; }
+    else if (offsetZ > 2.6 && offsetZ < 8.2 && Math.abs(focus.x) < 54.8) { text = '옆 장비 사이 통로'; sub = 'TOOL SIDE CLEARANCE · 0.65m'; }
   }
-  if (text !== currentZone) { currentZone = text; $('view-title').textContent = text; $('view-subtitle').textContent = sub; $('map-location').textContent = text; }
+  if (mode === 'ride') { const v = vehicles[explorer.state.followId]; text = 'OHT ' + String(explorer.state.followId + 1).padStart(2, '0') + ' · ' + v.state.label; sub = 'BAY ' + (v.state.origin.bayId + 1) + ' → BAY ' + (v.state.destination.bayId + 1); }
+  if (text !== currentZone) { currentZone = text; $('view-title').textContent = text; $('view-subtitle').textContent = sub; $('map-location').textContent = mode === 'ride' ? 'OHT ' + String(explorer.state.followId + 1).padStart(2, '0') : text.split(' · ')[0]; }
 }
 let frameCount = 0, fpsStart = 0, displayedFPS = 0;
-const poseTarget = new THREE.PerspectiveCamera();
 function animate(now) {
   requestAnimationFrame(animate);
   if (document.hidden) return;
   const dt = lastTime ? Math.min((now - lastTime) / 1000, .05) : .016; lastTime = now; elapsed += dt;
-  if (mode === 'tour') {
-    if (!dragging && !reducedMotion && $('help').classList.contains('hidden')) tourTime += dt;
-    const pose = tourPose(tourTime);
-    if (transition) {
-      transition.time += dt; const t = smooth(Math.min(transition.time / 1.8, 1)); camera.position.copy(transition.position).lerp(pose.p, t);
-      poseTarget.position.copy(pose.p); poseTarget.lookAt(pose.t); camera.quaternion.slerpQuaternions(transition.quaternion, poseTarget.quaternion, t);
-      if (t >= 1) transition = null;
-    } else { camera.position.copy(pose.p); if (!manualLook) camera.lookAt(pose.t); }
-  } else if (mode === 'walk') { if ($('help').classList.contains('hidden')) move(dt); }
-  else orbit.update();
+  fleet.step(dt);
   for (const v of vehicles) {
-    const state = sampleTransport(v.bay, elapsed + v.offset); v.state = state;
+    const state = v.controller.state; v.state = state;
     v.root.position.set(state.car.x, VEHICLE_Y, state.car.z); v.root.rotation.y = state.car.yaw;
     v.foup.position.set(state.foup.x, state.foup.y, state.foup.z); v.foup.rotation.y = state.foup.yaw;
     v.gripper.position.y = state.gripperY - VEHICLE_Y;
     const upper = .32, bottom = v.gripper.position.y + .0275;
     for (const belt of v.belts) { belt.position.y = (upper + bottom) / 2; belt.scale.y = Math.max(.02, upper - bottom); }
   }
+  explorer.update(dt);
   if (frameCount % 5 === 0) { drawMap(); updateZone(); }
   scene.updateMatrixWorld(true);
   for (const batch of movingBatches.values()) { batch.sources.forEach((source, i) => batch.instance.setMatrixAt(i, source.matrixWorld)); batch.instance.instanceMatrix.needsUpdate = true; }
@@ -516,11 +451,19 @@ function animate(now) {
   if (now - fpsStart > 1500) { displayedFPS = Math.round(frameCount * 1000 / (now - fpsStart)); frameCount = 0; fpsStart = now; }
   // Read-only diagnostics for local acceptance checks.
   if (frameCount % 15 === 0) {
-    const demo = vehicles.find(v => v.bay.id === 7);
-    $('world').dataset.diagnostics = JSON.stringify({ ready: true, revision: 'bay-layout-2', mode, width: WIDTH, length: LENGTH, ceiling: HEIGHT, eyeHeight: EYE, machines: machinePositions.length, bays: bays.length, toolsPerRow: 10, loadports: layoutMachines.length * 3, aisleWidth: AISLE, sideGap: .4, vehicles: vehicles.length, instances: staticInstances, fps: displayedFPS, calls: renderer.info.render.calls, position: { x: camera.position.x, y: camera.position.y, z: camera.position.z }, roofVisible: roof.visible, parkedFoups: vehicles.filter(v => v.state.parked).length, transfer: { ...demo.state, target: demo.bay.target }, tourTime });
-    $('transfer-status').textContent = demo.state.label;
+    const demo = vehicles[mode === 'ride' ? explorer.state.followId : 0];
+    $('world').dataset.diagnostics = JSON.stringify({ ready: true, revision: 'connected-avatar-3', mode, width: WIDTH, length: LENGTH, ceiling: HEIGHT,
+      machines: machinePositions.length, bays: bays.length, toolsPerRow: 10, loadports: layoutMachines.length * 3,
+      frontAisle: AISLE, rearAisle: SERVICE_AISLE, sideGap: SIDE_GAP, vehicles: vehicles.length, junctions: network.junctions.length,
+      networkNodes: network.nodes.length, networkEdges: network.edges.length, traffic: fleet.stats, instances: staticInstances, fps: displayedFPS,
+      calls: renderer.info.render.calls, position: { x: explorer.state.position.x, y: 0, z: explorer.state.position.z },
+      camera: { x: camera.position.x, y: camera.position.y, z: camera.position.z }, character: { visible: avatar.root.visible, height: avatar.height, speed: explorer.state.speed, heading: explorer.state.heading },
+      walkPathPoints: explorer.state.path.length, cameraDistance: explorer.state.distance, cameraYaw: explorer.state.yaw,
+      roofVisible: roof.visible, parkedFoups: vehicles.filter(v => v.state.parked).length, transfer: demo.state, followId: explorer.state.followId, tourTime: explorer.state.tourTime });
+    $('transfer-status').textContent = vehicles[0].state.label;
+
   }
 }
 window.addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); $('mobile-pad').classList.toggle('hidden', mode !== 'walk' || !(mobile || innerWidth < 700)); });
-reset(); requestAnimationFrame(animate);
+explorer.reset(); requestAnimationFrame(animate);
 requestAnimationFrame(() => { $('loading').classList.add('done'); setTimeout(() => $('loading').remove(), 800); });

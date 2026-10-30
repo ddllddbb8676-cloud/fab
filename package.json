@@ -3,6 +3,6 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "scripts": { "start": "node server.mjs", "check": "node --check src/main.js && node --check src/layout.js && node --check src/transport.js && node --check server.mjs && node --check launch.mjs", "test": "node --test tests/*.test.mjs", "build": "node prepare-site.mjs" },
+  "scripts": { "start": "node server.mjs", "check": "node --check src/main.js && node --check src/layout.js && node --check src/rail-network.js && node --check src/network-transport.js && node --check src/avatar.js && node --check src/walking.js && node --check src/explorer.js && node --check src/transport.js && node --check server.mjs && node --check launch.mjs", "test": "node --test tests/*.test.mjs", "build": "node prepare-site.mjs" },
   "dependencies": { "three": "0.186.1" }
 }
