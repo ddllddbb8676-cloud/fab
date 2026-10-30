@@ -7,6 +7,8 @@ import { network, railPaths } from './rail-network.js';
 import { createFleet, reservedPortIds } from './network-transport.js';
 import { createAvatar } from './avatar.js';
 import { createExplorer } from './explorer.js';
+import { AIR_SHOWER, createAirShower } from './air-shower.js';
+import { createEntrySequence } from './entry-sequence.js';
 
 const $ = (id) => document.getElementById(id);
 const mobile = matchMedia('(pointer: coarse)').matches;
@@ -347,6 +349,11 @@ const orbit = new OrbitControls(camera, renderer.domElement);
 orbit.enabled = false; orbit.enableDamping = true; orbit.dampingFactor = .06;
 orbit.minDistance = 16; orbit.maxDistance = 700; orbit.maxPolarAngle = Math.PI * .46; orbit.target.set(0, 0, 0);
 const avatar = createAvatar(THREE); scene.add(avatar.root);
+const airShower = createAirShower(THREE); scene.add(airShower.root);
+colliders.push(...AIR_SHOWER.bounds.map(b => ({ ...b, maxY: 3.15 })));
+colliders.push({ minX: -2.02, maxX: 2.02, minZ: 82.2, maxZ: 88.92, minY: 3.07, maxY: 3.23 },
+  { minX: -2.58, maxX: 2.58, minZ: 82.02, maxZ: 82.38, minY: 2.65, maxY: 3.23 });
+const entry = createEntrySequence({ reducedMotion });
 let mode = 'walk', elapsed = 0, lastTime = 0, currentZone = '', toastTimer;
 function toast(text) { $('zone-toast').textContent = text; $('zone-toast').classList.add('visible'); clearTimeout(toastTimer); toastTimer = setTimeout(() => $('zone-toast').classList.remove('visible'), 3200); }
 function showMachine(family) { $('tool-family').textContent = family.short; $('tool-name').textContent = family.name; $('tool-description').textContent = family.description; $('tool-card').classList.remove('hidden'); }
@@ -357,6 +364,7 @@ const explorer = createExplorer({ THREE, camera, scene, canvas: renderer.domElem
     for (const id of ['tour', 'walk', 'ride', 'overview']) { $(id).classList.toggle('active', id === next); $(id).setAttribute('aria-pressed', String(id === next)); }
     roof.visible = walls.visible = next !== 'overview'; if (reflector) reflector.visible = next !== 'overview';
     railOverview.visible = next === 'overview';
+    airShower.root.visible = next !== 'overview';
     scene.fog.density = next === 'overview' ? .0015 : .0063;
     camera.far = next === 'overview' ? 1000 : 420; camera.updateProjectionMatrix();
     $('walk-hint').classList.toggle('hidden', next !== 'walk'); $('mobile-pad').classList.toggle('hidden', next !== 'walk' || !(mobile || innerWidth < 700));
@@ -367,7 +375,7 @@ const explorer = createExplorer({ THREE, camera, scene, canvas: renderer.domElem
   }
 });
 for (const id of ['tour', 'walk', 'ride', 'overview']) $(id).addEventListener('click', () => explorer.setMode(id));
-$('explore').addEventListener('click', () => explorer.setMode('walk')); $('reset').addEventListener('click', () => explorer.reset());
+$('explore').addEventListener('click', () => explorer.setMode('walk')); $('reset').addEventListener('click', startEntry);
 $('transfer-view').addEventListener('click', () => explorer.focusTransfer());
 $('rear-view').addEventListener('click', () => explorer.focusRear());
 $('next-oht').addEventListener('click', () => explorer.nextVehicle());
@@ -375,6 +383,61 @@ $('help-toggle').addEventListener('click', () => $('help').classList.toggle('hid
 $('help-close').addEventListener('click', () => $('help').classList.add('hidden'));
 $('close-card').addEventListener('click', () => $('tool-card').classList.add('hidden'));
 document.addEventListener('visibilitychange', () => { lastTime = 0; });
+
+const entryUi = [...document.querySelectorAll('.bottom-bar,.map-panel,.scene-shortcuts,.mobile-pad,.walk-hint,#help-toggle')];
+const entryCopy = {
+  ready: ['에어샤워실에 오신 걸 환영해요.', '잠시 뒤 바람이 나옵니다.'],
+  shower: ['깨끗한 바람으로 준비 중', '양옆 노즐에서 바람이 나옵니다. 잠시만 기다려주세요.'],
+  settle: ['에어샤워 완료', '바람이 잦아들면 앞문이 열립니다.'],
+  opening: ['자동문이 열립니다.', '문 너머로 넓은 팹이 펼쳐집니다.'],
+  entering: ['FAB에 오신 걸 환영해요.', '캐릭터를 따라 안으로 들어갑니다.']
+};
+let entryStage = '';
+function startEntry() {
+  explorer.lock(false); explorer.setMode('walk');
+  explorer.state.position.set(AIR_SHOWER.start.x, 0, AIR_SHOWER.start.z);
+  explorer.state.yaw = 0; explorer.state.heading = Math.PI;
+  explorer.state.elevation = .3; explorer.state.distance = 2.65; explorer.state.manualLook = false;
+  explorer.lock(true); entry.start(); entryStage = '';
+  camera.fov = innerWidth < 700 ? 84 : 64; camera.updateProjectionMatrix();
+  document.body.classList.add('entering'); $('entry-overlay').classList.remove('hidden');
+  $('help').classList.add('hidden'); $('tool-card').classList.add('hidden'); $('zone-toast').classList.remove('visible'); clearTimeout(toastTimer);
+  for (const element of entryUi) element.inert = true;
+  airShower.update(entry.state);
+}
+function finishEntry() {
+  entry.finish(); explorer.state.position.set(AIR_SHOWER.exit.x, 0, AIR_SHOWER.exit.z);
+  explorer.state.speed = 0; explorer.state.distance = 4.4; explorer.state.elevation = .36;
+  camera.fov = 64; camera.updateProjectionMatrix();
+  explorer.lock(false); document.body.classList.remove('entering'); $('entry-overlay').classList.add('hidden');
+  for (const element of entryUi) element.inert = false;
+  $('reset').title = '에어샤워부터 다시 입장'; $('reset').setAttribute('aria-label', '에어샤워부터 다시 입장');
+  toast('바닥을 눌러 걷기 · 드래그로 둘러보기');
+}
+function updateEntry(dt) {
+  if (!entry.active) return;
+  const before = explorer.state.position.z, s = entry.step(dt);
+  airShower.update(s);
+  explorer.state.position.set(s.position.x, 0, s.position.z);
+  explorer.state.speed = Math.abs(s.position.z - before) / Math.max(dt, .001);
+  explorer.state.distance = 2.65 + 1.75 * s.walk;
+  explorer.state.elevation = .3 + .06 * s.walk;
+  camera.fov = innerWidth < 700 ? 84 - 20 * s.walk : 64; camera.updateProjectionMatrix();
+  if (s.complete) { finishEntry(); return; }
+  if (s.stage !== entryStage) {
+    entryStage = s.stage;
+    const [title, description] = entryCopy[s.stage];
+    $('entry-title').textContent = title; $('entry-description').textContent = description;
+    $('entry-step-air').classList.toggle('active', ['ready', 'shower', 'settle'].includes(s.stage));
+    $('entry-step-door').classList.toggle('active', s.stage === 'opening');
+    $('entry-step-walk').classList.toggle('active', s.stage === 'entering');
+  }
+  $('entry-progress-fill').style.transform = `scaleX(${s.progress})`;
+  $('entry-progress-fill').parentElement.setAttribute('aria-valuenow', String(Math.round(s.progress * 100)));
+}
+function skipEntry() { if (!entry.active) return; airShower.update(entry.skip()); finishEntry(); }
+$('entry-skip').addEventListener('click', skipEntry);
+window.addEventListener('keydown', e => { if (entry.active && e.key === 'Escape') skipEntry(); });
 
 // Optional quiet ventilation ambience is synthesized locally, after user input.
 let audio = null;
@@ -442,7 +505,8 @@ function animate(now) {
     const upper = .32, bottom = v.gripper.position.y + .0275;
     for (const belt of v.belts) { belt.position.y = (upper + bottom) / 2; belt.scale.y = Math.max(.02, upper - bottom); }
   }
-  explorer.update(dt);
+  updateEntry(dt); explorer.update(dt);
+  if (audio?.enabled) audio.gain.gain.setTargetAtTime(entry.active ? .13 + entry.state.jet * .22 : .13, audio.context.currentTime, .12);
   if (frameCount % 5 === 0) { drawMap(); updateZone(); }
   scene.updateMatrixWorld(true);
   for (const batch of movingBatches.values()) { batch.sources.forEach((source, i) => batch.instance.setMatrixAt(i, source.matrixWorld)); batch.instance.instanceMatrix.needsUpdate = true; }
@@ -452,7 +516,7 @@ function animate(now) {
   // Read-only diagnostics for local acceptance checks.
   if (frameCount % 15 === 0) {
     const demo = vehicles[mode === 'ride' ? explorer.state.followId : 0];
-    $('world').dataset.diagnostics = JSON.stringify({ ready: true, revision: 'connected-avatar-3', mode, width: WIDTH, length: LENGTH, ceiling: HEIGHT,
+    $('world').dataset.diagnostics = JSON.stringify({ ready: true, revision: 'air-shower-fleet-4', mode, entry: { active: entry.active, ...entry.state }, width: WIDTH, length: LENGTH, ceiling: HEIGHT,
       machines: machinePositions.length, bays: bays.length, toolsPerRow: 10, loadports: layoutMachines.length * 3,
       frontAisle: AISLE, rearAisle: SERVICE_AISLE, sideGap: SIDE_GAP, vehicles: vehicles.length, junctions: network.junctions.length,
       networkNodes: network.nodes.length, networkEdges: network.edges.length, traffic: fleet.stats, instances: staticInstances, fps: displayedFPS,
@@ -465,5 +529,5 @@ function animate(now) {
   }
 }
 window.addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); $('mobile-pad').classList.toggle('hidden', mode !== 'walk' || !(mobile || innerWidth < 700)); });
-explorer.reset(); requestAnimationFrame(animate);
+startEntry(); requestAnimationFrame(animate);
 requestAnimationFrame(() => { $('loading').classList.add('done'); setTimeout(() => $('loading').remove(), 800); });

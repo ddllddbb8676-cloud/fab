@@ -65,13 +65,14 @@ test('joined empty-car circuits close without a position or direction jump', () 
   near(Math.sin(left.yaw), Math.sin(right.yaw)); near(Math.cos(left.yaw), Math.cos(right.yaw));
 });
 
-test('fleet reserves unique real ports and preserves one FOUP per vehicle through release and pickup', () => {
+test('36-car fleet reserves 72 unique ports and preserves one FOUP per vehicle through release and pickup', () => {
   const fleet = createFleet();
-  assert.equal(fleet.vehicles.length, bays.length);
-  assert.equal(reservedPortIds.size, bays.length * 2);
+  assert.equal(fleet.vehicles.length, 36);
+  assert.equal(reservedPortIds.size, 72);
   const owned = fleet.vehicles.flatMap(v => [v.homePort.id, v.destinationPort.id]);
   assert.equal(new Set(owned).size, owned.length);
   assert.ok(owned.every(id => reservedPortIds.has(id)));
+  for (const bay of bays) assert.equal(fleet.vehicles.filter(v => v.homePort.bayId === bay.id).length, 2, 'each bay has two vehicles');
   const phases = new Set(); let sawParkedDeparture = false, sawCrossBankDelivery = false;
   for (let step = 0; step < 8000; step++) {
     const before = fleet.vehicles.map(v => v.state);
@@ -95,7 +96,7 @@ test('fleet reserves unique real ports and preserves one FOUP per vehicle throug
   assert.ok(fleet.vehicles.every(v => v.delivered > 0), 'every car completes real inter-bay delivery');
 });
 
-test('junction reservations prevent collisions and keep all cars progressing over 1200 seconds', () => {
+test('junction reservations prevent collisions and keep all 36 cars progressing over 1200 seconds', () => {
   const fleet = createFleet(); let minimum = Infinity, sawYield = false;
   const deliveredAt900 = [];
   for (let i = 0; i < 12000; i++) {
@@ -107,6 +108,6 @@ test('junction reservations prevent collisions and keep all cars progressing ove
   }
   assert.ok(sawYield, 'a conflicting car yields at a reserved junction');
   assert.ok(minimum >= 1.64, `vehicles approached within ${minimum} m`);
-  assert.ok(fleet.stats.delivered >= bays.length, 'traffic continues to make progress');
+  assert.ok(fleet.stats.delivered >= fleet.vehicles.length, 'traffic continues to make progress');
   assert.ok(fleet.vehicles.every((v, i) => v.delivered > deliveredAt900[i]), 'every car delivers again in the final 300 seconds');
 });

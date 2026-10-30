@@ -5,10 +5,10 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
   const $ = id => document.getElementById(id);
   const state = { mode: 'walk', position: new THREE.Vector3(TOUR_POINTS[0][0], 0, TOUR_POINTS[0][1]),
     yaw: Math.PI / 2, elevation: .36, distance: 4.4, heading: -Math.PI / 2, speed: 0,
-    path: [], tourTime: 0, followId: 0, rideYaw: 0, manualLook: false };
+    path: [], tourTime: 0, followId: 0, rideYaw: 0, manualLook: false, locked: false };
   const keys = new Set(), moves = new Set(), pointers = new Map();
   let dragged = 0, pinchDistance = 0, pinched = false, cameraSnap = true;
-  const colliderBoxes = colliders.map(c => new THREE.Box3(new THREE.Vector3(c.minX - .12, 0, c.minZ - .12), new THREE.Vector3(c.maxX + .12, 3.4, c.maxZ + .12)));
+  const colliderBoxes = colliders.map(c => new THREE.Box3(new THREE.Vector3(c.minX - .12, c.minY ?? 0, c.minZ - .12), new THREE.Vector3(c.maxX + .12, c.maxY ?? 3.4, c.maxZ + .12)));
   const cast = new THREE.Raycaster(), floor = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hit = new THREE.Vector3();
   const cameraRay = new THREE.Ray(), cameraHit = new THREE.Vector3();
   const target = new THREE.Vector3(), desired = new THREE.Vector3(), direction = new THREE.Vector3();
@@ -16,6 +16,7 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
   targetRing.rotation.x = -Math.PI / 2; targetRing.position.y = .012; targetRing.visible = false; scene.add(targetRing);
   function clearInput() { keys.clear(); moves.clear(); pointers.clear(); state.speed = 0; }
   function setMode(next) {
+    if (state.locked) return;
     state.mode = next; clearInput(); state.path = []; targetRing.visible = false; state.manualLook = false; cameraSnap = true;
     orbit.enabled = next === 'overview';
     if (next === 'overview') {
@@ -90,8 +91,8 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
     state.position.set(x, 0, z);
   }
   function update(dt) {
-    state.speed = 0;
-    if ($('help').classList.contains('hidden')) {
+    if (!state.locked) state.speed = 0;
+    if (!state.locked && $('help').classList.contains('hidden')) {
       if (state.mode === 'walk') walk(dt);
       if (state.mode === 'tour' && !pointers.size) tour(dt);
     }
@@ -114,7 +115,7 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
       const p = cast.ray.intersectBox(colliderBoxes[i], cameraHit);
       if (p && camera.position.distanceTo(p) < nearestDistance) { nearest = colliders[i]; nearestDistance = camera.position.distanceTo(p); }
     }
-    if (nearest) { onInspect(nearest.family); return; }
+    if (nearest) { if (nearest.family) onInspect(nearest.family); return; }
     if (!floorHit || Math.abs(floorHit.x) >= 58.8 || Math.abs(floorHit.z) >= 88.5) return;
     const destination = { x: floorHit.x, z: floorHit.z }, route = findWalkPath(state.position, destination);
     if (!route) { onToast('장비를 피해 통로 바닥을 눌러주세요'); return; }
@@ -122,7 +123,7 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
     state.path = route; targetRing.position.set(destination.x, .012, destination.z); targetRing.visible = true;
   }
   canvas.addEventListener('pointerdown', e => {
-    if (state.mode === 'overview') return;
+    if (state.locked || state.mode === 'overview') return;
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY }); canvas.setPointerCapture(e.pointerId);
     if (pointers.size === 1) { dragged = 0; pinched = false; }
     if (pointers.size === 2) { const p = [...pointers.values()]; pinchDistance = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y); pinched = true; }
@@ -149,10 +150,11 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
   });
   canvas.addEventListener('pointercancel', e => pointers.delete(e.pointerId));
   canvas.addEventListener('wheel', e => {
-    if (state.mode === 'overview') return; e.preventDefault(); state.distance = THREE.MathUtils.clamp(state.distance + e.deltaY * .004, 2, 6.8);
+    if (state.locked || state.mode === 'overview') return; e.preventDefault(); state.distance = THREE.MathUtils.clamp(state.distance + e.deltaY * .004, 2, 6.8);
   }, { passive: false });
   const movement = ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'shift'];
   window.addEventListener('keydown', e => {
+    if (state.locked) return;
     const key = e.key.toLowerCase();
     if (key === 'escape') { $('tool-card').classList.add('hidden'); $('help').classList.add('hidden'); state.path = []; targetRing.visible = false; }
     if (!movement.includes(key) || e.target.closest('input,textarea,select,[contenteditable=true]')) return;
@@ -163,7 +165,7 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
   document.addEventListener('visibilitychange', () => { if (document.hidden) clearInput(); });
   for (const button of document.querySelectorAll('[data-move]')) {
     const release = () => { moves.delete(button.dataset.move); button.classList.remove('pressed'); };
-    button.addEventListener('pointerdown', e => { e.preventDefault(); button.setPointerCapture(e.pointerId); moves.add(button.dataset.move); button.classList.add('pressed'); });
+    button.addEventListener('pointerdown', e => { if (state.locked) return; e.preventDefault(); button.setPointerCapture(e.pointerId); moves.add(button.dataset.move); button.classList.add('pressed'); });
     for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) button.addEventListener(event, release);
   }
   function focusTransfer() {
@@ -173,6 +175,7 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
     onToast('실제 로드포트에서 FOUP을 내려놓고 다시 회수합니다');
   }
   return { state, setMode, reset, update, focusTransfer,
+    lock(value) { state.locked = value; clearInput(); state.path = []; targetRing.visible = false; cameraSnap = true; },
     focusRear() {
       setMode('walk'); const bay = bays[7], previous = bays[6];
       state.position.set(-28.7, 0, (bay.z + previous.z) / 2); state.yaw = Math.PI / 2; state.heading = -Math.PI / 2; state.distance = 4.2; state.elevation = .3;

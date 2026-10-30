@@ -4,9 +4,12 @@ import { network, findRoute, sampleRoute, joinRoutes } from './rail-network.js';
 const smooth = t => t * t * (3 - 2 * t);
 const half = bays.length / 2;
 const bayOrder = [bays[7], ...bays.filter(b => b.id !== 7)];
-const secondaryPort = bay => bay.machines.find(m => m.sign === -1 && m.column === 6).ports[1];
+const secondaryPort = (bay, lane = 0) => bay.machines.find(m => m.sign === -1 && m.column === (lane === 0 ? 6 : 3)).ports[1];
+const homePortFor = (bay, lane) => lane === 0 ? bay.target : bay.machines.find(m => m.sign === 1 && m.column === 1).ports[1];
 const pairFor = bay => bays[(1 - bay.bank) * half + ((bay.id % half + 3) % half)];
-export const reservedPortIds = new Set(bays.flatMap(b => [b.target.id, secondaryPort(b).id]));
+export const DEFAULT_FLEET_SIZE = bays.length * 2;
+const assignments = [0, 1].flatMap(lane => bayOrder.map(bay => ({ bay, lane })));
+export const reservedPortIds = new Set(assignments.flatMap(({ bay, lane }) => [homePortFor(bay, lane).id, secondaryPort(bay, lane).id]));
 const labels = ['로드포트 정차', 'FOUP 내려놓기', 'FOUP 분리', '빈 호이스트 회수', '빈 OHT 순환', '빈 호이스트 하강', 'FOUP 체결', 'FOUP 들어올리기', '다른 BAY로 운반'];
 const durations = [1.5, 4, .8, 3.5, Infinity, 3.5, .8, 4, Infinity];
 const circuitCache = new Map(), tripCache = new Map();
@@ -41,10 +44,10 @@ function makeState(v) {
 // Lightweight one-way dispatch. Each junction is reserved before entry; nearby
 // junctions are acquired together. Following cars keep a physical gap. The
 // dispatcher is visual simulation, not a production AMHS controller.
-export function createFleet(count = bays.length) {
+export function createFleet(count = DEFAULT_FLEET_SIZE) {
   const junctionLocks = new Map();
-  const vehicles = bayOrder.slice(0, Math.min(count, bayOrder.length)).map((bay, id) => {
-    const homePort = bay.target, destinationPort = secondaryPort(pairFor(bay));
+  const vehicles = assignments.slice(0, Math.max(0, Math.min(Math.floor(count), assignments.length))).map(({ bay, lane }, id) => {
+    const homePort = homePortFor(bay, lane), destinationPort = secondaryPort(pairFor(bay), lane);
     const phase = id % 3 === 0 ? 0 : 8;
     const v = { id, homePort, destinationPort, currentPort: homePort, phase, time: 0, distance: 0,
       route: phase === 8 ? trip(homePort, destinationPort) : null, speed: 2.35 + (id % 3) * .12, waiting: false, delivered: 0, state: null };
@@ -73,13 +76,16 @@ export function createFleet(count = bays.length) {
     const nextDistance = Math.min(v.route.length, v.distance + v.speed * dt);
     const events = v.route.events.filter(e => e.distance >= v.distance - 2.4 && e.distance <= nextDistance + 6);
     const unavailable = events.some(e => junctionLocks.has(e.junctionId) && junctionLocks.get(e.junctionId) !== v.id);
-    if (!unavailable) for (const e of events) junctionLocks.set(e.junctionId, v.id);
-    const firstConflict = events.find(e => junctionLocks.get(e.junctionId) !== v.id);
+    const firstConflict = unavailable ? events.find(e => junctionLocks.get(e.junctionId) !== v.id) : null;
     let candidateDistance = firstConflict ? Math.min(nextDistance, Math.max(v.distance, firstConflict.distance - 3)) : nextDistance;
     const p = sampleRoute(v.route, candidateDistance);
     // A parked/hoisting OHT also occupies rail space and must be respected.
     const occupied = vehicles.some(other => other !== v && Math.hypot(p.x - other.state.car.x, p.z - other.state.car.z) < 1.65);
-    if (occupied) candidateDistance = v.distance;
+    if (occupied) {
+      candidateDistance = v.distance;
+      // A following car must not lock the junction needed by the car ahead.
+      for (const e of events) if (e.distance > v.distance + 2.4 && junctionLocks.get(e.junctionId) === v.id) junctionLocks.delete(e.junctionId);
+    } else if (!unavailable) for (const e of events) junctionLocks.set(e.junctionId, v.id);
     v.waiting = candidateDistance < nextDistance - 1e-7;
     v.distance = candidateDistance;
     if (v.distance >= v.route.length - 1e-8) {
