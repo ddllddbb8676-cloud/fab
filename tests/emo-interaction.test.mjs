@@ -101,9 +101,9 @@ test('both real avatar orientations walk, align, reach and hold before one callb
   }
 });
 
-test('movement, view changes, help and interruption cancel approach or hold without delayed activation', () => {
+test('floor taps, Escape, view changes, help and interruption cancel approach or hold without delayed activation', () => {
   const actions = [
-    ['movement', h => h.key()], ['escape', h => h.key('Escape')], ['tap', h => h.tap()], ['drag', h => h.drag()],
+    ['escape', h => h.key('Escape')], ['tap', h => h.tap()], ['drag', h => h.drag()],
     ['mode', h => h.explorer.setMode('ride')], ['reset', h => h.explorer.reset()], ['lock', h => h.explorer.lock(true)],
     ['help', h => h.showHelp()], ['blur', h => h.blur()], ['hidden', h => h.hide()]
   ];
@@ -119,6 +119,22 @@ test('movement, view changes, help and interruption cancel approach or hold with
       assert.equal(pressed, 0); assert.equal(cancellations.length, 1);
     } finally { h.dispose(); }
   }
+});
+
+test('unused movement keys do not cancel or restart a physical EMO press', () => {
+  const h = setup();
+  try {
+    let pressed = 0, cancelled = 0;
+    h.explorer.approachEmo(h.machine, { onPress: () => pressed++, onCancel: () => cancelled++ });
+    for (const phase of ['approach', 'hold']) {
+      advanceTo(h, phase);
+      const before = h.explorer.state.emoInteraction;
+      for (const key of ['w', 'a', 's', 'd', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Shift']) h.key(key);
+      assert.deepEqual(h.explorer.state.emoInteraction, before);
+    }
+    for (let i = 0; i < 180; i++) h.explorer.update(1 / 60);
+    assert.equal(pressed, 1); assert.equal(cancelled, 0);
+  } finally { h.dispose(); }
 });
 
 test('invalid, blocked or newly unavailable EMO targets never activate', () => {

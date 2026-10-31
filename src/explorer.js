@@ -8,7 +8,7 @@ import { planEmoApproach, emoPressCameraFrame, EMO_REACH_SECONDS, EMO_HOLD_SECON
 const damp = (value, wanted, rate, dt) => wanted + (value - wanted) * Math.exp(-rate * Math.max(0, dt));
 const angleDelta = (from, to) => Math.atan2(Math.sin(to - from), Math.cos(to - from));
 // Integrate the whole eased velocity over the frame, rather than multiplying
-// its final value by dt. A key held for one second travels equally far at 30/120 Hz.
+// its final value by dt. Tap routes accelerate equally at 30/120 Hz.
 function easeVelocity(value, wanted, rate, dt) {
   const decay = Math.exp(-rate * dt);
   return { value: wanted + (value - wanted) * decay,
@@ -45,7 +45,7 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
     yaw: Math.PI / 2, elevation: .36, distance: 4.4, heading: -Math.PI / 2, speed: 0,
     path: [], tourTime: 0, followId: 0, rideYaw: 0, manualLook: false, locked: false,
     transferVehicleId: null, transferTarget: null, transferWaiting: false, transferLabel: '', transferInTransit: false, emoInteraction: null };
-  const keys = new Set(), moves = new Set(), pointers = new Map();
+  const pointers = new Map();
   let dragged = 0, gestureDragged = false, pinchDistance = 0, pinched = false, cameraSnap = true;
   let tourRoute = null, transferSession = null, transferBaseFov = camera.fov, blastSession = null, blastBaseFov = camera.fov;
   let emoSession = null;
@@ -56,16 +56,15 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
   const target = new THREE.Vector3(), desired = new THREE.Vector3(), direction = new THREE.Vector3();
   const cameraFocus = new THREE.Vector3(), previousFocus = new THREE.Vector3();
   const cameraRig = { yaw: state.yaw, elevation: state.elevation, distance: state.distance, clearance: state.distance };
-  const velocity = { x: 0, z: 0 };
   let pathSpeed = 0, tourBlend = 0, runtimeSnapshot = null, runtimeCameraBoxes = [];
   const targetRing = new THREE.Mesh(new THREE.RingGeometry(.21, .29, 36), new THREE.MeshBasicMaterial({ color: '#3d9fa7', transparent: true, opacity: .8, side: THREE.DoubleSide, depthWrite: false }));
   targetRing.rotation.x = -Math.PI / 2; targetRing.position.y = .012; targetRing.visible = false; scene.add(targetRing);
-  function clearInput() { keys.clear(); moves.clear(); pointers.clear(); state.speed = 0; velocity.x = velocity.z = pathSpeed = 0; }
+  function clearInput() { pointers.clear(); state.speed = 0; pathSpeed = 0; }
   function cancelEmo(reason = 'cancelled') {
     if (!emoSession) return false;
     const previous = emoSession; emoSession = null; state.emoInteraction = null;
     state.path = []; targetRing.visible = false;
-    keys.clear(); moves.clear(); state.speed = 0; velocity.x = velocity.z = pathSpeed = 0;
+    state.speed = 0; pathSpeed = 0;
     camera.fov = previous.baseFov; camera.updateProjectionMatrix();
     if (previous.phase !== 'approach') cameraSnap = true;
     previous.onCancel?.(reason, previous.plan.machine);
@@ -166,7 +165,7 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
     tourRoute = null;
     state.position.set(TOUR_POINTS[0][0], 0, TOUR_POINTS[0][1]); state.yaw = Math.PI / 2; state.heading = -Math.PI / 2;
     state.distance = 4.4; state.elevation = .36; cameraSnap = true; setMode('walk');
-    onToast('바닥을 누르거나 WASD로 이동 · 드래그로 둘러보기');
+    onToast('바닥을 눌러 이동 · 드래그로 둘러보기');
   }
   function followCamera(focus, yaw, distance, elevation, dt, obstacles = true) {
     const snap = cameraSnap || previousFocus.distanceToSquared(focus) > 64;
@@ -218,49 +217,30 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
     camera.lookAt(focus);
   }
   function walk(dt) {
-    let forward = Number(keys.has('w') || keys.has('arrowup') || moves.has('forward')) - Number(keys.has('s') || keys.has('arrowdown') || moves.has('back'));
-    let right = Number(keys.has('d') || keys.has('arrowright') || moves.has('right')) - Number(keys.has('a') || keys.has('arrowleft') || moves.has('left'));
-    let dx = 0, dz = 0, next = null;
-    const speed = keys.has('shift') ? 4.3 : 2.6;
-    if (forward || right) {
-      state.path = []; targetRing.visible = false; pathSpeed = 0;
-      const norm = Math.hypot(forward, right); forward /= norm; right /= norm;
-      const viewYaw = cameraSnap ? state.yaw : cameraRig.yaw;
-      const x = easeVelocity(velocity.x, (-Math.sin(viewYaw) * forward + Math.cos(viewYaw) * right) * speed, 13, dt);
-      const z = easeVelocity(velocity.z, (-Math.cos(viewYaw) * forward - Math.sin(viewYaw) * right) * speed, 13, dt);
-      velocity.x = x.value; velocity.z = z.value; dx = x.travel; dz = z.travel;
-    } else if (state.path.length) {
-      velocity.x = velocity.z = 0;
-      while (state.path.length && Math.hypot(state.path[0].x - state.position.x, state.path[0].z - state.position.z) < 1e-6) state.path.shift();
-      const remaining = state.path.reduce((length, p, i) => {
-        const a = i ? state.path[i - 1] : state.position;
-        return length + Math.hypot(p.x - a.x, p.z - a.z);
-      }, 0);
-      const eased = easeVelocity(pathSpeed, Math.min(speed, Math.sqrt(remaining * 18)), 12, dt);
-      pathSpeed = eased.value;
-      let budget = eased.travel;
-      next = { x: state.position.x, z: state.position.z };
-      // Consume a corner and the remainder of this frame together. Previously
-      // each waypoint inserted a complete zero-motion frame, visible as a hitch.
-      while (budget > 1e-8 && state.path.length) {
-        const p = state.path[0], distance = Math.hypot(p.x - next.x, p.z - next.z);
-        if (distance < 1e-6) { state.path.shift(); continue; }
-        const amount = Math.min(distance, budget), sx = (p.x - next.x) / distance * amount, sz = (p.z - next.z) / distance * amount;
-        const moved = stepWalker(next, sx, sz), travelled = Math.hypot(moved.x - next.x, moved.z - next.z);
-        next = moved; budget -= amount;
-        if (Math.hypot(p.x - next.x, p.z - next.z) < 1e-6) state.path.shift();
-        if (travelled < amount * .5) { pathSpeed = 0; break; }
-      }
-      if (!state.path.length) { targetRing.visible = false; pathSpeed = 0; }
-    } else {
-      pathSpeed = 0;
-      const x = easeVelocity(velocity.x, 0, 18, dt), z = easeVelocity(velocity.z, 0, 18, dt);
-      velocity.x = x.value; velocity.z = z.value; dx = x.travel; dz = z.travel;
+    if (!state.path.length) { pathSpeed = 0; state.speed = 0; return; }
+    const speed = 2.6;
+    let next = { x: state.position.x, z: state.position.z };
+    while (state.path.length && Math.hypot(state.path[0].x - state.position.x, state.path[0].z - state.position.z) < 1e-6) state.path.shift();
+    const remaining = state.path.reduce((length, p, i) => {
+      const a = i ? state.path[i - 1] : state.position;
+      return length + Math.hypot(p.x - a.x, p.z - a.z);
+    }, 0);
+    const eased = easeVelocity(pathSpeed, Math.min(speed, Math.sqrt(remaining * 18)), 12, dt);
+    pathSpeed = eased.value;
+    let budget = eased.travel;
+    // Consume a corner and the remainder of this frame together. Previously
+    // each waypoint inserted a complete zero-motion frame, visible as a hitch.
+    while (budget > 1e-8 && state.path.length) {
+      const p = state.path[0], distance = Math.hypot(p.x - next.x, p.z - next.z);
+      if (distance < 1e-6) { state.path.shift(); continue; }
+      const amount = Math.min(distance, budget), sx = (p.x - next.x) / distance * amount, sz = (p.z - next.z) / distance * amount;
+      const moved = stepWalker(next, sx, sz), travelled = Math.hypot(moved.x - next.x, moved.z - next.z);
+      next = moved; budget -= amount;
+      if (Math.hypot(p.x - next.x, p.z - next.z) < 1e-6) state.path.shift();
+      if (travelled < amount * .5) { pathSpeed = 0; break; }
     }
-    if (!next) next = stepWalker(state.position, dx, dz);
+    if (!state.path.length) { targetRing.visible = false; pathSpeed = 0; }
     const movedX = next.x - state.position.x, movedZ = next.z - state.position.z;
-    if (Math.abs(dx) > 1e-8 && Math.abs(movedX) < Math.abs(dx) * .25) velocity.x = 0;
-    if (Math.abs(dz) > 1e-8 && Math.abs(movedZ) < Math.abs(dz) * .25) velocity.z = 0;
     state.speed = Math.hypot(movedX, movedZ) / Math.max(dt, .001);
     if (state.speed > .02) state.heading = Math.atan2(movedX, movedZ);
     if (state.path.length && state.speed > .02 && !state.manualLook) {
@@ -380,22 +360,13 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
     const units = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? canvas.getBoundingClientRect().height : 1;
     state.distance = THREE.MathUtils.clamp(state.distance + e.deltaY * units * .004, 2, 6.8);
   }, { passive: false });
-  const movement = ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'shift'];
   window.addEventListener('keydown', e => {
-    if (state.locked) return;
-    const key = e.key.toLowerCase();
-    if (key === 'escape') { cancelEmo('escape'); $('tool-card').classList.add('hidden'); $('help').classList.add('hidden'); state.path = []; targetRing.visible = false; }
-    if (!movement.includes(key) || e.target.closest('input,textarea,select,[contenteditable=true]')) return;
-    e.preventDefault(); cancelEmo('movement'); if (state.mode !== 'walk') setMode('walk'); keys.add(key);
+    if (state.locked || e.key.toLowerCase() !== 'escape') return;
+    cancelEmo('escape'); $('tool-card').classList.add('hidden'); $('help').classList.add('hidden');
+    state.path = []; pathSpeed = 0; targetRing.visible = false;
   });
-  window.addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
   window.addEventListener('blur', () => { cancelEmo('blur'); clearInput(); });
   document.addEventListener('visibilitychange', () => { if (document.hidden) { cancelEmo('hidden'); clearInput(); } });
-  for (const button of document.querySelectorAll('[data-move]')) {
-    const release = () => { moves.delete(button.dataset.move); button.classList.remove('pressed'); };
-    button.addEventListener('pointerdown', e => { if (state.locked) return; e.preventDefault(); cancelEmo('movement'); button.setPointerCapture(e.pointerId); moves.add(button.dataset.move); button.classList.add('pressed'); });
-    for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) button.addEventListener(event, release);
-  }
   function focusTransfer() {
     if (state.locked) return;
     transferSession = createTransferSession(vehicles, state.position);

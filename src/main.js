@@ -6,6 +6,7 @@ import { network, railPaths } from './rail-network.js';
 import { createFleet, reservedPortIds } from './network-transport.js';
 import { createAvatar } from './avatar.js';
 import { createExplorer } from './explorer.js';
+import { createViewControls } from './view-controls.js';
 import { AIR_SHOWER, createAirShower } from './air-shower.js';
 import { createEntrySequence } from './entry-sequence.js';
 import { processFamilies, buildEquipmentCatalog, getBayPurpose } from './equipment-catalog.js';
@@ -388,7 +389,7 @@ const explorer = createExplorer({ THREE, camera, scene, canvas: renderer.domElem
   onToast: toast, onInspect: showMachine,
   onActionTap: ray => emoControls.press(ray),
   onMode(next) {
-    mode = next; document.body.classList.add('exploring'); $('intro').classList.add('hidden');
+    mode = next; document.body.classList.add('exploring');
     document.body.dataset.viewMode = next;
     $('transfer-view').setAttribute('aria-pressed', String(next === 'transfer'));
     for (const id of ['tour', 'walk', 'ride', 'overview']) { $(id).classList.toggle('active', id === next); $(id).setAttribute('aria-pressed', String(id === next)); }
@@ -399,7 +400,6 @@ const explorer = createExplorer({ THREE, camera, scene, canvas: renderer.domElem
     airShower.root.visible = next !== 'overview';
     scene.fog.density = next === 'overview' ? .0015 : .0063;
     camera.far = next === 'overview' ? 1000 : 420; camera.updateProjectionMatrix();
-    $('walk-hint').classList.toggle('hidden', next !== 'walk'); $('mobile-pad').classList.toggle('hidden', next !== 'walk' || !(mobile || innerWidth < 700));
     $('next-oht').classList.toggle('hidden', next !== 'ride'); $('tool-card').classList.add('hidden');
     if (next === 'overview') { $('view-title').textContent = '연결된 팹 전체 보기'; $('view-subtitle').textContent = `${bays.length} BAYS · ${layoutMachines.length} TOOLS · ${network.junctions.length} JUNCTIONS`; }
     if (next === 'blast') { $('view-title').textContent = `${selectedEquipment?.code ?? '장비'} · EMO`; $('view-subtitle').textContent = '파손 · 붕괴 · 폭발'; }
@@ -413,16 +413,20 @@ const directory = createEquipmentDirectory({ equipment, families,
 });
 $('equipment-list').addEventListener('click', () => { if (!entry.active) directory.open(); });
 for (const id of ['tour', 'walk', 'ride', 'overview']) $(id).addEventListener('click', () => explorer.setMode(id));
-$('explore').addEventListener('click', () => explorer.setMode('walk')); $('reset').addEventListener('click', startEntry);
+$('reset').addEventListener('click', startEntry);
 $('transfer-view').addEventListener('click', () => explorer.focusTransfer());
 $('rear-view').addEventListener('click', () => explorer.focusRear());
 $('next-oht').addEventListener('click', () => explorer.nextVehicle());
 $('help-toggle').addEventListener('click', () => $('help').classList.toggle('hidden'));
 $('help-close').addEventListener('click', () => $('help').classList.add('hidden'));
 $('close-card').addEventListener('click', () => $('tool-card').classList.add('hidden'));
+const viewControls = createViewControls({
+  onLock: value => explorer.lock(value),
+  onOpen() { $('help').classList.add('hidden'); $('tool-card').classList.add('hidden'); }
+});
 document.addEventListener('visibilitychange', () => { lastTime = 0; });
 
-const entryUi = [...document.querySelectorAll('.bottom-bar,.map-panel,.scene-shortcuts,.mobile-pad,.walk-hint,#help-toggle')];
+const entryUi = [...document.querySelectorAll('#controls-toggle,#controls-panel,#map-panel,.view-label')];
 const entryCopy = {
   ready: ['에어샤워실에 오신 걸 환영해요.', '잠시 뒤 바람이 나옵니다.'],
   shower: ['깨끗한 바람으로 준비 중', '양옆 노즐에서 바람이 나옵니다. 잠시만 기다려주세요.'],
@@ -433,6 +437,7 @@ const entryCopy = {
 };
 let entryStage = '';
 function startEntry() {
+  viewControls.closeAll();
   setRuntimeObstacles([]);
   explorer.lock(false); explorer.setMode('walk');
   explorer.state.position.set(AIR_SHOWER.start.x, 0, AIR_SHOWER.start.z);
@@ -593,7 +598,7 @@ function drawMap() {
 }
 function updateZone() {
   if (mode === 'overview' || mode === 'blast') return;
-  let text = '중앙 통로', sub = 'CONNECTED FAB · THIRD PERSON';
+  let text = '중앙 통로', sub = mode === 'tour' ? '자동 산책 중' : '바닥을 눌러 이동';
   const focus = viewFocus();
   if (Math.abs(focus.x) > AISLE / 2) {
     const nearest = bays.reduce((a, b) => Math.hypot(focus.x - a.x, focus.z - a.z) < Math.hypot(focus.x - b.x, focus.z - b.z) ? a : b);
@@ -663,7 +668,7 @@ function animate(now) {
     camera.position.y += Math.cos(elapsed * 71) * burstShake * .05;
   }
   audio.update({ jet: entry.active ? entry.state.jet : 0, hidden: false });
-  if (now >= nextMapAt) { drawMap(); updateZone(); nextMapAt = now + 125; }
+  if (now >= nextMapAt) { if (viewControls.mapVisible) drawMap(); updateZone(); nextMapAt = now + 125; }
   camera.updateMatrixWorld();
   viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); viewFrustum.setFromProjectionMatrix(viewProjection);
   for (const batch of spatialBatches) batch.update(viewFrustum, camera.position);
@@ -677,7 +682,7 @@ function animate(now) {
     nextDiagnosticAt = now + 500;
     const demo = observedVehicle();
     updateSoundButton();
-    $('world').dataset.diagnostics = JSON.stringify({ ready: true, revision: 'chibi-physical-emo-11', mode, audio: audio.state, destruction: destruction.state, equipmentVisibility: equipmentVisibility.state, emoInteraction: explorer.state.emoInteraction, emoButtons: layoutMachines.length, amberBays: bayLighting.bayIds.map(id => id + 1), amberLights: bayLighting.lights.length, amberLightsVisible: bayLighting.root.visible, entry: { active: entry.active, ...entry.state }, width: WIDTH, length: LENGTH, ceiling: HEIGHT,
+    $('world').dataset.diagnostics = JSON.stringify({ ready: true, revision: 'relaxed-avatar-quiet-ui-12', mode, audio: audio.state, destruction: destruction.state, equipmentVisibility: equipmentVisibility.state, emoInteraction: explorer.state.emoInteraction, controlsOpen: viewControls.isOpen, mapVisible: viewControls.mapVisible, emoButtons: layoutMachines.length, amberBays: bayLighting.bayIds.map(id => id + 1), amberLights: bayLighting.lights.length, amberLightsVisible: bayLighting.root.visible, entry: { active: entry.active, ...entry.state }, width: WIDTH, length: LENGTH, ceiling: HEIGHT,
       equipmentCount: equipment.length, equipmentFamilies: families.length, uniqueEquipmentCodes: new Set(equipment.map(e => e.code)).size, selectedEquipment: selectedEquipment?.code ?? null,
       machines: machinePositions.length, bays: bays.length, toolsPerRow: 10, loadports: layoutMachines.length * 3,
       frontAisle: AISLE, rearAisle: SERVICE_AISLE, sideGap: SIDE_GAP, vehicles: vehicles.length, junctions: network.junctions.length,
@@ -691,6 +696,6 @@ function animate(now) {
 
   }
 }
-window.addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); $('mobile-pad').classList.toggle('hidden', mode !== 'walk' || !(mobile || innerWidth < 700)); });
+window.addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
 startEntry(); requestAnimationFrame(animate);
 requestAnimationFrame(() => { $('loading').classList.add('done'); setTimeout(() => $('loading').remove(), 800); });

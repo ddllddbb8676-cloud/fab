@@ -122,8 +122,12 @@ function acquireResources(THREE) {
   }
   const faceTexture = new THREE.DataTexture(facePixels, textureSize, textureSize);
   faceTexture.colorSpace = THREE.SRGBColorSpace; faceTexture.magFilter = THREE.LinearFilter; faceTexture.minFilter = THREE.LinearFilter; faceTexture.needsUpdate = true;
-  const torso = merge([[profile([[.285, .095, .087], [.32, .145, .12], [.42, .184, .15], [.60, .194, .16], [.75, .185, .15], [.85, .149, .118], [.93, .098, .089]], 16), cloth],
-    [new THREE.BoxGeometry(.008, .25, .003).translate(0, .65, .160), '#8faeb9']]);
+  // Compact chest/hips leave the trouser legs visible instead of forming a long pouch.
+  const zipper = geometry([-.004,.56,.1191, .004,.56,.1191, -.004,.61,.131, .004,.61,.131,
+    -.004,.73,.138, .004,.73,.138, -.004,.83,.128, .004,.83,.128, -.004,.86,.118, .004,.86,.118],
+    [0,1,2,1,3,2,2,3,4,3,5,4,4,5,6,5,7,6,6,7,8,7,9,8]);
+  const torso = merge([[profile([[.49, .100, .083], [.53, .145, .110], [.61, .169, .129], [.73, .175, .136], [.83, .166, .126], [.89, .137, .106], [.94, .098, .089]], 16), cloth],
+    [zipper, '#8faeb9']]);
   const upperArm = merge([[profile([[-.57, .058, .057], [-.35, .069, .067], [.12, .074, .071], [.4, .068, .064], [.55, .052, .05]], 12), cloth]]);
   const forearm = merge([[profile([[-.11, .041, .042], [-.085, .048, .047], [.02, .058, .056], [.1, .058, .055]], 12), cloth],
     [profile([[-.113, .043, .043], [-.096, .046, .046]], 12), cuff]]);
@@ -182,21 +186,26 @@ export function createAvatar(THREE) {
       const p = (phase + (leg.side === 1 ? .5 : 0)) % 1, stance = p < .6, q = stance ? p / .6 : (p - .6) / .4;
       const footZ = stride * (stance ? 1 - 2 * q : -1 + 2 * q * q * (3 - 2 * q));
       const lift = stance ? 0 : Math.sin(q * Math.PI) ** 2 * .034 * activity;
-      leg.hip.set(leg.side * .088, .395 + bob, 0); leg.ankle.set(leg.side * .088, .105 + lift, footZ);
+      leg.footZ = footZ;
+      leg.hip.set(leg.side * .088, .55 + bob, 0); leg.ankle.set(leg.side * .088, .105 + lift, footZ);
       between(leg.pants, leg.ankle, leg.hip); leg.boot.position.set(leg.side * .088, lift, footZ);
     }
     root.userData.pressReachable = false;
     if (pressing > 0) { root.updateMatrixWorld(true); pressLocal.set(pressTarget.x, pressTarget.y, pressTarget.z); upper.worldToLocal(pressLocal); }
     for (const arm of arms) {
-      const swing = -wave * arm.side * .050 * activity;
-      arm.shoulder.set(arm.side * .167, .875, 0); arm.elbow.set(arm.side * .208, .755, -.015 + swing * .4); arm.wrist.set(arm.side * .200, .715, .055 + swing);
+      // Relaxed, downward arms. The same-side foot moving forward sends the hand back.
+      const swing = -legs.find(leg => leg.side === arm.side).footZ * 1.15;
+      arm.shoulder.set(arm.side * .167, .89, 0);
+      arm.elbow.set(arm.side * .206, .69 + Math.abs(swing) * .04, -.010 + swing * .45);
+      arm.wrist.set(arm.side * .212, .49 + Math.abs(swing) * .06, .012 + swing);
       if (arm === rightArm && pressing > 0) {
-        // A little shoulder lift keeps the normal arms short while reaching a 1.28 m EMO.
+        // Lift the shoulder only for the deliberate press; ordinary walking stays relaxed.
         arm.shoulder.y += .065 * pressing;
         reachDirection.copy(pressLocal).sub(arm.shoulder);
-        const requestedDistance = reachDirection.length(), lengthA = .19, lengthB = .27;
-        const distance = Math.max(.081, Math.min(lengthA + lengthB - .001, requestedDistance));
-        root.userData.pressReachable = requestedDistance <= lengthA + lengthB - .001 && requestedDistance >= .081;
+        const requestedDistance = reachDirection.length(), lengthA = .205, lengthB = .295;
+        const minimumReach = Math.abs(lengthA - lengthB) + .001;
+        const distance = Math.max(minimumReach, Math.min(lengthA + lengthB - .001, requestedDistance));
+        root.userData.pressReachable = requestedDistance <= lengthA + lengthB - .001 && requestedDistance >= minimumReach;
         if (requestedDistance > 1e-8) reachDirection.multiplyScalar(1 / requestedDistance); else reachDirection.set(0, 0, 1);
         reachTip.copy(arm.shoulder).addScaledVector(reachDirection, distance);
         const along = (lengthA * lengthA - lengthB * lengthB + distance * distance) / (2 * distance);

@@ -8,6 +8,30 @@ import { getEmoButtonPose } from '../src/emo-controls.js';
 function meshesOf(avatar) { const meshes = []; avatar.root.traverse(object => { if (object.isMesh) meshes.push(object); }); return meshes; }
 const vector = new THREE.Vector3();
 
+test('compact torso exposes longer legs and relaxed hands swing below the hips opposite their feet', () => {
+  const avatar = createAvatar(THREE), meshes = meshesOf(avatar), torso = meshes.find(mesh => mesh.name === 'torso');
+  const gloves = meshes.filter(mesh => mesh.name === 'glove'), boots = meshes.filter(mesh => mesh.name === 'boot');
+  const handTip = new THREE.Vector3(0, -.095, 0), hand = new THREE.Vector3();
+  try {
+    assert.ok(torso.geometry.boundingBox.max.y - torso.geometry.boundingBox.min.y <= .46, 'torso is at least 25% shorter than the old 0.645 m body');
+    assert.ok(torso.geometry.boundingBox.min.y >= .48, 'visible legs must not be covered by a long pouch');
+    const rest = gloves.map(glove => glove.localToWorld(handTip.clone()));
+    assert.ok(rest.every(point => point.y >= .38 && point.y <= .43), 'relaxed fingertips reach the upper thighs');
+    const minSwing = [Infinity, Infinity], maxSwing = [-Infinity, -Infinity];
+    for (let frame = 0; frame < 360; frame++) {
+      avatar.update(1 / 60, { speed: 2.6, heading: 0 });
+      for (let i = 0; i < gloves.length; i++) {
+        hand.copy(handTip); gloves[i].localToWorld(hand);
+        assert.ok(hand.y < .44, 'walking must never lift the resting hands up onto the belly');
+        const swing = hand.z - rest[i].z;
+        assert.ok(boots[i].position.z * swing <= 1e-7, 'hand and same-side foot must move in opposite directions');
+        minSwing[i] = Math.min(minSwing[i], swing); maxSwing[i] = Math.max(maxSwing[i], swing);
+      }
+    }
+    assert.ok(minSwing.every(value => value < -.035) && maxSwing.every(value => value > .035), 'both arms visibly swing forward and back');
+  } finally { avatar.dispose(); }
+});
+
 test('chibi visitor keeps grounded feet and its narrow-aisle envelope through walking and turns', () => {
   const avatar = createAvatar(THREE), meshes = meshesOf(avatar);
   try {
@@ -49,7 +73,7 @@ test('right glove visibly reaches all 360 WORLD EMO targets from the agreed stan
         assert.ok(avatar.root.position.equals(before));
         avatar.update(1 / 60, { heading, pressTarget: target, pressProgress: 0 });
         assert.equal(avatar.root.userData.pressReachable, false);
-        assert.ok(avatar.root.userData.pressHandWorld.y < .85);
+        assert.ok(avatar.root.userData.pressHandWorld.y < .44, 'release returns the hand down beside the thigh');
       }
     }
     avatar.update(.016, { pressTarget: { x: 900, y: 900, z: 900 }, pressProgress: 1 });

@@ -20,7 +20,14 @@ function setup({ colliders = [] } = {}) {
     onMode() {}, onInspect() {}, onToast() {} });
   explorer.state.position.set(-28.7, 0, bays[4].z); explorer.update(0);
   return { explorer, camera,
-    key(type, key) { windowEvents.get(type)({ key, target: { closest: () => false }, preventDefault() {} }); },
+    key(type, key) { windowEvents.get(type)?.({ key, target: { closest: () => false }, preventDefault() {} }); },
+    tapFloor(point, pointerType = 'mouse') {
+      camera.updateMatrixWorld(true);
+      const p = new THREE.Vector3(point.x, 0, point.z).project(camera);
+      assert.ok(Math.abs(p.x) < 1 && Math.abs(p.y) < 1, 'the tapped destination is visible in the canvas');
+      const event = { pointerId: 1, pointerType, clientX: (p.x + 1) * 640, clientY: (1 - p.y) * 360 };
+      canvasEvents.get('pointerdown')(event); canvasEvents.get('pointerup')(event);
+    },
     drag(dx, dy = 0) {
       canvasEvents.get('pointerdown')({ pointerId: 1, clientX: 640, clientY: 360 });
       canvasEvents.get('pointermove')({ pointerId: 1, clientX: 640 + dx, clientY: 360 + dy });
@@ -30,26 +37,49 @@ function setup({ colliders = [] } = {}) {
   };
 }
 
-test('keyboard acceleration and release are eased and give equal travel at 30, 60 and 120 Hz', () => {
+test('floor clicks and touch taps accelerate smoothly with equal travel at 30, 60 and 120 Hz', () => {
   const results = [];
   for (const hz of [30, 60, 120]) {
     const h = setup();
     try {
-      const start = h.explorer.state.position.clone(); h.key('keydown', 'w');
+      const start = h.explorer.state.position.clone(), destination = { x: start.x - 6, z: start.z };
+      h.tapFloor(destination, hz === 60 ? 'touch' : 'mouse');
+      assert.ok(h.explorer.state.path.length > 0); assert.ok(h.explorer.state.position.equals(start));
       h.explorer.update(1 / hz);
       assert.ok(h.explorer.state.speed > 0 && h.explorer.state.speed < .55, 'first movement frame accelerates gradually');
       for (let i = 1; i < hz; i++) h.explorer.update(1 / hz);
-      const release = h.explorer.state.position.clone(); h.key('keyup', 'w');
-      for (let i = 0; i < hz; i++) h.explorer.update(1 / hz);
-      assert.ok(h.explorer.state.position.distanceTo(release) < .15, 'release has a short controlled deceleration');
-      assert.ok(h.explorer.state.speed < 1e-5);
       results.push({ travel: start.distanceTo(h.explorer.state.position), camera: h.camera.position.clone() });
+      for (let i = 0; i < 3 * hz; i++) h.explorer.update(1 / hz);
+      assert.ok(Math.hypot(h.explorer.state.position.x - destination.x, h.explorer.state.position.z - destination.z) < 1e-8);
+      assert.equal(h.explorer.state.path.length, 0); assert.equal(h.explorer.state.speed, 0);
     } finally { h.dispose(); }
   }
   for (const r of results.slice(1)) {
     assert.ok(Math.abs(r.travel - results[0].travel) < 1e-8);
     assert.ok(r.camera.distanceTo(results[0].camera) < .002, 'camera trailing distance is stable across frame rates');
   }
+});
+
+test('WASD, arrow keys and Shift do not move, reroute, accelerate or switch the visitor mode', () => {
+  const h = setup();
+  try {
+    const keys = ['w', 'a', 's', 'd', 'W', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Shift'];
+    const start = h.explorer.state.position.clone();
+    for (const key of keys) {
+      h.key('keydown', key);
+      for (let i = 0; i < 30; i++) h.explorer.update(1 / 60);
+      h.key('keyup', key);
+      assert.ok(h.explorer.state.position.equals(start), `${key} does not cause movement`);
+    }
+    const destination = { x: start.x - 6, z: start.z }; h.tapFloor(destination);
+    const path = JSON.stringify(h.explorer.state.path);
+    for (const key of keys) h.key('keydown', key);
+    assert.equal(JSON.stringify(h.explorer.state.path), path, 'keyboard input does not replace a floor route');
+    for (let i = 0; i < 120; i++) { h.explorer.update(1 / 60); assert.ok(h.explorer.state.speed <= 2.6 + 1e-8); }
+    h.explorer.setMode('tour');
+    for (const key of keys) h.key('keydown', key);
+    assert.equal(h.explorer.state.mode, 'tour', 'keys do not leave automatic walking');
+  } finally { h.dispose(); }
 });
 
 test('drag input eases into the orbit and walk/tour switching does not snap to the target angle', () => {
