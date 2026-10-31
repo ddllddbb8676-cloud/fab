@@ -1,0 +1,47 @@
+import { getEmoButtonPose } from './emo-controls.js';
+import { findWalkPath, WALK_RADIUS } from './walking.js';
+import { isBlocked } from './layout.js';
+
+export const EMO_REACH_SECONDS = .48;
+export const EMO_HOLD_SECONDS = .75;
+export const EMO_CONTACT_TOLERANCE = .035;
+
+export function getEmoApproach(machine) {
+  if (!machine || !Number.isFinite(machine.id) || !Number.isFinite(machine.x) || !Number.isFinite(machine.z) || ![1, -1].includes(machine.sign)) return null;
+  const button = getEmoButtonPose(machine);
+  return { id: machine.id, machine, button,
+    destination: { x: button.x + button.sign * .22, z: button.z + button.sign * .27 },
+    heading: button.sign === 1 ? Math.PI : 0 };
+}
+
+export function planEmoApproach(machine, position) {
+  const plan = getEmoApproach(machine);
+  if (!plan || isBlocked(plan.destination.x, plan.destination.z, WALK_RADIUS)) return null;
+  const path = findWalkPath(position, plan.destination);
+  return path ? { ...plan, path } : null;
+}
+
+// The operator's right side and the mushroom stay visible together. This is a
+// safe front-aisle shot, not a camera inside the monitor or neighbouring EFEM.
+export function emoPressCameraFrame(plan, aspect = 1, baseFov = 64) {
+  const { button, destination } = plan, sign = button.sign;
+  const position = { x: button.x - sign * 1.35, y: 1.7, z: button.z + sign * 1.85 };
+  const target = { x: button.x + sign * .08, y: .93, z: button.z + sign * .15 };
+  const landmarks = [];
+  for (const x of [-.295, .295]) for (const z of [-.295, .295]) for (const y of [0, 1.44]) {
+    landmarks.push({ x: destination.x + x, y, z: destination.z + z });
+  }
+  for (const x of [-.13, .13]) for (const y of [-.13, .13]) landmarks.push({ x: button.x + x, y: button.y + y, z: button.z });
+  const dx = target.x - position.x, dy = target.y - position.y, dz = target.z - position.z;
+  const length = Math.hypot(dx, dy, dz), horizontal = Math.hypot(dx, dz);
+  const forward = { x: dx / length, y: dy / length, z: dz / length }, right = { x: -dz / horizontal, z: dx / horizontal };
+  const up = { x: -right.z * forward.y, y: right.z * forward.x - right.x * forward.z, z: right.x * forward.y };
+  let tangent = Math.tan(baseFov * Math.PI / 360);
+  for (const p of landmarks) {
+    const x = p.x - position.x, y = p.y - position.y, z = p.z - position.z;
+    const depth = x * forward.x + y * forward.y + z * forward.z;
+    tangent = Math.max(tangent, Math.abs(x * right.x + z * right.z) / depth / Math.max(.1, aspect) / .8,
+      Math.abs(x * up.x + y * up.y + z * up.z) / depth / .71);
+  }
+  return { position, target, landmarks, fov: Math.atan(tangent) * 360 / Math.PI };
+}

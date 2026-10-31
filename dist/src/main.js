@@ -239,7 +239,8 @@ function machine(layout, family) {
     for (let j = -1; j <= 1; j++) localBox(x, z, s, M.blue, j * 1.4, 2.22, 2.383, .95, .35, .018);
   }
   const shadow = mesh(scene, planeGeometry, aoMat, x, .001, z, 6.5, 7.1, 1); shadow.rotation.x = -Math.PI / 2;
-  colliders.push({ ...layout.bounds, front: frontZ, x, z, family, equipment: equipmentById.get(index) });
+  colliders.push({ ...layout.bounds, front: frontZ, x, z, family, equipment: equipmentById.get(index),
+    cameraBounds: layout.walkBounds.map((bounds, i) => ({ ...bounds, minY: 0, maxY: i === 0 ? 3.4 : 1.45 })) });
   machinePositions.push({ x, z, family, equipment: equipmentById.get(index), index, sign, frontZ });
 }
 for (const layout of layoutMachines) { buildingMachineId = layout.id; machine(layout, families[layout.familyIndex]); }
@@ -481,7 +482,7 @@ window.addEventListener('keydown', e => { if (entry.active && e.key === 'Escape'
 
 // Browsers require a user gesture; the first touch starts the intended ambience.
 const audio = createAmbience();
-let destruction, burstShake = 0;
+let destruction, burstShake = 0, emoPhase = '';
 const emoControls = createEmoControls({ THREE, scene, machines: layoutMachines, equipment,
   isDestroyed: id => destruction?.isDestroyed(id) ?? false, onPress: triggerEmo });
 destruction = createEquipmentDestruction({ THREE, scene, machines: layoutMachines, reducedMotion,
@@ -492,9 +493,10 @@ destruction = createEquipmentDestruction({ THREE, scene, machines: layoutMachine
 function updateEmoCard() {
   if (!destruction) return;
   const id = selectedEquipment?.id, damaged = id !== undefined && destruction.isDestroyed(id);
-  $('tool-emo').disabled = id === undefined || damaged;
+  const busy = explorer.state.emoInteraction !== null && explorer.state.emoInteraction !== undefined;
+  $('tool-emo').disabled = id === undefined || damaged || busy;
   $('tool-emo').setAttribute('aria-label', id === undefined ? 'EMO 누르기' : `${selectedEquipment.code} EMO 누르기`);
-  $('tool-emo').querySelector('strong').textContent = damaged ? '파손된 장비' : 'EMO 누르기';
+  $('tool-emo').querySelector('strong').textContent = damaged ? '파손된 장비' : busy ? '캐릭터가 누르러 가는 중' : 'EMO 누르기';
   $('tool-repair').classList.toggle('hidden', !damaged);
   const count = destruction.state.destroyedIds.length;
   $('restore-equipment').classList.toggle('hidden', count === 0);
@@ -505,19 +507,34 @@ function triggerEmo(id) {
   const item = equipmentById.get(id); if (!item) return false;
   if (destruction.isDestroyed(id)) { toast(`${item.code} · 먼저 장비를 복구해 주세요`); return false; }
   selectedEquipment = item;
-  if (mode !== 'walk') explorer.setMode('walk');
-  $('tool-card').classList.add('hidden');
-  if (!destruction.trigger(id)) return false;
-  explorer.focusDestruction(layoutMachines.find(machine => machine.id === id));
-  toast(`${item.code} · EMO 작동`);
-  return true;
+  const machine = layoutMachines.find(machine => machine.id === id);
+  const accepted = explorer.approachEmo(machine, {
+    isValid: () => !entry.active && !directory.isOpen && !destruction.isDestroyed(id),
+    onPress() {
+      emoControls.setPress(null);
+      if (!destruction.trigger(id)) return;
+      explorer.focusDestruction(machine);
+      updateEmoCard(); toast(`${item.code} · EMO 작동`);
+    },
+    onCancel(reason) {
+      emoControls.setPress(null); updateEmoCard();
+      if (['movement', 'tap', 'look-input', 'escape', 'mode-change'].includes(reason)) toast('EMO 누르기를 취소했어요');
+    }
+  });
+  if (accepted) {
+    $('tool-card').classList.add('hidden'); updateEmoCard();
+    toast(`${item.code} · 캐릭터가 버튼 앞으로 걸어가요`);
+  }
+  return accepted;
 }
 $('tool-emo').addEventListener('click', () => { if (selectedEquipment) triggerEmo(selectedEquipment.id); });
 $('tool-repair').addEventListener('click', () => {
   if (!selectedEquipment) return;
+  explorer.cancelEmo('repair');
   destruction.reset(selectedEquipment.id); updateEmoCard(); toast(`${selectedEquipment.code} · 복구 완료`);
 });
 $('restore-equipment').addEventListener('click', () => {
+  explorer.cancelEmo('repair');
   destruction.resetAll(); if (mode === 'blast') explorer.setMode('walk'); updateEmoCard(); toast('모든 장비를 복구했어요');
 });
 updateEmoCard();
@@ -631,6 +648,13 @@ function animate(now) {
     for (const belt of v.belts) { belt.position.y = (upper + bottom) / 2; belt.scale.y = Math.max(.02, upper - bottom); }
   }
   updateEntry(dt); explorer.update(dt);
+  const press = explorer.state.emoInteraction;
+  emoControls.setPress(press?.id, press?.phase === 'hold' ? Math.min(1, press.holdProgress * 6) : 0);
+  const nextEmoPhase = press ? `${press.id}:${press.phase}` : '';
+  if (nextEmoPhase !== emoPhase) {
+    emoPhase = nextEmoPhase; updateEmoCard();
+    if (press?.phase === 'hold') toast(`${equipmentById.get(press.id)?.code ?? 'EMO'} · 꾹 누르는 중`);
+  }
   emoControls.update({ mode, locked: entry.active || directory.isOpen || !$('help').classList.contains('hidden') });
   destruction.update(dt);
   if (burstShake > 0) {
@@ -653,13 +677,14 @@ function animate(now) {
     nextDiagnosticAt = now + 500;
     const demo = observedVehicle();
     updateSoundButton();
-    $('world').dataset.diagnostics = JSON.stringify({ ready: true, revision: 'human-cleanroom-smooth-10', mode, audio: audio.state, destruction: destruction.state, equipmentVisibility: equipmentVisibility.state, emoButtons: layoutMachines.length, amberBays: bayLighting.bayIds.map(id => id + 1), amberLights: bayLighting.lights.length, amberLightsVisible: bayLighting.root.visible, entry: { active: entry.active, ...entry.state }, width: WIDTH, length: LENGTH, ceiling: HEIGHT,
+    $('world').dataset.diagnostics = JSON.stringify({ ready: true, revision: 'chibi-physical-emo-11', mode, audio: audio.state, destruction: destruction.state, equipmentVisibility: equipmentVisibility.state, emoInteraction: explorer.state.emoInteraction, emoButtons: layoutMachines.length, amberBays: bayLighting.bayIds.map(id => id + 1), amberLights: bayLighting.lights.length, amberLightsVisible: bayLighting.root.visible, entry: { active: entry.active, ...entry.state }, width: WIDTH, length: LENGTH, ceiling: HEIGHT,
       equipmentCount: equipment.length, equipmentFamilies: families.length, uniqueEquipmentCodes: new Set(equipment.map(e => e.code)).size, selectedEquipment: selectedEquipment?.code ?? null,
       machines: machinePositions.length, bays: bays.length, toolsPerRow: 10, loadports: layoutMachines.length * 3,
       frontAisle: AISLE, rearAisle: SERVICE_AISLE, sideGap: SIDE_GAP, vehicles: vehicles.length, junctions: network.junctions.length,
       networkNodes: network.nodes.length, networkEdges: network.edges.length, traffic: fleet.stats, instances: staticInstances, fps: displayedFPS,
       calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, renderPixelRatio, frameMedianMs: frameMedian, frameP95Ms: frameP95, visibleInstances: spatialBatches.reduce((n, b) => n + (b.mesh.parent.visible ? b.visibleCount : 0), 0), mirrorPass: false, position: { x: explorer.state.position.x, y: 0, z: explorer.state.position.z },
-      camera: { x: camera.position.x, y: camera.position.y, z: camera.position.z }, character: { visible: avatar.root.visible, height: avatar.height, speed: explorer.state.speed, heading: explorer.state.heading },
+      camera: { x: camera.position.x, y: camera.position.y, z: camera.position.z }, character: { visible: avatar.root.visible, height: avatar.height, speed: explorer.state.speed, heading: explorer.state.heading,
+        pressReachable: avatar.root.userData.pressReachable, pressHand: avatar.root.userData.pressHandWorld },
       walkPathPoints: explorer.state.path.length, cameraDistance: explorer.state.distance, cameraYaw: explorer.state.yaw,
       roofVisible: roof.visible, parkedFoups: vehicles.filter(v => v.state.parked).length, transfer: demo.state, transferVehicleId: explorer.state.transferVehicleId, transferTarget: explorer.state.transferTarget, transferWaiting: explorer.state.transferWaiting, transferInTransit: explorer.state.transferInTransit, transferLabel: explorer.state.transferLabel, followId: explorer.state.followId, tourTime: explorer.state.tourTime });
     $('transfer-status').textContent = mode === 'transfer' ? (explorer.state.transferLabel || demo.state.label) : demo.state.label;

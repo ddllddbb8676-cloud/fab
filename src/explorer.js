@@ -3,6 +3,7 @@ import { findWalkPath, stepWalker } from './walking.js';
 import { createTourRoute } from './tour-route.js';
 import { createTransferSession, updateTransferSession, transferCameraFrame, transferTransitFrame } from './transfer-view.js';
 import { getRuntimeObstacles } from './runtime-obstacles.js';
+import { planEmoApproach, emoPressCameraFrame, EMO_REACH_SECONDS, EMO_HOLD_SECONDS, EMO_CONTACT_TOLERANCE } from './emo-interaction.js';
 
 const damp = (value, wanted, rate, dt) => wanted + (value - wanted) * Math.exp(-rate * Math.max(0, dt));
 const angleDelta = (from, to) => Math.atan2(Math.sin(to - from), Math.cos(to - from));
@@ -43,11 +44,13 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
   const state = { mode: 'walk', position: new THREE.Vector3(TOUR_POINTS[0][0], 0, TOUR_POINTS[0][1]),
     yaw: Math.PI / 2, elevation: .36, distance: 4.4, heading: -Math.PI / 2, speed: 0,
     path: [], tourTime: 0, followId: 0, rideYaw: 0, manualLook: false, locked: false,
-    transferVehicleId: null, transferTarget: null, transferWaiting: false, transferLabel: '', transferInTransit: false };
+    transferVehicleId: null, transferTarget: null, transferWaiting: false, transferLabel: '', transferInTransit: false, emoInteraction: null };
   const keys = new Set(), moves = new Set(), pointers = new Map();
   let dragged = 0, gestureDragged = false, pinchDistance = 0, pinched = false, cameraSnap = true;
   let tourRoute = null, transferSession = null, transferBaseFov = camera.fov, blastSession = null, blastBaseFov = camera.fov;
+  let emoSession = null;
   const colliderBoxes = colliders.map(c => new THREE.Box3(new THREE.Vector3(c.minX - .12, c.minY ?? 0, c.minZ - .12), new THREE.Vector3(c.maxX + .12, c.maxY ?? 3.4, c.maxZ + .12)));
+  const cameraColliderBoxes = colliders.flatMap(c => c.cameraBounds ?? [c]).map(c => new THREE.Box3(new THREE.Vector3(c.minX - .12, c.minY ?? 0, c.minZ - .12), new THREE.Vector3(c.maxX + .12, c.maxY ?? 3.4, c.maxZ + .12)));
   const cast = new THREE.Raycaster(), floor = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hit = new THREE.Vector3();
   const cameraRay = new THREE.Ray(), cameraHit = new THREE.Vector3();
   const target = new THREE.Vector3(), desired = new THREE.Vector3(), direction = new THREE.Vector3();
@@ -58,8 +61,81 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
   const targetRing = new THREE.Mesh(new THREE.RingGeometry(.21, .29, 36), new THREE.MeshBasicMaterial({ color: '#3d9fa7', transparent: true, opacity: .8, side: THREE.DoubleSide, depthWrite: false }));
   targetRing.rotation.x = -Math.PI / 2; targetRing.position.y = .012; targetRing.visible = false; scene.add(targetRing);
   function clearInput() { keys.clear(); moves.clear(); pointers.clear(); state.speed = 0; velocity.x = velocity.z = pathSpeed = 0; }
+  function cancelEmo(reason = 'cancelled') {
+    if (!emoSession) return false;
+    const previous = emoSession; emoSession = null; state.emoInteraction = null;
+    state.path = []; targetRing.visible = false;
+    keys.clear(); moves.clear(); state.speed = 0; velocity.x = velocity.z = pathSpeed = 0;
+    camera.fov = previous.baseFov; camera.updateProjectionMatrix();
+    if (previous.phase !== 'approach') cameraSnap = true;
+    previous.onCancel?.(reason, previous.plan.machine);
+    return true;
+  }
+  function syncEmoState() {
+    if (!emoSession) { state.emoInteraction = null; return; }
+    const s = emoSession;
+    state.emoInteraction = { id: s.plan.id, phase: s.phase, pressProgress: s.progress,
+      holdProgress: Math.min(1, s.held / EMO_HOLD_SECONDS), button: s.plan.button, destination: s.plan.destination };
+  }
+  function approachEmo(machine, { onPress, onCancel, isValid = () => true } = {}) {
+    if (state.locked || typeof onPress !== 'function') return false;
+    if (emoSession && emoSession.plan.id === machine?.id) return true;
+    cancelEmo('replaced');
+    if (!isValid()) return false;
+    const plan = planEmoApproach(machine, state.position);
+    if (!plan) { onToast('버튼 앞까지 걸어갈 수 있는 통로가 없어요'); return false; }
+    setMode('walk');
+    emoSession = { plan, onPress, onCancel, isValid, phase: 'approach', elapsed: 0, held: 0, progress: 0, stalled: 0, baseFov: camera.fov };
+    state.path = plan.path; targetRing.position.set(plan.destination.x, .012, plan.destination.z); targetRing.visible = true;
+    syncEmoState(); onToast('장비 앞으로 걸어가 버튼을 길게 누릅니다'); return true;
+  }
+  function updateEmo(dt) {
+    const s = emoSession;
+    if (!s) return;
+    if (!s.isValid()) { cancelEmo('unavailable'); return; }
+    const distance = Math.hypot(state.position.x - s.plan.destination.x, state.position.z - s.plan.destination.z);
+    if (s.phase === 'approach') {
+      s.stalled = distance > .02 && state.speed < .02 ? s.stalled + dt : 0;
+      if (s.stalled > 1.5 || (!state.path.length && distance > .02)) { cancelEmo('path-blocked'); onToast('통로가 막혀 버튼 누르기를 멈췄어요'); return; }
+      if (distance <= .015 && !state.path.length) {
+        s.phase = 'align'; s.elapsed = 0; clearInput(); targetRing.visible = false;
+        state.heading = s.plan.heading;
+      }
+    } else {
+      if (distance > .035) { cancelEmo('moved-away'); return; }
+      state.heading = s.plan.heading; state.speed = 0;
+      const actionDt = Math.min(Math.max(dt, 0), .05);
+      s.elapsed += actionDt;
+      const facing = avatar.root.userData.heading ?? avatar.body?.rotation.y ?? avatar.root.rotation.y;
+      if (s.phase === 'align' && s.elapsed >= .24 && Math.abs(angleDelta(facing, s.plan.heading)) < .055) {
+        s.phase = 'reach'; s.elapsed = 0;
+      }
+      if (s.phase === 'reach') {
+        const p = Math.min(1, s.elapsed / EMO_REACH_SECONDS); s.progress = p * p * (3 - 2 * p);
+        if (p >= 1) { s.phase = 'hold'; s.elapsed = 0; }
+      }
+    }
+    syncEmoState();
+  }
+  function finishEmoContact(dt) {
+    const s = emoSession;
+    if (!s || s.phase !== 'hold') return;
+    const hand = avatar.root.userData.pressHandWorld, button = s.plan.button;
+    const touching = avatar.root.userData.pressReachable === true && hand &&
+      Math.hypot(hand.x - button.x, hand.y - button.y, hand.z - button.z) <= EMO_CONTACT_TOLERANCE;
+    s.held = touching ? s.held + Math.min(Math.max(dt, 0), .05) : 0;
+    if (!touching && s.elapsed > 1.5) { cancelEmo('out-of-reach'); return; }
+    syncEmoState();
+    if (s.held + 1e-8 < EMO_HOLD_SECONDS) return;
+    // Clear before calling into the app: the resulting blast mode cannot fire a
+    // cancellation callback, nor can a second tap reuse a completed press.
+    emoSession = null; state.emoInteraction = null; state.path = []; clearInput();
+    camera.fov = s.baseFov; camera.updateProjectionMatrix(); cameraSnap = true;
+    s.onPress(s.plan.machine);
+  }
   function setMode(next) {
     if (state.locked) return;
+    cancelEmo('mode-change');
     if (next === 'tour' && state.mode === 'tour') return;
     if (next === 'tour' && (!tourRoute || Math.hypot(tourRoute.position.x - state.position.x, tourRoute.position.z - state.position.z) > .01)) {
       tourRoute = createTourRoute(state.position);
@@ -128,7 +204,7 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
       cameraRay.set(focus, direction);
       const minX = Math.min(focus.x, desired.x), maxX = Math.max(focus.x, desired.x);
       const minZ = Math.min(focus.z, desired.z), maxZ = Math.max(focus.z, desired.z);
-      for (const boxes of [colliderBoxes, runtimeCameraBoxes]) for (const box of boxes) {
+      for (const boxes of [cameraColliderBoxes, runtimeCameraBoxes]) for (const box of boxes) {
         if (box.max.x < minX || box.min.x > maxX || box.max.z < minZ || box.min.z > maxZ) continue;
         const p = cameraRay.intersectBox(box, cameraHit);
         if (p) clearDistance = Math.min(clearDistance, Math.max(.08, focus.distanceTo(p) - .15));
@@ -206,18 +282,29 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
     state.position.set(next.x, 0, next.z);
   }
   function update(dt) {
+    const helpVisible = !$('help').classList.contains('hidden');
+    if (emoSession && (state.locked || helpVisible || document.hidden)) cancelEmo(state.locked ? 'locked' : helpVisible ? 'help' : 'hidden');
     if (!state.locked) state.speed = 0;
-    if (!state.locked && $('help').classList.contains('hidden')) {
-      if (state.mode === 'walk') walk(dt);
+    if (!state.locked && !helpVisible) {
+      if (state.mode === 'walk' && (!emoSession || emoSession.phase === 'approach')) walk(dt);
       if (state.mode === 'tour' && !pointers.size) tour(dt);
     }
-    avatar.root.position.copy(state.position); avatar.update(dt, { speed: state.speed, heading: state.heading });
+    updateEmo(dt);
+    avatar.root.position.copy(state.position); avatar.update(dt, { speed: state.speed, heading: state.heading,
+      pressTarget: emoSession && emoSession.phase !== 'approach' ? emoSession.plan.button : null, pressProgress: emoSession?.progress ?? 0 });
+    finishEmoContact(dt);
     if (state.mode === 'blast' && blastSession) {
       blastSession.elapsed += dt;
       if (blastSession.elapsed < 4.8) { applyBlastCamera(); return; }
       setMode('walk');
     }
     if (state.mode === 'overview') { orbit.update(); return; }
+    if (emoSession && emoSession.phase !== 'approach') {
+      const frame = emoPressCameraFrame(emoSession.plan, camera.aspect, emoSession.baseFov);
+      if (camera.fov !== frame.fov) { camera.fov = frame.fov; camera.updateProjectionMatrix(); }
+      camera.position.set(frame.position.x, frame.position.y, frame.position.z); camera.lookAt(frame.target.x, frame.target.y, frame.target.z);
+      cameraSnap = false; return;
+    }
     if (state.mode === 'transfer' && transferSession) {
       updateTransferSession(transferSession, vehicles);
       state.transferVehicleId = transferSession.vehicleId; state.transferTarget = transferSession.port;
@@ -242,7 +329,8 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
   function tap(event) {
     if (state.locked || (state.mode !== 'walk' && state.mode !== 'tour')) return;
     const r = canvas.getBoundingClientRect(); cast.setFromCamera(new THREE.Vector2((event.clientX - r.left) / r.width * 2 - 1, -(event.clientY - r.top) / r.height * 2 + 1), camera);
-    if (onActionTap(cast.ray) === true) { state.path = []; targetRing.visible = false; return; }
+    if (onActionTap(cast.ray) === true) { if (!emoSession) { state.path = []; targetRing.visible = false; } return; }
+    cancelEmo('tap');
     const floorHit = cast.ray.intersectPlane(floor, hit), groundDistance = floorHit ? camera.position.distanceTo(floorHit) : Infinity;
     let nearest = null, nearestDistance = Math.min(groundDistance, 24);
     for (let i = 0; i < colliderBoxes.length; i++) {
@@ -266,12 +354,14 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
     const old = pointers.get(e.pointerId); if (!old || state.mode === 'overview') return;
     const dx = e.clientX - old.x, dy = e.clientY - old.y; pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pointers.size === 2) {
+      cancelEmo('look-input');
       const p = [...pointers.values()], distance = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
       if (distance > 1 && pinchDistance > 1) state.distance = THREE.MathUtils.clamp(state.distance * pinchDistance / distance, 2, 6.8);
       pinchDistance = distance; return;
     }
     dragged += Math.abs(dx) + Math.abs(dy);
     if (dragged > 4) {
+      cancelEmo('look-input');
       gestureDragged = true;
       state.manualLook = true;
       if (state.mode === 'ride') state.rideYaw -= dx * .005;
@@ -286,7 +376,7 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
   canvas.addEventListener('pointercancel', e => pointers.delete(e.pointerId));
   canvas.addEventListener('wheel', e => {
     if (state.locked || state.mode === 'overview' || state.mode === 'transfer' || state.mode === 'blast') return;
-    e.preventDefault();
+    e.preventDefault(); cancelEmo('look-input');
     const units = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? canvas.getBoundingClientRect().height : 1;
     state.distance = THREE.MathUtils.clamp(state.distance + e.deltaY * units * .004, 2, 6.8);
   }, { passive: false });
@@ -294,16 +384,16 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
   window.addEventListener('keydown', e => {
     if (state.locked) return;
     const key = e.key.toLowerCase();
-    if (key === 'escape') { $('tool-card').classList.add('hidden'); $('help').classList.add('hidden'); state.path = []; targetRing.visible = false; }
+    if (key === 'escape') { cancelEmo('escape'); $('tool-card').classList.add('hidden'); $('help').classList.add('hidden'); state.path = []; targetRing.visible = false; }
     if (!movement.includes(key) || e.target.closest('input,textarea,select,[contenteditable=true]')) return;
-    e.preventDefault(); if (state.mode !== 'walk') setMode('walk'); keys.add(key);
+    e.preventDefault(); cancelEmo('movement'); if (state.mode !== 'walk') setMode('walk'); keys.add(key);
   });
   window.addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
-  window.addEventListener('blur', clearInput);
-  document.addEventListener('visibilitychange', () => { if (document.hidden) clearInput(); });
+  window.addEventListener('blur', () => { cancelEmo('blur'); clearInput(); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) { cancelEmo('hidden'); clearInput(); } });
   for (const button of document.querySelectorAll('[data-move]')) {
     const release = () => { moves.delete(button.dataset.move); button.classList.remove('pressed'); };
-    button.addEventListener('pointerdown', e => { if (state.locked) return; e.preventDefault(); button.setPointerCapture(e.pointerId); moves.add(button.dataset.move); button.classList.add('pressed'); });
+    button.addEventListener('pointerdown', e => { if (state.locked) return; e.preventDefault(); cancelEmo('movement'); button.setPointerCapture(e.pointerId); moves.add(button.dataset.move); button.classList.add('pressed'); });
     for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) button.addEventListener(event, release);
   }
   function focusTransfer() {
@@ -326,8 +416,8 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
     if (state.locked || !machine || !Number.isFinite(machine.x) || !Number.isFinite(machine.z) || ![1, -1].includes(machine.sign)) return false;
     blastSession = { machine, elapsed: 0 }; setMode('blast'); applyBlastCamera(); return true;
   }
-  return { state, setMode, reset, update, focusTransfer, focusDestruction,
-    lock(value) { if (value && state.mode === 'blast') setMode('walk'); state.locked = value; clearInput(); state.path = []; targetRing.visible = false; },
+  return { state, setMode, reset, update, focusTransfer, focusDestruction, approachEmo, cancelEmo,
+    lock(value) { cancelEmo('locked'); if (value && state.mode === 'blast') setMode('walk'); state.locked = value; clearInput(); state.path = []; targetRing.visible = false; },
     focusEquipment(machine) {
       if (state.locked) return;
       setMode('walk'); const bay = bays[machine.bayId];

@@ -14,6 +14,23 @@ export const BAY_CENTERS = Array.from({ length: 9 }, (_, i) => (i - 4) * BAY_PIT
 export const BANK_CENTERS = [-28.7, 28.7];
 export const machines = [], bays = [], ports = [];
 
+// Keep the broad machine.bounds for inspection/camera framing, but walk against
+// the real cabinet, projecting EFEM and monitor/EMO mounting post separately.
+// The monitor keyboard is above the 1.45 m visitor; the red mushroom is the
+// intentional hand-contact target rather than an obstacle across the whole bay.
+export function getMachineWalkBounds(machine) {
+  const { x, z, sign } = machine;
+  const localBox = (part, x0, x1, z0, z1) => ({ part,
+    minX: x + Math.min(sign * x0, sign * x1), maxX: x + Math.max(sign * x0, sign * x1),
+    minZ: z + Math.min(sign * z0, sign * z1), maxZ: z + Math.max(sign * z0, sign * z1) });
+  const monitorX = 2.12 * TOOL_SCALE_X;
+  return [
+    localBox('cabinet', -TOOL_WIDTH / 2, TOOL_WIDTH / 2, -TOOL_BACK, TOOL_BACK),
+    localBox('efem', -1.9 * TOOL_SCALE_X, 1.5 * TOOL_SCALE_X, 2.345, TOOL_FRONT),
+    localBox('monitor-post', monitorX - .17, monitorX + .17, 2.505, 2.7475)
+  ];
+}
+
 // Clockwise rounded loop. Top service run travels toward +X.
 export function makeLoop(minX, maxX, minZ, maxZ, radius = .7) {
   const segments = [], addLine = (x, z, dx, dz, length) => segments.push({ type: 'line', x, z, dx, dz, length });
@@ -47,6 +64,7 @@ for (let bank = 0; bank < 2; bank++) for (let b = 0; b < BAY_CENTERS.length; b++
       x: x + (column - 4.5) * (TOOL_WIDTH + SIDE_GAP), z: z - sign * ROW_OFFSET };
     m.bounds = { minX: m.x - TOOL_WIDTH / 2, maxX: m.x + TOOL_WIDTH / 2,
       minZ: m.z - (sign === 1 ? TOOL_BACK : TOOL_FRONT), maxZ: m.z + (sign === 1 ? TOOL_FRONT : TOOL_BACK) };
+    m.walkBounds = getMachineWalkBounds(m);
     m.ports = Array.from({ length: 3 }, (_, j) => ({ id: `${m.id}:${j}`, machineId: m.id, bayId: id,
       x: m.x + sign * (-1.23 + j * 1.02) * TOOL_SCALE_X, z: m.z + sign * PORT_Z, y: PORT_SURFACE_Y,
       sign, index: j, reserved: sign === 1 && column === 4 && j === 1 }));
@@ -62,7 +80,10 @@ export function isBlocked(x, z, margin = .28) {
   if (isRuntimeBlocked(x, z, margin)) return true;
   if (AIR_SHOWER.bounds.some(c => x > c.minX - margin && x < c.maxX + margin && z > c.minZ - margin && z < c.maxZ + margin)) return true;
   if (columns.some(c => Math.abs(x - c.x) < .27 + margin && Math.abs(z - c.z) < .27 + margin)) return true;
-  return machines.some(({ bounds: c }) => x > c.minX - margin && x < c.maxX + margin && z > c.minZ - margin && z < c.maxZ + margin);
+  return machines.some(({ bounds: c, walkBounds }) => {
+    if (x <= c.minX - margin || x >= c.maxX + margin || z <= c.minZ - margin || z >= c.maxZ + margin) return false;
+    return walkBounds.some(b => x > b.minX - margin && x < b.maxX + margin && z > b.minZ - margin && z < b.maxZ + margin);
+  });
 }
 export const TOUR_POINTS = [
   [-4, BAY_CENTERS[7]], [-49, BAY_CENTERS[7]], [-57.4, BAY_CENTERS[7]],

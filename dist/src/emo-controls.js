@@ -116,7 +116,25 @@ export function createEmoControls({ THREE, scene, machines, equipment = [], onPr
     });
     mesh.computeBoundingSphere(); root.add(mesh); return { mesh, matrices };
   });
-  let enabled = true;
+  let enabled = true, pressedId = null, pressedDepth = 0;
+  const pressedMatrix = new THREE.Matrix4();
+  function setPress(id, depth = 0) {
+    const nextDepth = Number.isFinite(depth) ? Math.min(1, Math.max(0, depth)) : 0;
+    const nextId = nextDepth > 0 && indexes.has(id) && !disabled(id) ? id : null;
+    if (nextId === pressedId && nextDepth === pressedDepth) return;
+    const mushroom = instances[3];
+    if (pressedId !== null && !hiddenIds.has(pressedId)) {
+      const index = indexes.get(pressedId); mushroom.mesh.setMatrixAt(index, mushroom.matrices[index]);
+    }
+    pressedId = nextId; pressedDepth = nextId === null ? 0 : nextDepth;
+    if (pressedId !== null) {
+      const index = indexes.get(pressedId);
+      pressedMatrix.copy(mushroom.matrices[index]);
+      pressedMatrix.elements[14] -= targets[index].sign * .025 * pressedDepth;
+      mushroom.mesh.setMatrixAt(index, pressedMatrix);
+    }
+    mushroom.mesh.instanceMatrix.needsUpdate = true;
+  }
   function applyHidden(id, value) {
     const index = indexes.get(id); if (index === undefined) return false;
     if (hiddenIds.has(id) === value) return true;
@@ -127,6 +145,7 @@ export function createEmoControls({ THREE, scene, machines, equipment = [], onPr
   function disabled(id) { return destroyed.has(id) || isDestroyed(id); }
   function setDestroyed(id, value = true) {
     if (!indexes.has(id)) return false;
+    if (value && pressedId === id) setPress(null);
     if (value) destroyed.add(id); else destroyed.delete(id);
     return applyHidden(id, Boolean(disabled(id)));
   }
@@ -143,7 +162,7 @@ export function createEmoControls({ THREE, scene, machines, equipment = [], onPr
     for (const target of targets) applyHidden(target.id, Boolean(disabled(target.id)));
   }
   scene?.add(root); update();
-  return { root, targets, pick, press, setDestroyed, update,
+  return { root, targets, pick, press, setDestroyed, setPress, update,
     getButton(id) { const index = indexes.get(id); return index === undefined ? null : { ...targets[index], equipment: metadata.get(id) }; },
     dispose() { root.removeFromParent(); for (const item of Object.values(geometry)) item.dispose(); for (const material of materials) material.dispose(); labelTexture.dispose(); }
   };

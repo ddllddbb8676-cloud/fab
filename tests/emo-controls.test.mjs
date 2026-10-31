@@ -60,6 +60,23 @@ test('dynamic doors and other temporary blockers also prevent a direct button pr
   try { assert.equal(controls.pick(rayFor(target)), null); }
   finally { setRuntimeObstacles([]); controls.dispose(); }
 });
+
+test('holding EMO depresses only its red cap and cancellation or destruction releases it', () => {
+  const controls = createEmoControls({ THREE, machines });
+  const caps = controls.root.children[3], before = new THREE.Matrix4(), actual = new THREE.Matrix4(), other = new THREE.Matrix4();
+  try {
+    for (const sign of [1, -1]) {
+      const target = targets.find(t => t.sign === sign), index = targets.indexOf(target), untouched = (index + 1) % targets.length;
+      caps.getMatrixAt(index, before); caps.getMatrixAt(untouched, other);
+      controls.setPress(target.id, 1); caps.getMatrixAt(index, actual);
+      assert.ok(Math.abs(actual.elements[14] - before.elements[14] + sign * .025) < 1e-5);
+      const otherAfter = new THREE.Matrix4(); caps.getMatrixAt(untouched, otherAfter); assert.ok(otherAfter.equals(other));
+      controls.setPress(null); caps.getMatrixAt(index, actual); assert.ok(actual.equals(before));
+      controls.setPress(target.id, .7); controls.setDestroyed(target.id); caps.getMatrixAt(index, actual); assert.equal(actual.elements[0], 0);
+      controls.setDestroyed(target.id, false); caps.getMatrixAt(index, actual); assert.ok(actual.equals(before));
+    }
+  } finally { controls.dispose(); }
+});
 test('explorer dispatches a real short button tap before inspect and never fires after drag, pinch or lock', () => {
   const previousDocument = globalThis.document, previousWindow = globalThis.window;
   const handlers = new Map(), canvas = { addEventListener: (name, fn) => handlers.set(name, fn), setPointerCapture() {},

@@ -1,6 +1,6 @@
 import { machines, bays, BAY_CENTERS, TOOL_WIDTH, isBlocked } from './layout.js';
 import { canTraverseRuntimeObstacles } from './runtime-obstacles.js';
-export const WALK_RADIUS = .23;
+export const WALK_RADIUS = .295;
 export function canWalkSegment(a, b) {
   if (!canTraverseRuntimeObstacles(a, b, WALK_RADIUS)) return false;
   const length = Math.hypot(b.x - a.x, b.z - a.z), steps = Math.max(1, Math.ceil(length / .12));
