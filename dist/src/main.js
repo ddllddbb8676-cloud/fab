@@ -617,7 +617,7 @@ function animate(now) {
   if (frameCount % 15 === 0) {
     const demo = observedVehicle();
     updateSoundButton();
-    $('world').dataset.diagnostics = JSON.stringify({ ready: true, revision: 'emo-destruction-8', mode, audio: audio.state, destruction: destruction.state, equipmentVisibility: equipmentVisibility.state, emoButtons: layoutMachines.length, amberBays: bayLighting.bayIds.map(id => id + 1), amberLights: bayLighting.lights.length, amberLightsVisible: bayLighting.root.visible, entry: { active: entry.active, ...entry.state }, width: WIDTH, length: LENGTH, ceiling: HEIGHT,
+    $('world').dataset.diagnostics = JSON.stringify({ ready: true, revision: 'simple-cleanroom-avatar-9', mode, audio: audio.state, destruction: destruction.state, equipmentVisibility: equipmentVisibility.state, emoButtons: layoutMachines.length, amberBays: bayLighting.bayIds.map(id => id + 1), amberLights: bayLighting.lights.length, amberLightsVisible: bayLighting.root.visible, entry: { active: entry.active, ...entry.state }, width: WIDTH, length: LENGTH, ceiling: HEIGHT,
       equipmentCount: equipment.length, equipmentFamilies: families.length, uniqueEquipmentCodes: new Set(equipment.map(e => e.code)).size, selectedEquipment: selectedEquipment?.code ?? null,
       machines: machinePositions.length, bays: bays.length, toolsPerRow: 10, loadports: layoutMachines.length * 3,
       frontAisle: AISLE, rearAisle: SERVICE_AISLE, sideGap: SIDE_GAP, vehicles: vehicles.length, junctions: network.junctions.length,
