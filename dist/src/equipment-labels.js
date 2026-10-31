@@ -28,5 +28,13 @@ export function createEquipmentLabels(THREE, machines, equipment, families) {
   geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2)); geometry.setIndex(indices); geometry.computeBoundingSphere();
   const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ map: texture }));
   mesh.name = 'Equipment identifiers';
+  const originals = geometry.attributes.position.array.slice();
+  const offsets = new Map(equipment.map((item, index) => [item.id, index * 24]));
+  mesh.setEquipmentVisible = (id, visible) => {
+    const offset = offsets.get(id); if (offset === undefined) return;
+    const attribute = geometry.attributes.position;
+    for (let i = offset; i < offset + 24; i++) attribute.array[i] = visible ? originals[i] : (i % 3 === 1 ? -1 : 0);
+    attribute.needsUpdate = true;
+  };
   return mesh;
 }

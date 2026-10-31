@@ -15,6 +15,9 @@ import { createEquipmentDirectory } from './equipment-directory.js';
 import { createBayLighting, applyBayWhiteLightMask } from './bay-lighting.js';
 import { createAmbience } from './ambience.js';
 import { setRuntimeObstacles } from './runtime-obstacles.js';
+import { createEquipmentVisibility } from './equipment-visibility.js';
+import { createEquipmentDestruction } from './equipment-destruction.js';
+import { createEmoControls } from './emo-controls.js';
 
 const $ = (id) => document.getElementById(id);
 const mobile = matchMedia('(pointer: coarse)').matches;
@@ -63,17 +66,28 @@ const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
 const cylinderGeometry = new THREE.CylinderGeometry(1, 1, 1, 16);
 const planeGeometry = new THREE.PlaneGeometry(1, 1);
 const batches = new Map();
+const equipmentVisibility = createEquipmentVisibility();
+let buildingMachineId = null;
+const hiddenPartMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
+function registerInstancePart(id, instance, index, original) {
+  if (id === null || id === undefined) return;
+  const initial = original.clone();
+  equipmentVisibility.register(id, visible => { instance.setMatrixAt(index, visible ? initial : hiddenPartMatrix); instance.instanceMatrix.needsUpdate = true; });
+}
 const dummy = new THREE.Object3D();
 function solid(geometry, material, x, y, z, sx, sy, sz, rotationY = 0) {
   const key = geometry.uuid + material.uuid;
-  if (!batches.has(key)) batches.set(key, { geometry, material, transforms: [] });
+  if (!batches.has(key)) batches.set(key, { geometry, material, transforms: [], owners: [] });
   dummy.position.set(x, y, z); dummy.rotation.set(0, rotationY, 0); dummy.scale.set(sx, sy, sz); dummy.updateMatrix();
   batches.get(key).transforms.push(dummy.matrix.clone());
+  batches.get(key).owners.push(buildingMachineId);
 }
 const box = (material, x, y, z, sx, sy, sz, ry = 0) => solid(boxGeometry, material, x, y, z, sx, sy, sz, ry);
 const cyl = (material, x, y, z, r, h) => solid(cylinderGeometry, material, x, y, z, r, h, r);
 function mesh(parent, geometry, material, x, y, z, sx, sy, sz) {
-  const obj = new THREE.Mesh(geometry, material); obj.position.set(x, y, z); obj.scale.set(sx, sy, sz); parent.add(obj); return obj;
+  const obj = new THREE.Mesh(geometry, material); obj.position.set(x, y, z); obj.scale.set(sx, sy, sz); parent.add(obj);
+  if (buildingMachineId !== null && parent === scene) obj.userData.equipmentId = buildingMachineId;
+  return obj;
 }
 const roof = new THREE.Group(); scene.add(roof);
 const ceilingMat = M.ceiling;
@@ -227,8 +241,10 @@ function machine(layout, family) {
   colliders.push({ ...layout.bounds, front: frontZ, x, z, family, equipment: equipmentById.get(index) });
   machinePositions.push({ x, z, family, equipment: equipmentById.get(index), index, sign, frontZ });
 }
-for (const layout of layoutMachines) machine(layout, families[layout.familyIndex]);
-scene.add(createEquipmentLabels(THREE, layoutMachines, equipment, families));
+for (const layout of layoutMachines) { buildingMachineId = layout.id; machine(layout, families[layout.familyIndex]); }
+buildingMachineId = null;
+const equipmentLabels = createEquipmentLabels(THREE, layoutMachines, equipment, families); scene.add(equipmentLabels);
+for (const machine of layoutMachines) equipmentVisibility.register(machine.id, visible => equipmentLabels.setEquipmentVisible(machine.id, visible));
 // Utility mains above equipment, below the ceiling. Cleanroom equipment is schematic.
 for (const bay of bays) for (const sign of [-1, 1]) {
   const z = bay.z + sign * 6.7;
@@ -321,9 +337,9 @@ for (const batch of movingBatches.values()) {
 
 // Static geometry is instanced by material so the huge hall stays lightweight.
 let staticInstances = 0;
-for (const { geometry, material, transforms } of batches.values()) {
+for (const { geometry, material, transforms, owners } of batches.values()) {
   const instance = new THREE.InstancedMesh(geometry, material, transforms.length);
-  transforms.forEach((matrix, i) => instance.setMatrixAt(i, matrix));
+  transforms.forEach((matrix, i) => { instance.setMatrixAt(i, matrix); registerInstancePart(owners[i], instance, i, matrix); });
   instance.computeBoundingSphere(); scene.add(instance); staticInstances += transforms.length;
 }
 // Batch repeated roof lights, screens, labels and contact shadows as well.
@@ -336,9 +352,9 @@ function consolidate(parent) {
     groups.get(key).push(obj);
   }
   for (const objects of groups.values()) {
-    if (objects.length < 2) continue;
+    if (objects.length < 2) { const obj = objects[0]; if (obj.userData.equipmentId !== undefined) equipmentVisibility.register(obj.userData.equipmentId, visible => { obj.visible = visible; }); continue; }
     const instance = new THREE.InstancedMesh(objects[0].geometry, objects[0].material, objects.length);
-    objects.forEach((obj, i) => { obj.updateMatrix(); instance.setMatrixAt(i, obj.matrix); parent.remove(obj); });
+    objects.forEach((obj, i) => { obj.updateMatrix(); instance.setMatrixAt(i, obj.matrix); registerInstancePart(obj.userData.equipmentId, instance, i, obj.matrix); parent.remove(obj); });
     instance.computeBoundingSphere(); parent.add(instance);
   }
 }
@@ -365,10 +381,12 @@ function showMachine(item) {
   $('tool-code-process').textContent = item.processCode; $('tool-code-fab').textContent = item.fabCode;
   $('tool-code-bay').textContent = item.code.slice(3, 5); $('tool-code-number').textContent = item.code.slice(5);
   $('tool-ports').textContent = '로드포트 ' + item.portCodes.join(' · ');
+  updateEmoCard();
   $('tool-card').classList.remove('hidden');
 }
 const explorer = createExplorer({ THREE, camera, scene, canvas: renderer.domElement, avatar, orbit, colliders, vehicles,
   onToast: toast, onInspect: showMachine,
+  onActionTap: ray => emoControls.press(ray),
   onMode(next) {
     mode = next; document.body.classList.add('exploring'); $('intro').classList.add('hidden');
     document.body.dataset.viewMode = next;
@@ -384,6 +402,7 @@ const explorer = createExplorer({ THREE, camera, scene, canvas: renderer.domElem
     $('walk-hint').classList.toggle('hidden', next !== 'walk'); $('mobile-pad').classList.toggle('hidden', next !== 'walk' || !(mobile || innerWidth < 700));
     $('next-oht').classList.toggle('hidden', next !== 'ride'); $('tool-card').classList.add('hidden');
     if (next === 'overview') { $('view-title').textContent = '연결된 팹 전체 보기'; $('view-subtitle').textContent = `${bays.length} BAYS · ${layoutMachines.length} TOOLS · ${network.junctions.length} JUNCTIONS`; }
+    if (next === 'blast') { $('view-title').textContent = `${selectedEquipment?.code ?? '장비'} · EMO`; $('view-subtitle').textContent = '파손 · 붕괴 · 폭발'; }
     if (next === 'ride') toast('교차로를 지나 다른 구역으로 향하는 OHT를 따라갑니다');
     currentZone = '';
   }
@@ -463,6 +482,46 @@ window.addEventListener('keydown', e => { if (entry.active && e.key === 'Escape'
 
 // Browsers require a user gesture; the first touch starts the intended ambience.
 const audio = createAmbience();
+let destruction, burstShake = 0;
+const emoControls = createEmoControls({ THREE, scene, machines: layoutMachines, equipment,
+  isDestroyed: id => destruction?.isDestroyed(id) ?? false, onPress: triggerEmo });
+destruction = createEquipmentDestruction({ THREE, scene, machines: layoutMachines, reducedMotion,
+  onVisibility(id, visible) { equipmentVisibility.setVisible(id, visible); emoControls.setDestroyed(id, !visible); },
+  onBurst() { audio.playExplosion(); if (!reducedMotion) burstShake = .45; },
+  onChange() { updateEmoCard(); }
+});
+function updateEmoCard() {
+  if (!destruction) return;
+  const id = selectedEquipment?.id, damaged = id !== undefined && destruction.isDestroyed(id);
+  $('tool-emo').disabled = id === undefined || damaged;
+  $('tool-emo').setAttribute('aria-label', id === undefined ? 'EMO 누르기' : `${selectedEquipment.code} EMO 누르기`);
+  $('tool-emo').querySelector('strong').textContent = damaged ? '파손된 장비' : 'EMO 누르기';
+  $('tool-repair').classList.toggle('hidden', !damaged);
+  const count = destruction.state.destroyedIds.length;
+  $('restore-equipment').classList.toggle('hidden', count === 0);
+  $('destroyed-count').textContent = `${count}대`;
+}
+function triggerEmo(id) {
+  if (entry.active || directory.isOpen || explorer.state.locked) return false;
+  const item = equipmentById.get(id); if (!item) return false;
+  if (destruction.isDestroyed(id)) { toast(`${item.code} · 먼저 장비를 복구해 주세요`); return false; }
+  selectedEquipment = item;
+  if (mode !== 'walk') explorer.setMode('walk');
+  $('tool-card').classList.add('hidden');
+  if (!destruction.trigger(id)) return false;
+  explorer.focusDestruction(layoutMachines.find(machine => machine.id === id));
+  toast(`${item.code} · EMO 작동`);
+  return true;
+}
+$('tool-emo').addEventListener('click', () => { if (selectedEquipment) triggerEmo(selectedEquipment.id); });
+$('tool-repair').addEventListener('click', () => {
+  if (!selectedEquipment) return;
+  destruction.reset(selectedEquipment.id); updateEmoCard(); toast(`${selectedEquipment.code} · 복구 완료`);
+});
+$('restore-equipment').addEventListener('click', () => {
+  destruction.resetAll(); if (mode === 'blast') explorer.setMode('walk'); updateEmoCard(); toast('모든 장비를 복구했어요');
+});
+updateEmoCard();
 function updateSoundButton() {
   const s = audio.state, button = $('sound');
   button.setAttribute('aria-pressed', String(s.enabled));
@@ -509,7 +568,7 @@ function drawMap() {
   }
 }
 function updateZone() {
-  if (mode === 'overview') return;
+  if (mode === 'overview' || mode === 'blast') return;
   let text = '중앙 통로', sub = 'CONNECTED FAB · THIRD PERSON';
   const focus = viewFocus();
   if (Math.abs(focus.x) > AISLE / 2) {
@@ -532,6 +591,7 @@ function animate(now) {
   fleet.step(dt);
   for (const v of vehicles) {
     const state = v.controller.state; v.state = state;
+    v.foup.scale.setScalar(destruction.isDestroyed(state.target.machineId) && (state.parked || !state.travelling) ? 0 : 1);
     v.root.position.set(state.car.x, VEHICLE_Y, state.car.z); v.root.rotation.y = state.car.yaw;
     v.foup.position.set(state.foup.x, state.foup.y, state.foup.z); v.foup.rotation.y = state.foup.yaw;
     v.gripper.position.y = state.gripperY - VEHICLE_Y;
@@ -539,6 +599,13 @@ function animate(now) {
     for (const belt of v.belts) { belt.position.y = (upper + bottom) / 2; belt.scale.y = Math.max(.02, upper - bottom); }
   }
   updateEntry(dt); explorer.update(dt);
+  emoControls.update({ mode, locked: entry.active || directory.isOpen || !$('help').classList.contains('hidden') });
+  destruction.update(dt);
+  if (burstShake > 0) {
+    burstShake = Math.max(0, burstShake - dt);
+    camera.position.x += Math.sin(elapsed * 83) * burstShake * .07;
+    camera.position.y += Math.cos(elapsed * 71) * burstShake * .05;
+  }
   audio.update({ jet: entry.active ? entry.state.jet : 0, hidden: false });
   if (frameCount % 5 === 0) { drawMap(); updateZone(); }
   scene.updateMatrixWorld(true);
@@ -550,7 +617,7 @@ function animate(now) {
   if (frameCount % 15 === 0) {
     const demo = observedVehicle();
     updateSoundButton();
-    $('world').dataset.diagnostics = JSON.stringify({ ready: true, revision: 'experience-fixes-7', mode, audio: audio.state, amberBays: bayLighting.bayIds.map(id => id + 1), amberLights: bayLighting.lights.length, amberLightsVisible: bayLighting.root.visible, entry: { active: entry.active, ...entry.state }, width: WIDTH, length: LENGTH, ceiling: HEIGHT,
+    $('world').dataset.diagnostics = JSON.stringify({ ready: true, revision: 'emo-destruction-8', mode, audio: audio.state, destruction: destruction.state, equipmentVisibility: equipmentVisibility.state, emoButtons: layoutMachines.length, amberBays: bayLighting.bayIds.map(id => id + 1), amberLights: bayLighting.lights.length, amberLightsVisible: bayLighting.root.visible, entry: { active: entry.active, ...entry.state }, width: WIDTH, length: LENGTH, ceiling: HEIGHT,
       equipmentCount: equipment.length, equipmentFamilies: families.length, uniqueEquipmentCodes: new Set(equipment.map(e => e.code)).size, selectedEquipment: selectedEquipment?.code ?? null,
       machines: machinePositions.length, bays: bays.length, toolsPerRow: 10, loadports: layoutMachines.length * 3,
       frontAisle: AISLE, rearAisle: SERVICE_AISLE, sideGap: SIDE_GAP, vehicles: vehicles.length, junctions: network.junctions.length,

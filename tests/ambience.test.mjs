@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createAmbience, createFanNoise } from '../src/ambience.js';
+import { createAmbience, createFanNoise, createExplosionSound, EXPLOSION_DURATION, MAX_EXPLOSION_VOICES } from '../src/ambience.js';
 
 class Parameter {
   constructor() { this.value = 0; }
@@ -12,8 +12,8 @@ class AudioNode {
   constructor() { this.gain = new Parameter(); this.frequency = new Parameter(); this.Q = new Parameter(); }
   connect(next) { return next; }
   disconnect() { this.disconnected = true; }
-  start() { this.started = true; }
-  stop() { this.stopped = true; }
+  start(time = 0) { this.started = true; this.startTime = time; }
+  stop(time = 0) { this.stopped = true; this.stopTime = time; }
 }
 function fakeContextClass() {
   return class FakeContext {
@@ -43,6 +43,78 @@ test('generated wash has bounded energy and a smooth loop boundary at mobile sam
     assert.ok(Math.abs(data.at(-2) - data.at(-1)) < .001);
     assert.deepEqual(data, createFanNoise({ sampleRate, duration: 1 }));
   }
+});
+
+test('explosion signal has a bounded transient, softer tail and smooth endpoints', () => {
+  for (const sampleRate of [8000, 48000]) {
+    const data = createExplosionSound({ sampleRate });
+    const rms = values => Math.sqrt(values.reduce((sum, value) => sum + value * value, 0) / values.length);
+    assert.equal(data.length, Math.floor(sampleRate * EXPLOSION_DURATION));
+    assert.ok(data.every(value => Number.isFinite(value) && Math.abs(value) <= .65));
+    assert.ok(rms(data.subarray(0, sampleRate / 5)) > .1);
+    assert.ok(rms(data.subarray(sampleRate)) < .015);
+    assert.equal(Math.abs(data[0]), 0); assert.equal(Math.abs(data.at(-1)), 0);
+    assert.ok(Math.abs(data[1]) < .001); assert.ok(Math.abs(data.at(-2)) < .001);
+    assert.deepEqual(data, createExplosionSound({ sampleRate }));
+  }
+});
+
+test('explosions require the existing running context and preserve mute preference', async () => {
+  const Context = fakeContextClass(), ambience = createAmbience({ AudioContext: Context });
+  assert.equal(ambience.playExplosion(), false); assert.equal(Context.instances.length, 0);
+  await ambience.activate(); const context = Context.instances[0];
+  assert.equal(ambience.playExplosion(), true); assert.equal(ambience.state.totalEffects, 1);
+  await ambience.toggle();
+  assert.equal(ambience.playExplosion(), false);
+  await ambience.activate();
+  assert.equal(ambience.state.desired, false); assert.equal(context.resumeCalls, 1);
+  context.currentTime += .04;
+  assert.equal(ambience.state.activeEffects, 0);
+  await ambience.toggle();
+  assert.equal(ambience.playExplosion(), true);
+  ambience.update({ hidden: true }); assert.equal(ambience.playExplosion(), false);
+  context.currentTime += .04;
+  assert.equal(ambience.state.activeEffects, 0);
+  ambience.update({ hidden: false }); assert.equal(ambience.playExplosion(), true);
+  assert.equal(Context.instances.length, 1);
+  await ambience.dispose();
+});
+
+test('interruption recovery cancels stale explosions instead of replaying their tails', async () => {
+  const Context = fakeContextClass(), ambience = createAmbience({ AudioContext: Context });
+  await ambience.activate(); const context = Context.instances[0];
+  assert.equal(ambience.playExplosion(), true);
+  context.state = 'interrupted';
+  assert.equal(ambience.playExplosion(), false); assert.equal(context.resumeCalls, 1);
+  await ambience.activate();
+  assert.equal(context.resumeCalls, 2); assert.equal(ambience.state.activeEffects, 0);
+  assert.equal(ambience.playExplosion(), true); assert.equal(ambience.state.totalEffects, 2);
+  await ambience.dispose();
+});
+
+test('explosion voices are capped and disconnect on ended, expiry and disposal', async () => {
+  const Context = fakeContextClass(), ambience = createAmbience({ AudioContext: Context });
+  await ambience.activate(); const context = Context.instances[0];
+  const baseNodeCount = context.nodes.length;
+  for (let i = 0; i < MAX_EXPLOSION_VOICES; i++) assert.equal(ambience.playExplosion(), true);
+  const fullNodeCount = context.nodes.length;
+  for (let i = 0; i < 30; i++) assert.equal(ambience.playExplosion(), false);
+  assert.equal(context.nodes.length, fullNodeCount);
+  assert.equal(ambience.state.activeEffects, MAX_EXPLOSION_VOICES);
+  const firstSource = context.nodes.slice(baseNodeCount).find(node => typeof node.onended === 'function');
+  firstSource.onended();
+  assert.equal(firstSource.disconnected, true);
+  assert.equal(firstSource.onended, null);
+  assert.equal(ambience.state.activeEffects, MAX_EXPLOSION_VOICES - 1);
+  assert.equal(ambience.playExplosion(), true);
+  context.currentTime += EXPLOSION_DURATION + .01;
+  assert.equal(ambience.state.activeEffects, 0);
+  assert.ok(context.nodes.slice(baseNodeCount).every(node => node.disconnected));
+  assert.equal(ambience.playExplosion(), true);
+  await ambience.dispose();
+  assert.equal(ambience.state.activeEffects, 0); assert.equal(ambience.playExplosion(), false);
+  assert.ok(context.nodes.every(node => node.disconnected));
+  assert.equal(Context.instances.length, 1);
 });
 
 test('construction and animation updates stay silent until a gesture activates audio', async () => {

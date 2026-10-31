@@ -1,6 +1,9 @@
 // Ventilation is generated locally. Construction is silent until activate() is
 // called from a trusted gesture; a later gesture never overrides explicit mute.
 const clamp01 = value => Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
+export const EXPLOSION_DURATION = 1.2;
+export const MAX_EXPLOSION_VOICES = 4;
+const EXPLOSION_GAIN = .28;
 
 /** A deterministic, bounded fan wash with a quiet, continuous loop boundary. */
 export function createFanNoise({ sampleRate = 48000, duration = 6, seed = 0x6fab0321 } = {}) {
@@ -28,10 +31,43 @@ export function createFanNoise({ sampleRate = 48000, duration = 6, seed = 0x6fab
   return samples;
 }
 
+/** Locally synthesized thump, crackle and metallic decay; no sharp sample edge. */
+export function createExplosionSound({ sampleRate = 48000, seed = 0x3eaf0127 } = {}) {
+  if (!Number.isFinite(sampleRate) || sampleRate < 8000 || sampleRate > 192000) throw new RangeError('Unsupported explosion sample rate');
+  const samples = new Float32Array(Math.floor(sampleRate * EXPLOSION_DURATION));
+  const fastAlpha = 1 - Math.exp(-2 * Math.PI * 2100 / sampleRate);
+  const slowAlpha = 1 - Math.exp(-2 * Math.PI * 130 / sampleRate);
+  const crackleDecay = Math.exp(-1 / (sampleRate * .003));
+  let randomState = (seed >>> 0) || 1, fast = 0, slow = 0, crackle = 0;
+  for (let i = 0; i < samples.length; i++) {
+    const t = i / sampleRate;
+    randomState ^= randomState << 13; randomState ^= randomState >>> 17; randomState ^= randomState << 5;
+    const white = (randomState >>> 0) / 0x100000000 * 2 - 1;
+    fast += fastAlpha * (white - fast); slow += slowAlpha * (white - slow);
+    crackle = white > .996 ? .65 : crackle * crackleDecay;
+    const phase = 2 * Math.PI * (48 * t + 106 * (1 - Math.exp(-22 * t)) / 22);
+    const thump = Math.sin(phase) * Math.exp(-t / .15);
+    const blast = (fast - slow) * 1.1 * Math.exp(-t / .19);
+    const fragments = (white - fast) * crackle * Math.exp(-t / .3);
+    const tailTime = Math.max(0, t - .045);
+    const metalAttack = Math.min(1, tailTime / .008) ** 2;
+    const metal = metalAttack * .16 * (
+      Math.sin(2 * Math.PI * 428 * tailTime) * Math.exp(-tailTime / .33) +
+      .7 * Math.sin(2 * Math.PI * 714 * tailTime) * Math.exp(-tailTime / .23) +
+      .45 * Math.sin(2 * Math.PI * 1141 * tailTime) * Math.exp(-tailTime / .18));
+    const attack = Math.sin(Math.min(1, t / .009) * Math.PI / 2) ** 2;
+    const release = Math.sin(Math.min(1, (samples.length - 1 - i) / (sampleRate * .055)) * Math.PI / 2) ** 2;
+    samples[i] = .65 * Math.tanh((thump + blast + fragments + metal) * 1.15) * attack * release;
+  }
+  return samples;
+}
+
 /**
  * activate(): call only in a trusted user gesture, also to recover interruption.
  * toggle(): changes explicit preference; muted preference survives activate().
  * update(): safe in requestAnimationFrame; never creates/resumes a context.
+ * playExplosion(): returns false while muted, hidden, interrupted, or at the
+ * four-voice limit. It never creates/resumes a context or changes preference.
  * state.rms/peak: measured after the master gain, before the destination.
  */
 export function createAmbience(options = {}) {
@@ -39,7 +75,40 @@ export function createAmbience(options = {}) {
   let context = null, master = null, wash = null, lowpass = null, analyser = null, waveform = null;
   let sources = [], nodes = [], desired = true, hidden = false, jet = 0, disposed = false;
   let error = null, starting = false, generation = 0, appliedJet = NaN, ready = false;
+  let explosionBuffer = null, totalEffects = 0, effectError = null;
+  const effects = new Set();
   const supported = typeof Context === 'function';
+
+  function finishEffect(effect, stop = false) {
+    if (effect.finished) return;
+    effect.finished = true;
+    if (effect.source) {
+      effect.source.onended = null;
+      if (stop) { try { effect.source.stop(); } catch { /* already ended */ } }
+      try { effect.source.disconnect(); } catch { /* partially initialized */ }
+    }
+    try { effect.gain?.disconnect(); } catch { /* partially initialized */ }
+    effects.delete(effect);
+  }
+
+  function stopEffects(immediate = false) {
+    for (const effect of [...effects]) {
+      if (immediate || context?.state !== 'running') { finishEffect(effect, true); continue; }
+      if (effect.stopping) continue;
+      effect.stopping = true;
+      effect.endsAt = Math.min(effect.endsAt, context.currentTime + .035);
+      try {
+        effect.gain.gain.cancelScheduledValues(context.currentTime);
+        effect.gain.gain.setTargetAtTime(0, context.currentTime, .006);
+        effect.source.stop(effect.endsAt);
+      } catch { finishEffect(effect, true); }
+    }
+  }
+
+  function pruneEffects() {
+    if (!context) return;
+    for (const effect of [...effects]) if (context.currentTime >= effect.endsAt) finishEffect(effect, true);
+  }
 
   function fade(parameter, value, seconds = .18) {
     const time = context.currentTime;
@@ -60,6 +129,7 @@ export function createAmbience(options = {}) {
   }
 
   function releaseNodes() {
+    stopEffects(true); explosionBuffer = null;
     for (const source of sources) { try { source.stop(); } catch { /* already stopped */ } }
     for (const node of nodes) { try { node.disconnect(); } catch { /* disconnected */ } }
     sources = []; nodes = [];
@@ -86,6 +156,10 @@ export function createAmbience(options = {}) {
     source.connect(highpass); highpass.connect(lowpass); lowpass.connect(wash); wash.connect(master);
     source.start();
 
+    const explosion = createExplosionSound({ sampleRate: context.sampleRate });
+    explosionBuffer = context.createBuffer(1, explosion.length, context.sampleRate);
+    explosionBuffer.getChannelData(0).set(explosion);
+
     // Quiet motor harmonics add recognizable fan body without musical notes.
     for (const [frequency, level] of [[180, .009], [360, .005], [720, .0028]]) {
       const motor = keep(context.createOscillator()); motor.type = 'sine'; motor.frequency.value = frequency;
@@ -96,6 +170,7 @@ export function createAmbience(options = {}) {
   }
 
   function snapshot() {
+    pruneEffects();
     const contextState = context?.state || (supported ? 'idle' : 'not-supported');
     const enabled = !disposed && !error && desired && !hidden && contextState === 'running' && ready;
     let rms = 0, peak = 0;
@@ -108,7 +183,7 @@ export function createAmbience(options = {}) {
       } catch (cause) { error = String(cause?.message || cause); }
     }
     const status = disposed ? 'disposed' : !supported ? 'not-supported' : error ? 'error' : !desired ? 'muted' : hidden ? 'hidden' : enabled ? 'running' : starting ? 'starting' : context ? contextState : 'idle';
-    return { enabled: enabled && !error, desired, status, contextState, rms, peak, jet, hidden, error };
+    return { enabled: enabled && !error, desired, status, contextState, rms, peak, jet, hidden, error, activeEffects: effects.size, totalEffects, effectError };
   }
 
   async function activate() {
@@ -118,7 +193,7 @@ export function createAmbience(options = {}) {
     try {
       if (!context || context.state === 'closed') { releaseNodes(); build(); }
       // Invoke resume synchronously before awaiting, retaining gesture activation.
-      if (context.state !== 'running') await context.resume();
+      if (context.state !== 'running') { stopEffects(true); await context.resume(); }
       if (disposed || operation !== generation) return snapshot();
       applyLevels();
     } catch (cause) {
@@ -140,6 +215,7 @@ export function createAmbience(options = {}) {
     desired = !desired;
     if (desired) return activate();
     generation++; starting = false;
+    stopEffects();
     applyLevels();
     return snapshot();
   }
@@ -149,8 +225,30 @@ export function createAmbience(options = {}) {
     const nextHidden = typeof next.hidden === 'boolean' ? next.hidden : hidden;
     const changed = Math.abs(nextJet - appliedJet) > .005 || nextHidden !== hidden;
     jet = nextJet; hidden = nextHidden;
+    if (hidden) stopEffects();
     if (!disposed && changed) applyLevels();
     return snapshot();
+  }
+
+  function playExplosion() {
+    if (disposed || !desired || hidden || !ready || error || context?.state !== 'running') return false;
+    pruneEffects();
+    if (effects.size >= MAX_EXPLOSION_VOICES) return false;
+    const effect = { source: null, gain: null, endsAt: context.currentTime + EXPLOSION_DURATION, finished: false, stopping: false };
+    try {
+      effect.source = context.createBufferSource(); effect.source.buffer = explosionBuffer;
+      effect.gain = context.createGain(); effect.gain.gain.value = EXPLOSION_GAIN;
+      effect.source.connect(effect.gain); effect.gain.connect(master);
+      effect.source.onended = () => finishEffect(effect);
+      effects.add(effect);
+      effect.source.start(context.currentTime);
+      totalEffects++; effectError = null;
+      return true;
+    } catch (cause) {
+      effectError = String(cause?.message || cause);
+      finishEffect(effect, true);
+      return false;
+    }
   }
 
   async function dispose() {
@@ -162,5 +260,5 @@ export function createAmbience(options = {}) {
     }
   }
 
-  return { activate, toggle, update, dispose, get state() { return snapshot(); } };
+  return { activate, toggle, update, playExplosion, dispose, get state() { return snapshot(); } };
 }

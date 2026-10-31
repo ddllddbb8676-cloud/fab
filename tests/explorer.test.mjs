@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { createTourRoute } from '../src/tour-route.js';
 import { createTransferSession, updateTransferSession, selectTransferVehicle, transferCameraFrame, transferTransitFrame } from '../src/transfer-view.js';
-import { createExplorer } from '../src/explorer.js';
+import { createExplorer, destructionCameraFrame } from '../src/explorer.js';
 import { bays, machines, ports, BAY_CENTERS, isBlocked } from '../src/layout.js';
 import { canWalkSegment } from '../src/walking.js';
 import { AIR_SHOWER } from '../src/air-shower.js';
@@ -105,6 +105,50 @@ test('loaded transit shot contains real OHT and FOUP through every turn heading'
     }
     for (const p of projected(frame, aspect, landmarks)) assert.ok(Math.abs(p.x) < .9 && Math.abs(p.y) < .85 && p.z > -1 && p.z < 1);
   }
+});
+
+test('destruction shot frames every cabinet and the 4.85 m plume with clearance from the facing tools', () => {
+  for (const aspect of [16 / 9, 390 / 844, 360 / 800]) for (const machine of machines) {
+    const frame = destructionCameraFrame(machine, aspect);
+    assert.ok(!isBlocked(frame.position.x, frame.position.z, .3), 'camera has 30 cm clearance inside the front aisle');
+    assert.ok(frame.fov < 100, 'portrait fit avoids an excessive ultra-wide camera');
+    for (const p of projected(frame, aspect)) {
+      assert.ok(Math.abs(p.x) <= .900001 && Math.abs(p.y) <= .760001, 'tool and plume stay clear of screen edges');
+      assert.ok(p.z > -1 && p.z < 1);
+    }
+  }
+});
+
+test('destruction view hides the avatar, stays fixed for 4.8 seconds and restores position, zoom and FOV', () => {
+  const priorDocument = globalThis.document, priorWindow = globalThis.window;
+  globalThis.document = { getElementById: () => ({ classList: { contains: name => name === 'hidden', add() {}, remove() {} } }), querySelectorAll: () => [], addEventListener() {} };
+  globalThis.window = { addEventListener() {} };
+  try {
+    const camera = new THREE.PerspectiveCamera(67, 390 / 844, .08, 420), avatar = { root: new THREE.Group(), update() {} }, modes = [];
+    const port = bays[4].target, vehicles = [{ state: { phase: 1, target: port, destination: port, car: { x: port.x, z: port.z, yaw: 0 }, travelling: false } }];
+    const explorer = createExplorer({ THREE, camera, scene: new THREE.Scene(), canvas: { addEventListener() {}, setPointerCapture() {} }, avatar,
+      orbit: { enabled: false, target: new THREE.Vector3(), update() {} }, colliders: [], vehicles, onMode: mode => modes.push(mode), onInspect() {}, onToast() {} });
+    explorer.state.position.set(-30, 0, bays[4].z); explorer.state.distance = 6.1;
+    const saved = explorer.state.position.clone(), orientation = [explorer.state.yaw, explorer.state.elevation, explorer.state.heading];
+    explorer.state.path = [{ x: 0, z: 0 }]; assert.equal(explorer.focusDestruction(machines[0]), true);
+    assert.equal(explorer.state.mode, 'blast'); assert.equal(avatar.root.visible, false); assert.equal(explorer.state.path.length, 0);
+    const shot = camera.position.clone(); explorer.update(4.7);
+    assert.ok(camera.position.equals(shot)); assert.ok(explorer.state.position.equals(saved)); assert.ok(avatar.root.position.equals(saved));
+    explorer.update(.11); assert.equal(explorer.state.mode, 'walk'); assert.equal(avatar.root.visible, true); assert.equal(camera.fov, 67);
+    assert.ok(explorer.state.position.equals(saved)); assert.equal(explorer.state.distance, 6.1);
+    assert.deepEqual([explorer.state.yaw, explorer.state.elevation, explorer.state.heading], orientation);
+    for (const next of ['walk', 'tour', 'ride', 'overview']) {
+      explorer.focusDestruction(machines[10]); explorer.setMode(next);
+      assert.equal(explorer.state.mode, next); assert.equal(avatar.root.visible, true); assert.equal(camera.fov, 67);
+      assert.ok(explorer.state.position.equals(saved)); explorer.setMode('walk');
+    }
+    explorer.focusTransfer(); explorer.update(.01); explorer.focusDestruction(machines[0]); explorer.setMode('walk'); assert.equal(camera.fov, 67);
+    explorer.focusDestruction(machines[0]); explorer.focusTransfer(); assert.equal(explorer.state.mode, 'transfer'); explorer.setMode('walk'); assert.equal(camera.fov, 67);
+    explorer.focusDestruction(machines[0]); explorer.lock(true); assert.equal(explorer.state.mode, 'walk'); assert.equal(camera.fov, 67); assert.equal(avatar.root.visible, true);
+    assert.equal(explorer.focusDestruction(machines[0]), false); explorer.lock(false);
+    explorer.focusDestruction(machines[0]); explorer.reset(); assert.equal(explorer.state.mode, 'walk'); assert.equal(camera.fov, 67);
+    assert.equal(modes.filter(mode => mode === 'blast').length, 9);
+  } finally { globalThis.document = priorDocument; globalThis.window = priorWindow; }
 });
 
 test('explorer mode changes preserve position, hide avatar during transfer and respect a closed door camera collider', () => {

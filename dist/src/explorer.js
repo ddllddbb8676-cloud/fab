@@ -1,18 +1,42 @@
-import { TOUR_POINTS, HALL, bays, isBlocked } from './layout.js';
+import { TOUR_POINTS, HALL, TOOL_WIDTH, bays, isBlocked } from './layout.js';
 import { findWalkPath, stepWalker } from './walking.js';
 import { createTourRoute } from './tour-route.js';
 import { createTransferSession, updateTransferSession, transferCameraFrame, transferTransitFrame } from './transfer-view.js';
 import { getRuntimeObstacles } from './runtime-obstacles.js';
 
-export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, colliders, vehicles, onMode, onInspect, onToast }) {
+export function destructionCameraFrame(machine, aspect = 1, baseFov = 64) {
+  const sign = machine.sign, setback = aspect < 1 ? 7.9 : 6.4;
+  const position = { x: machine.x + .7 * sign, y: 2.6, z: machine.z + sign * setback };
+  const target = { x: machine.x, y: 1.6, z: machine.z + sign * .5 }, landmarks = [];
+  // Fit the complete cabinet, the projecting loadports and a plume below the 5 m ceiling.
+  for (const x of [-TOOL_WIDTH / 2, TOOL_WIDTH / 2]) for (const z of [-2.4, 2.4]) for (const y of [0, 3.4]) {
+    landmarks.push({ x: machine.x + x, y, z: machine.z + z });
+  }
+  for (const x of [-TOOL_WIDTH * .4, TOOL_WIDTH * .4]) for (const y of [.1, 1.6]) landmarks.push({ x: machine.x + x, y, z: machine.z + sign * 3.275 });
+  for (const x of [-2.7, 2.7]) for (const z of [-1.5, 1.5]) landmarks.push({ x: machine.x + x, y: 4.85, z: machine.z + z });
+  const dx = target.x - position.x, dy = target.y - position.y, dz = target.z - position.z;
+  const length = Math.hypot(dx, dy, dz), horizontal = Math.hypot(dx, dz), forward = { x: dx / length, y: dy / length, z: dz / length };
+  const right = { x: -dz / horizontal, z: dx / horizontal };
+  const up = { x: -right.z * forward.y, y: right.z * forward.x - right.x * forward.z, z: right.x * forward.y };
+  let tangent = Math.tan(Math.max(baseFov, aspect < 1 ? 82 : 64) * Math.PI / 360);
+  for (const point of landmarks) {
+    const x = point.x - position.x, y = point.y - position.y, z = point.z - position.z;
+    const depth = x * forward.x + y * forward.y + z * forward.z;
+    tangent = Math.max(tangent, Math.abs(x * right.x + z * right.z) / depth / Math.max(.1, aspect) / .9,
+      Math.abs(x * up.x + y * up.y + z * up.z) / depth / .76);
+  }
+  return { position, target, landmarks, fov: Math.atan(tangent) * 360 / Math.PI };
+}
+
+export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, colliders, vehicles, onMode, onInspect, onToast, onActionTap = () => false }) {
   const $ = id => document.getElementById(id);
   const state = { mode: 'walk', position: new THREE.Vector3(TOUR_POINTS[0][0], 0, TOUR_POINTS[0][1]),
     yaw: Math.PI / 2, elevation: .36, distance: 4.4, heading: -Math.PI / 2, speed: 0,
     path: [], tourTime: 0, followId: 0, rideYaw: 0, manualLook: false, locked: false,
     transferVehicleId: null, transferTarget: null, transferWaiting: false, transferLabel: '', transferInTransit: false };
   const keys = new Set(), moves = new Set(), pointers = new Map();
-  let dragged = 0, pinchDistance = 0, pinched = false, cameraSnap = true;
-  let tourRoute = null, transferSession = null, transferBaseFov = camera.fov;
+  let dragged = 0, gestureDragged = false, pinchDistance = 0, pinched = false, cameraSnap = true;
+  let tourRoute = null, transferSession = null, transferBaseFov = camera.fov, blastSession = null, blastBaseFov = camera.fov;
   const colliderBoxes = colliders.map(c => new THREE.Box3(new THREE.Vector3(c.minX - .12, c.minY ?? 0, c.minZ - .12), new THREE.Vector3(c.maxX + .12, c.maxY ?? 3.4, c.maxZ + .12)));
   const cast = new THREE.Raycaster(), floor = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hit = new THREE.Vector3();
   const cameraRay = new THREE.Ray(), cameraHit = new THREE.Vector3();
@@ -28,9 +52,11 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
       if (!tourRoute) { onToast('현재 위치에서 산책 통로에 연결할 수 없어요. 통로로 이동해 주세요.'); return; }
     }
     if (state.mode === 'transfer' && next !== 'transfer') { camera.fov = transferBaseFov; camera.updateProjectionMatrix(); }
+    if (state.mode === 'blast' && next !== 'blast') { camera.fov = blastBaseFov; camera.updateProjectionMatrix(); blastSession = null; }
     if (next === 'transfer' && state.mode !== 'transfer') transferBaseFov = camera.fov;
+    if (next === 'blast' && state.mode !== 'blast') blastBaseFov = camera.fov;
     state.mode = next; clearInput(); state.path = []; targetRing.visible = false; state.manualLook = false; cameraSnap = true;
-    avatar.root.visible = next !== 'transfer';
+    avatar.root.visible = next !== 'transfer' && next !== 'blast';
     orbit.enabled = next === 'overview';
     if (next === 'overview') {
       orbit.target.set(0, 0, 0);
@@ -114,6 +140,11 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
       if (state.mode === 'tour' && !pointers.size) tour(dt);
     }
     avatar.root.position.copy(state.position); avatar.update(dt, { speed: state.speed, heading: state.heading });
+    if (state.mode === 'blast' && blastSession) {
+      blastSession.elapsed += dt;
+      if (blastSession.elapsed < 4.8) { applyBlastCamera(); return; }
+      setMode('walk');
+    }
     if (state.mode === 'overview') { orbit.update(); return; }
     if (state.mode === 'transfer' && transferSession) {
       updateTransferSession(transferSession, vehicles);
@@ -137,7 +168,9 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
     }
   }
   function tap(event) {
+    if (state.locked || (state.mode !== 'walk' && state.mode !== 'tour')) return;
     const r = canvas.getBoundingClientRect(); cast.setFromCamera(new THREE.Vector2((event.clientX - r.left) / r.width * 2 - 1, -(event.clientY - r.top) / r.height * 2 + 1), camera);
+    if (onActionTap(cast.ray) === true) { state.path = []; targetRing.visible = false; return; }
     const floorHit = cast.ray.intersectPlane(floor, hit), groundDistance = floorHit ? camera.position.distanceTo(floorHit) : Infinity;
     let nearest = null, nearestDistance = Math.min(groundDistance, 24);
     for (let i = 0; i < colliderBoxes.length; i++) {
@@ -152,9 +185,9 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
     state.path = route; targetRing.position.set(destination.x, .012, destination.z); targetRing.visible = true;
   }
   canvas.addEventListener('pointerdown', e => {
-    if (state.locked || state.mode === 'overview' || state.mode === 'transfer') return;
+    if (state.locked || state.mode === 'overview' || state.mode === 'transfer' || state.mode === 'blast') return;
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY }); canvas.setPointerCapture(e.pointerId);
-    if (pointers.size === 1) { dragged = 0; pinched = false; }
+    if (pointers.size === 1) { dragged = 0; gestureDragged = false; pinched = false; }
     if (pointers.size === 2) { const p = [...pointers.values()]; pinchDistance = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y); pinched = true; }
   });
   canvas.addEventListener('pointermove', e => {
@@ -167,6 +200,7 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
     }
     dragged += Math.abs(dx) + Math.abs(dy);
     if (dragged > 4) {
+      gestureDragged = true;
       state.manualLook = true;
       if (state.mode === 'ride') state.rideYaw -= dx * .005;
       else { state.yaw -= dx * .005; state.elevation = THREE.MathUtils.clamp(state.elevation + dy * .004, .08, .72); }
@@ -175,11 +209,11 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
   canvas.addEventListener('pointerup', e => {
     if (!pointers.has(e.pointerId)) return;
     pointers.delete(e.pointerId);
-    if (!pointers.size && !pinched && dragged < 6 && state.mode !== 'ride') tap(e);
+    if (!pointers.size && !pinched && !gestureDragged && dragged < 6 && state.mode !== 'ride') tap(e);
   });
   canvas.addEventListener('pointercancel', e => pointers.delete(e.pointerId));
   canvas.addEventListener('wheel', e => {
-    if (state.locked || state.mode === 'overview' || state.mode === 'transfer') return; e.preventDefault(); state.distance = THREE.MathUtils.clamp(state.distance + e.deltaY * .004, 2, 6.8);
+    if (state.locked || state.mode === 'overview' || state.mode === 'transfer' || state.mode === 'blast') return; e.preventDefault(); state.distance = THREE.MathUtils.clamp(state.distance + e.deltaY * .004, 2, 6.8);
   }, { passive: false });
   const movement = ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'shift'];
   window.addEventListener('keydown', e => {
@@ -207,8 +241,18 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
     setMode('transfer');
     onToast('OHT ' + String(state.transferVehicleId + 1).padStart(2, '0') + ' · 로드포트와 호이스트를 함께 봅니다');
   }
-  return { state, setMode, reset, update, focusTransfer,
-    lock(value) { state.locked = value; clearInput(); state.path = []; targetRing.visible = false; cameraSnap = true; },
+  function applyBlastCamera() {
+    const frame = destructionCameraFrame(blastSession.machine, camera.aspect, blastBaseFov);
+    if (camera.fov !== frame.fov) { camera.fov = frame.fov; camera.updateProjectionMatrix(); }
+    camera.position.set(frame.position.x, frame.position.y, frame.position.z);
+    camera.lookAt(frame.target.x, frame.target.y, frame.target.z); cameraSnap = false;
+  }
+  function focusDestruction(machine) {
+    if (state.locked || !machine || !Number.isFinite(machine.x) || !Number.isFinite(machine.z) || ![1, -1].includes(machine.sign)) return false;
+    blastSession = { machine, elapsed: 0 }; setMode('blast'); applyBlastCamera(); return true;
+  }
+  return { state, setMode, reset, update, focusTransfer, focusDestruction,
+    lock(value) { if (value && state.mode === 'blast') setMode('walk'); state.locked = value; clearInput(); state.path = []; targetRing.visible = false; cameraSnap = true; },
     focusEquipment(machine) {
       if (state.locked) return;
       setMode('walk'); const bay = bays[machine.bayId];
