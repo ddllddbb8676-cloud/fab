@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { Reflector } from 'three/addons/objects/Reflector.js';
 import { machines as layoutMachines, bays, columns, TOUR_POINTS, isBlocked, TOOL_SCALE_X, TOOL_WIDTH, SEATED_FOUP_Y, VEHICLE_Y, RAIL_Y, AISLE, SERVICE_AISLE, SIDE_GAP } from './layout.js';
 import { network, railPaths } from './rail-network.js';
 import { createFleet, reservedPortIds } from './network-transport.js';
@@ -18,9 +17,10 @@ import { setRuntimeObstacles } from './runtime-obstacles.js';
 import { createEquipmentVisibility } from './equipment-visibility.js';
 import { createEquipmentDestruction } from './equipment-destruction.js';
 import { createEmoControls } from './emo-controls.js';
+import { createSpatialBatch } from './spatial-batch.js';
 
 const $ = (id) => document.getElementById(id);
-const mobile = matchMedia('(pointer: coarse)').matches;
+const mobile = matchMedia('(pointer: coarse)').matches || innerWidth < 700;
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const WIDTH = 120, LENGTH = 180, HEIGHT = 5, EYE = 1.68;
 const scene = new THREE.Scene();
@@ -37,7 +37,9 @@ try {
   $('error').textContent = '이 브라우저에서 3D 화면을 열 수 없어요. 하드웨어 가속을 켠 Chrome 또는 Edge에서 다시 열어주세요.';
   throw new Error('WebGL initialization failed');
 }
-renderer.setPixelRatio(Math.min(devicePixelRatio, mobile ? 1.35 : 1.7));
+const maxPixelRatio = Math.min(devicePixelRatio, mobile ? 1.25 : 1.5);
+let renderPixelRatio = maxPixelRatio;
+renderer.setPixelRatio(renderPixelRatio);
 renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
@@ -68,16 +70,20 @@ const planeGeometry = new THREE.PlaneGeometry(1, 1);
 const batches = new Map();
 const equipmentVisibility = createEquipmentVisibility();
 let buildingMachineId = null;
-const hiddenPartMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
-function registerInstancePart(id, instance, index, original) {
-  if (id === null || id === undefined) return;
-  const initial = original.clone();
-  equipmentVisibility.register(id, visible => { instance.setMatrixAt(index, visible ? initial : hiddenPartMatrix); instance.instanceMatrix.needsUpdate = true; });
+const spatialBatches = [], viewFrustum = new THREE.Frustum(), viewProjection = new THREE.Matrix4();
+function addSpatialBatch(parent, geometry, material, transforms, owners, maxDistance = Infinity) {
+  const batch = createSpatialBatch(THREE, { geometry, material, transforms, owners, maxDistance });
+  spatialBatches.push(batch); parent.add(batch.mesh);
+  owners?.forEach((id, i) => { if (id !== null && id !== undefined) equipmentVisibility.register(id, visible => batch.setVisible(i, visible)); });
+  return batch;
 }
 const dummy = new THREE.Object3D();
 function solid(geometry, material, x, y, z, sx, sy, sz, rotationY = 0) {
-  const key = geometry.uuid + material.uuid;
-  if (!batches.has(key)) batches.set(key, { geometry, material, transforms: [], owners: [] });
+  // Retain every distant cabinet and rail; only sub-pixel tool fittings use LOD.
+  const longest = Math.max(Math.abs(sx), Math.abs(sy), Math.abs(sz)), shortest = Math.min(Math.abs(sx), Math.abs(sy), Math.abs(sz));
+  const detail = buildingMachineId !== null && (longest <= .7 || (shortest < .06 && longest < 3.6));
+  const key = geometry.uuid + material.uuid + (detail ? ':detail' : ':body');
+  if (!batches.has(key)) batches.set(key, { geometry, material, transforms: [], owners: [], maxDistance: detail ? 55 : Infinity });
   dummy.position.set(x, y, z); dummy.rotation.set(0, rotationY, 0); dummy.scale.set(sx, sy, sz); dummy.updateMatrix();
   batches.get(key).transforms.push(dummy.matrix.clone());
   batches.get(key).owners.push(buildingMachineId);
@@ -106,15 +112,10 @@ const floorTexture = canvasTexture(512, 512, (ctx, w, h) => {
   for (let x = 21; x < w; x += 24) for (let y = 21; y < h; y += 24) { ctx.beginPath(); ctx.arc(x, y, 1.45, 0, Math.PI * 2); ctx.fill(); }
 });
 floorTexture.wrapS = floorTexture.wrapT = THREE.RepeatWrapping; floorTexture.repeat.set(WIDTH / 1.2, LENGTH / 1.2);
-const floorBase = new THREE.Mesh(new THREE.PlaneGeometry(WIDTH, LENGTH), new THREE.MeshStandardMaterial({ map: floorTexture, roughness: .3, metalness: .32 }));
+const floorBase = new THREE.Mesh(new THREE.PlaneGeometry(WIDTH, LENGTH), new THREE.MeshStandardMaterial({ map: floorTexture, roughness: .43, metalness: .28 }));
 floorBase.rotation.x = -Math.PI / 2; floorBase.position.y = -.02; scene.add(floorBase);
-let reflector;
-if (!mobile) {
-  reflector = new Reflector(new THREE.PlaneGeometry(WIDTH, LENGTH), { textureWidth: 960, textureHeight: 640, color: '#9dbac5', clipBias: .003 });
-  reflector.rotation.x = -Math.PI / 2; reflector.position.y = -.015; scene.add(reflector);
-  const floorOverlay = new THREE.Mesh(new THREE.PlaneGeometry(WIDTH, LENGTH), new THREE.MeshStandardMaterial({ map: floorTexture, transparent: true, opacity: .83, roughness: .43, metalness: .22 }));
-  floorOverlay.rotation.x = -Math.PI / 2; floorOverlay.position.y = -.008; scene.add(floorOverlay);
-}
+// The shared room environment supplies a soft floor sheen in one render pass.
+// A second live mirror pass over the entire 21,600 m² hall is unnecessary here.
 box(M.dark, 0, -.19, 0, WIDTH + .3, .3, LENGTH + .3);
 for (const x of [-60, 60]) box(M.edge, x, .003, 0, .12, .006, LENGTH);
 for (const z of [-90, 90]) box(M.edge, 0, .003, z, WIDTH, .006, .12);
@@ -337,10 +338,8 @@ for (const batch of movingBatches.values()) {
 
 // Static geometry is instanced by material so the huge hall stays lightweight.
 let staticInstances = 0;
-for (const { geometry, material, transforms, owners } of batches.values()) {
-  const instance = new THREE.InstancedMesh(geometry, material, transforms.length);
-  transforms.forEach((matrix, i) => { instance.setMatrixAt(i, matrix); registerInstancePart(owners[i], instance, i, matrix); });
-  instance.computeBoundingSphere(); scene.add(instance); staticInstances += transforms.length;
+for (const { geometry, material, transforms, owners, maxDistance } of batches.values()) {
+  addSpatialBatch(scene, geometry, material, transforms, owners, maxDistance); staticInstances += transforms.length;
 }
 // Batch repeated roof lights, screens, labels and contact shadows as well.
 function consolidate(parent) {
@@ -352,10 +351,10 @@ function consolidate(parent) {
     groups.get(key).push(obj);
   }
   for (const objects of groups.values()) {
-    if (objects.length < 2) { const obj = objects[0]; if (obj.userData.equipmentId !== undefined) equipmentVisibility.register(obj.userData.equipmentId, visible => { obj.visible = visible; }); continue; }
-    const instance = new THREE.InstancedMesh(objects[0].geometry, objects[0].material, objects.length);
-    objects.forEach((obj, i) => { obj.updateMatrix(); instance.setMatrixAt(i, obj.matrix); registerInstancePart(obj.userData.equipmentId, instance, i, obj.matrix); parent.remove(obj); });
-    instance.computeBoundingSphere(); parent.add(instance);
+    if (objects.length < 2) { const obj = objects[0]; obj.updateMatrix(); obj.matrixAutoUpdate = false; if (obj.userData.equipmentId !== undefined) equipmentVisibility.register(obj.userData.equipmentId, visible => { obj.visible = visible; }); continue; }
+    const transforms = objects.map(obj => { obj.updateMatrix(); return obj.matrix.clone(); });
+    addSpatialBatch(parent, objects[0].geometry, objects[0].material, transforms, objects.map(obj => obj.userData.equipmentId));
+    objects.forEach(obj => parent.remove(obj));
   }
 }
 consolidate(roof); consolidate(walls); consolidate(scene);
@@ -392,7 +391,7 @@ const explorer = createExplorer({ THREE, camera, scene, canvas: renderer.domElem
     document.body.dataset.viewMode = next;
     $('transfer-view').setAttribute('aria-pressed', String(next === 'transfer'));
     for (const id of ['tour', 'walk', 'ride', 'overview']) { $(id).classList.toggle('active', id === next); $(id).setAttribute('aria-pressed', String(id === next)); }
-    roof.visible = walls.visible = next !== 'overview'; if (reflector) reflector.visible = next !== 'overview';
+    roof.visible = walls.visible = next !== 'overview';
     bayLighting.setOverview(next === 'overview');
     bayWhiteMask.setOverview(next === 'overview');
     railOverview.visible = next === 'overview';
@@ -549,16 +548,24 @@ function observedVehicle() { return vehicles[mode === 'transfer' ? explorer.stat
 function viewFocus() { return mode === 'ride' ? observedVehicle().state.car : mode === 'transfer' ? (explorer.state.transferTarget ?? observedVehicle().state.target) : explorer.state.position; }
 
 const mapCanvas = $('minimap'), mapCtx = mapCanvas.getContext('2d');
+const mapBase = document.createElement('canvas'); mapBase.width = mapCanvas.width; mapBase.height = mapCanvas.height;
+let mapBaseReady = false;
 function drawMap() {
-  const ctx = mapCtx, w = mapCanvas.width, h = mapCanvas.height, pad = 16;
+  let ctx = mapCtx;
+  const w = mapCanvas.width, h = mapCanvas.height, pad = 16;
   const sx = (w - pad * 2) / WIDTH, sz = (h - pad * 2) / LENGTH;
   const mx = (x) => pad + (x + WIDTH / 2) * sx, mz = (z) => pad + (z + LENGTH / 2) * sz;
+  if (!mapBaseReady) {
+  ctx = mapBase.getContext('2d');
   ctx.clearRect(0, 0, w, h); ctx.fillStyle = '#eef3f2'; ctx.fillRect(pad, pad, w - pad * 2, h - pad * 2);
   ctx.strokeStyle = '#bacdd0'; ctx.lineWidth = 2; ctx.strokeRect(pad, pad, w - pad * 2, h - pad * 2);
   ctx.fillStyle = '#dae7e7'; ctx.fillRect(mx(-AISLE / 2), pad, sx * AISLE, h - pad * 2);
   for (const m of machinePositions) { ctx.fillStyle = m.family.color + 'aa'; ctx.fillRect(mx(m.x - TOOL_WIDTH / 2), mz(m.z - 2.4), sx * TOOL_WIDTH, sz * 4.8); }
   ctx.strokeStyle = '#397e8c88'; ctx.lineWidth = .8;
   for (const path of railPaths) { if (path.kind === 'switch') continue; ctx.beginPath(); path.points.forEach((p, i) => i ? ctx.lineTo(mx(p.x), mz(p.z)) : ctx.moveTo(mx(p.x), mz(p.z))); ctx.stroke(); }
+  mapBaseReady = true;
+  }
+  ctx = mapCtx; ctx.clearRect(0, 0, w, h); ctx.drawImage(mapBase, 0, 0);
   ctx.fillStyle = '#bd874a'; for (const v of vehicles) { ctx.beginPath(); ctx.arc(mx(v.state.car.x), mz(v.state.car.z), 1.6, 0, Math.PI * 2); ctx.fill(); }
   if (mode !== 'overview') {
     const focus = viewFocus();
@@ -583,11 +590,36 @@ function updateZone() {
   if (text !== currentZone) { currentZone = text; $('view-title').textContent = text; $('map-location').textContent = mode === 'ride' ? 'OHT ' + String(explorer.state.followId + 1).padStart(2, '0') : text.split(' · ')[0]; }
   if ($('view-subtitle').textContent !== sub) $('view-subtitle').textContent = sub;
 }
-let frameCount = 0, fpsStart = 0, displayedFPS = 0;
+// Static transforms are composed once. Dynamic branches still update normally.
+scene.updateMatrixWorld(true);
+for (const batch of spatialBatches) batch.mesh.matrixAutoUpdate = false;
+for (const parent of [roof, walls]) parent.traverse(obj => { obj.updateMatrix(); obj.matrixAutoUpdate = false; });
+// FOUP roots and the grippers are animated each frame, including standalone roots.
+for (const v of vehicles) for (const group of [v.root, v.foup]) group.traverse(obj => { obj.matrixAutoUpdate = true; });
+scene.matrixAutoUpdate = false; scene.matrixWorldAutoUpdate = false;
+let frameCount = 0, fpsStart = 0, displayedFPS = 0, nextMapAt = 0, nextDiagnosticAt = 0;
+let budgetTotal = 0, budgetFrames = 0, budgetAt = 0, lastQualityChange = 0;
+const frameIntervals = new Float32Array(120); let frameCursor = 0, frameSamples = 0, frameMedian = 0, frameP95 = 0;
+function updateFrameBudget(now, frameMs) {
+  if (frameMs <= 0 || frameMs > 250 || entry.active) return;
+  frameIntervals[frameCursor++ % frameIntervals.length] = frameMs; frameSamples = Math.min(frameSamples + 1, frameIntervals.length);
+  budgetTotal += frameMs; budgetFrames++;
+  if (now - budgetAt < 2000) return;
+  const sorted = Array.from(frameIntervals.subarray(0, frameSamples)).sort((a, b) => a - b);
+  frameMedian = sorted[Math.floor(sorted.length * .5)] || 0; frameP95 = sorted[Math.floor(sorted.length * .95)] || 0;
+  const mean = budgetTotal / Math.max(1, budgetFrames); budgetTotal = 0; budgetFrames = 0; budgetAt = now;
+  const floorRatio = Math.min(maxPixelRatio, mobile ? .8 : 1);
+  let next = renderPixelRatio;
+  if (now - lastQualityChange > 5000 && mean > 23) next = Math.max(floorRatio, renderPixelRatio - .15);
+  else if (now - lastQualityChange > 12000 && mean < 17.5) next = Math.min(maxPixelRatio, renderPixelRatio + .1);
+  if (Math.abs(next - renderPixelRatio) > .01) { renderPixelRatio = next; renderer.setPixelRatio(next); lastQualityChange = now; }
+}
 function animate(now) {
   requestAnimationFrame(animate);
-  if (document.hidden) return;
-  const dt = lastTime ? Math.min((now - lastTime) / 1000, .05) : .016; lastTime = now; elapsed += dt;
+  if (document.hidden) { lastTime = 0; return; }
+  const frameMs = lastTime ? now - lastTime : 0;
+  const dt = frameMs ? Math.min(frameMs / 1000, .05) : .016; lastTime = now; elapsed += dt;
+  updateFrameBudget(now, frameMs);
   fleet.step(dt);
   for (const v of vehicles) {
     const state = v.controller.state; v.state = state;
@@ -607,22 +639,26 @@ function animate(now) {
     camera.position.y += Math.cos(elapsed * 71) * burstShake * .05;
   }
   audio.update({ jet: entry.active ? entry.state.jet : 0, hidden: false });
-  if (frameCount % 5 === 0) { drawMap(); updateZone(); }
-  scene.updateMatrixWorld(true);
+  if (now >= nextMapAt) { drawMap(); updateZone(); nextMapAt = now + 125; }
+  camera.updateMatrixWorld();
+  viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); viewFrustum.setFromProjectionMatrix(viewProjection);
+  for (const batch of spatialBatches) batch.update(viewFrustum, camera.position);
+  scene.updateMatrixWorld();
   for (const batch of movingBatches.values()) { batch.sources.forEach((source, i) => batch.instance.setMatrixAt(i, source.matrixWorld)); batch.instance.instanceMatrix.needsUpdate = true; }
   renderer.render(scene, camera);
   frameCount++;
   if (now - fpsStart > 1500) { displayedFPS = Math.round(frameCount * 1000 / (now - fpsStart)); frameCount = 0; fpsStart = now; }
   // Read-only diagnostics for local acceptance checks.
-  if (frameCount % 15 === 0) {
+  if (now >= nextDiagnosticAt) {
+    nextDiagnosticAt = now + 500;
     const demo = observedVehicle();
     updateSoundButton();
-    $('world').dataset.diagnostics = JSON.stringify({ ready: true, revision: 'simple-cleanroom-avatar-9', mode, audio: audio.state, destruction: destruction.state, equipmentVisibility: equipmentVisibility.state, emoButtons: layoutMachines.length, amberBays: bayLighting.bayIds.map(id => id + 1), amberLights: bayLighting.lights.length, amberLightsVisible: bayLighting.root.visible, entry: { active: entry.active, ...entry.state }, width: WIDTH, length: LENGTH, ceiling: HEIGHT,
+    $('world').dataset.diagnostics = JSON.stringify({ ready: true, revision: 'human-cleanroom-smooth-10', mode, audio: audio.state, destruction: destruction.state, equipmentVisibility: equipmentVisibility.state, emoButtons: layoutMachines.length, amberBays: bayLighting.bayIds.map(id => id + 1), amberLights: bayLighting.lights.length, amberLightsVisible: bayLighting.root.visible, entry: { active: entry.active, ...entry.state }, width: WIDTH, length: LENGTH, ceiling: HEIGHT,
       equipmentCount: equipment.length, equipmentFamilies: families.length, uniqueEquipmentCodes: new Set(equipment.map(e => e.code)).size, selectedEquipment: selectedEquipment?.code ?? null,
       machines: machinePositions.length, bays: bays.length, toolsPerRow: 10, loadports: layoutMachines.length * 3,
       frontAisle: AISLE, rearAisle: SERVICE_AISLE, sideGap: SIDE_GAP, vehicles: vehicles.length, junctions: network.junctions.length,
       networkNodes: network.nodes.length, networkEdges: network.edges.length, traffic: fleet.stats, instances: staticInstances, fps: displayedFPS,
-      calls: renderer.info.render.calls, position: { x: explorer.state.position.x, y: 0, z: explorer.state.position.z },
+      calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, renderPixelRatio, frameMedianMs: frameMedian, frameP95Ms: frameP95, visibleInstances: spatialBatches.reduce((n, b) => n + (b.mesh.parent.visible ? b.visibleCount : 0), 0), mirrorPass: false, position: { x: explorer.state.position.x, y: 0, z: explorer.state.position.z },
       camera: { x: camera.position.x, y: camera.position.y, z: camera.position.z }, character: { visible: avatar.root.visible, height: avatar.height, speed: explorer.state.speed, heading: explorer.state.heading },
       walkPathPoints: explorer.state.path.length, cameraDistance: explorer.state.distance, cameraYaw: explorer.state.yaw,
       roofVisible: roof.visible, parkedFoups: vehicles.filter(v => v.state.parked).length, transfer: demo.state, transferVehicleId: explorer.state.transferVehicleId, transferTarget: explorer.state.transferTarget, transferWaiting: explorer.state.transferWaiting, transferInTransit: explorer.state.transferInTransit, transferLabel: explorer.state.transferLabel, followId: explorer.state.followId, tourTime: explorer.state.tourTime });

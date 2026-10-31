@@ -4,6 +4,16 @@ import { createTourRoute } from './tour-route.js';
 import { createTransferSession, updateTransferSession, transferCameraFrame, transferTransitFrame } from './transfer-view.js';
 import { getRuntimeObstacles } from './runtime-obstacles.js';
 
+const damp = (value, wanted, rate, dt) => wanted + (value - wanted) * Math.exp(-rate * Math.max(0, dt));
+const angleDelta = (from, to) => Math.atan2(Math.sin(to - from), Math.cos(to - from));
+// Integrate the whole eased velocity over the frame, rather than multiplying
+// its final value by dt. A key held for one second travels equally far at 30/120 Hz.
+function easeVelocity(value, wanted, rate, dt) {
+  const decay = Math.exp(-rate * dt);
+  return { value: wanted + (value - wanted) * decay,
+    travel: wanted * dt + (value - wanted) * (1 - decay) / rate };
+}
+
 export function destructionCameraFrame(machine, aspect = 1, baseFov = 64) {
   const sign = machine.sign, setback = aspect < 1 ? 7.9 : 6.4;
   const position = { x: machine.x + .7 * sign, y: 2.6, z: machine.z + sign * setback };
@@ -41,9 +51,13 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
   const cast = new THREE.Raycaster(), floor = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hit = new THREE.Vector3();
   const cameraRay = new THREE.Ray(), cameraHit = new THREE.Vector3();
   const target = new THREE.Vector3(), desired = new THREE.Vector3(), direction = new THREE.Vector3();
+  const cameraFocus = new THREE.Vector3(), previousFocus = new THREE.Vector3();
+  const cameraRig = { yaw: state.yaw, elevation: state.elevation, distance: state.distance, clearance: state.distance };
+  const velocity = { x: 0, z: 0 };
+  let pathSpeed = 0, tourBlend = 0, runtimeSnapshot = null, runtimeCameraBoxes = [];
   const targetRing = new THREE.Mesh(new THREE.RingGeometry(.21, .29, 36), new THREE.MeshBasicMaterial({ color: '#3d9fa7', transparent: true, opacity: .8, side: THREE.DoubleSide, depthWrite: false }));
   targetRing.rotation.x = -Math.PI / 2; targetRing.position.y = .012; targetRing.visible = false; scene.add(targetRing);
-  function clearInput() { keys.clear(); moves.clear(); pointers.clear(); state.speed = 0; }
+  function clearInput() { keys.clear(); moves.clear(); pointers.clear(); state.speed = 0; velocity.x = velocity.z = pathSpeed = 0; }
   function setMode(next) {
     if (state.locked) return;
     if (next === 'tour' && state.mode === 'tour') return;
@@ -55,7 +69,12 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
     if (state.mode === 'blast' && next !== 'blast') { camera.fov = blastBaseFov; camera.updateProjectionMatrix(); blastSession = null; }
     if (next === 'transfer' && state.mode !== 'transfer') transferBaseFov = camera.fov;
     if (next === 'blast' && state.mode !== 'blast') blastBaseFov = camera.fov;
-    state.mode = next; clearInput(); state.path = []; targetRing.visible = false; state.manualLook = false; cameraSnap = true;
+    const walkingView = mode => mode === 'walk' || mode === 'tour';
+    // Walking and automatic walking share the same camera rig. Preserve its
+    // current pose rather than cutting back to an uneased orbit on each toggle.
+    if (!walkingView(state.mode) || !walkingView(next)) cameraSnap = true;
+    if (next === 'tour') tourBlend = 0;
+    state.mode = next; clearInput(); state.path = []; targetRing.visible = false; state.manualLook = false;
     avatar.root.visible = next !== 'transfer' && next !== 'blast';
     orbit.enabled = next === 'overview';
     if (next === 'overview') {
@@ -70,50 +89,102 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
   function reset() {
     tourRoute = null;
     state.position.set(TOUR_POINTS[0][0], 0, TOUR_POINTS[0][1]); state.yaw = Math.PI / 2; state.heading = -Math.PI / 2;
-    state.distance = 4.4; state.elevation = .36; setMode('walk');
+    state.distance = 4.4; state.elevation = .36; cameraSnap = true; setMode('walk');
     onToast('바닥을 누르거나 WASD로 이동 · 드래그로 둘러보기');
   }
   function followCamera(focus, yaw, distance, elevation, dt, obstacles = true) {
-    desired.set(focus.x + Math.sin(yaw) * Math.cos(elevation) * distance,
-      Math.min(HALL.height - .28, focus.y + Math.sin(elevation) * distance),
-      focus.z + Math.cos(yaw) * Math.cos(elevation) * distance);
-    if (cameraSnap) { camera.position.copy(desired); cameraSnap = false; }
-    else camera.position.lerp(desired, 1 - Math.exp(-dt * 12));
-    camera.position.x = THREE.MathUtils.clamp(camera.position.x, -59.3, 59.3);
-    camera.position.z = THREE.MathUtils.clamp(camera.position.z, -89.3, 89.3);
-    if (obstacles) {
-      direction.copy(camera.position).sub(focus); let length = direction.length(); direction.normalize(); cameraRay.set(focus, direction);
-      for (const box of colliderBoxes) {
-        const p = cameraRay.intersectBox(box, cameraHit);
-        if (p) length = Math.min(length, Math.max(.08, focus.distanceTo(p) - .15));
+    const snap = cameraSnap || previousFocus.distanceToSquared(focus) > 64;
+    if (snap) {
+      cameraRig.yaw = yaw; cameraRig.elevation = elevation; cameraRig.distance = distance;
+      cameraFocus.copy(focus); previousFocus.copy(focus);
+    } else {
+      cameraRig.yaw += angleDelta(cameraRig.yaw, yaw) * (1 - Math.exp(-dt * 16));
+      cameraRig.elevation = damp(cameraRig.elevation, elevation, 16, dt);
+      cameraRig.distance = damp(cameraRig.distance, distance, 12, dt);
+      // Exact damping for a target moving linearly during this frame. This
+      // avoids the frame-rate-dependent trailing distance of position.lerp.
+      const decay = Math.exp(-dt * 14);
+      for (const axis of ['x', 'y', 'z']) {
+        const perSecond = dt > 0 ? (focus[axis] - previousFocus[axis]) / dt : 0;
+        cameraFocus[axis] = focus[axis] - perSecond / 14 + (cameraFocus[axis] - previousFocus[axis] + perSecond / 14) * decay;
       }
-      for (const obstacle of getRuntimeObstacles()) {
-        const box = new THREE.Box3(new THREE.Vector3(obstacle.minX - .12, obstacle.minY ?? 0, obstacle.minZ - .12), new THREE.Vector3(obstacle.maxX + .12, obstacle.maxY ?? HALL.height, obstacle.maxZ + .12));
-        const p = cameraRay.intersectBox(box, cameraHit);
-        if (p) length = Math.min(length, Math.max(.08, focus.distanceTo(p) - .15));
-      }
-      camera.position.copy(focus).addScaledVector(direction, length);
+      previousFocus.copy(focus);
     }
+    desired.set(cameraFocus.x + Math.sin(cameraRig.yaw) * Math.cos(cameraRig.elevation) * cameraRig.distance,
+      Math.min(HALL.height - .28, cameraFocus.y + Math.sin(cameraRig.elevation) * cameraRig.distance),
+      cameraFocus.z + Math.cos(cameraRig.yaw) * Math.cos(cameraRig.elevation) * cameraRig.distance);
+    desired.x = THREE.MathUtils.clamp(desired.x, -59.3, 59.3);
+    desired.z = THREE.MathUtils.clamp(desired.z, -89.3, 89.3);
+    direction.copy(desired).sub(focus);
+    let clearDistance = direction.length();
+    if (clearDistance < .0001) { camera.position.copy(desired); cameraSnap = false; return; }
+    direction.multiplyScalar(1 / clearDistance);
+    if (obstacles) {
+      const snapshot = getRuntimeObstacles();
+      if (snapshot !== runtimeSnapshot) {
+        runtimeSnapshot = snapshot;
+        runtimeCameraBoxes = snapshot.map(o => new THREE.Box3(new THREE.Vector3(o.minX - .12, o.minY ?? 0, o.minZ - .12), new THREE.Vector3(o.maxX + .12, o.maxY ?? HALL.height, o.maxZ + .12)));
+      }
+      cameraRay.set(focus, direction);
+      const minX = Math.min(focus.x, desired.x), maxX = Math.max(focus.x, desired.x);
+      const minZ = Math.min(focus.z, desired.z), maxZ = Math.max(focus.z, desired.z);
+      for (const boxes of [colliderBoxes, runtimeCameraBoxes]) for (const box of boxes) {
+        if (box.max.x < minX || box.min.x > maxX || box.max.z < minZ || box.min.z > maxZ) continue;
+        const p = cameraRay.intersectBox(box, cameraHit);
+        if (p) clearDistance = Math.min(clearDistance, Math.max(.08, focus.distanceTo(p) - .15));
+      }
+    }
+    // Collision shortening never feeds back into the ideal orbit. Move inward
+    // immediately for safety, then ease outward when a cabinet/door clears.
+    cameraRig.clearance = snap ? clearDistance : Math.min(clearDistance, damp(cameraRig.clearance, clearDistance, 4.2, dt));
+    camera.position.copy(focus).addScaledVector(direction, cameraRig.clearance);
+    cameraSnap = false;
     camera.lookAt(focus);
   }
   function walk(dt) {
     let forward = Number(keys.has('w') || keys.has('arrowup') || moves.has('forward')) - Number(keys.has('s') || keys.has('arrowdown') || moves.has('back'));
     let right = Number(keys.has('d') || keys.has('arrowright') || moves.has('right')) - Number(keys.has('a') || keys.has('arrowleft') || moves.has('left'));
-    let dx = 0, dz = 0;
+    let dx = 0, dz = 0, next = null;
     const speed = keys.has('shift') ? 4.3 : 2.6;
     if (forward || right) {
-      state.path = []; targetRing.visible = false;
+      state.path = []; targetRing.visible = false; pathSpeed = 0;
       const norm = Math.hypot(forward, right); forward /= norm; right /= norm;
-      dx = (-Math.sin(state.yaw) * forward + Math.cos(state.yaw) * right) * speed * dt;
-      dz = (-Math.cos(state.yaw) * forward - Math.sin(state.yaw) * right) * speed * dt;
+      const viewYaw = cameraSnap ? state.yaw : cameraRig.yaw;
+      const x = easeVelocity(velocity.x, (-Math.sin(viewYaw) * forward + Math.cos(viewYaw) * right) * speed, 13, dt);
+      const z = easeVelocity(velocity.z, (-Math.cos(viewYaw) * forward - Math.sin(viewYaw) * right) * speed, 13, dt);
+      velocity.x = x.value; velocity.z = z.value; dx = x.travel; dz = z.travel;
     } else if (state.path.length) {
-      const p = state.path[0], distance = Math.hypot(p.x - state.position.x, p.z - state.position.z);
-      if (distance < .055) state.path.shift();
-      else { const step = Math.min(distance, speed * dt); dx = (p.x - state.position.x) / distance * step; dz = (p.z - state.position.z) / distance * step; }
-      if (!state.path.length) targetRing.visible = false;
+      velocity.x = velocity.z = 0;
+      while (state.path.length && Math.hypot(state.path[0].x - state.position.x, state.path[0].z - state.position.z) < 1e-6) state.path.shift();
+      const remaining = state.path.reduce((length, p, i) => {
+        const a = i ? state.path[i - 1] : state.position;
+        return length + Math.hypot(p.x - a.x, p.z - a.z);
+      }, 0);
+      const eased = easeVelocity(pathSpeed, Math.min(speed, Math.sqrt(remaining * 18)), 12, dt);
+      pathSpeed = eased.value;
+      let budget = eased.travel;
+      next = { x: state.position.x, z: state.position.z };
+      // Consume a corner and the remainder of this frame together. Previously
+      // each waypoint inserted a complete zero-motion frame, visible as a hitch.
+      while (budget > 1e-8 && state.path.length) {
+        const p = state.path[0], distance = Math.hypot(p.x - next.x, p.z - next.z);
+        if (distance < 1e-6) { state.path.shift(); continue; }
+        const amount = Math.min(distance, budget), sx = (p.x - next.x) / distance * amount, sz = (p.z - next.z) / distance * amount;
+        const moved = stepWalker(next, sx, sz), travelled = Math.hypot(moved.x - next.x, moved.z - next.z);
+        next = moved; budget -= amount;
+        if (Math.hypot(p.x - next.x, p.z - next.z) < 1e-6) state.path.shift();
+        if (travelled < amount * .5) { pathSpeed = 0; break; }
+      }
+      if (!state.path.length) { targetRing.visible = false; pathSpeed = 0; }
+    } else {
+      pathSpeed = 0;
+      const x = easeVelocity(velocity.x, 0, 18, dt), z = easeVelocity(velocity.z, 0, 18, dt);
+      velocity.x = x.value; velocity.z = z.value; dx = x.travel; dz = z.travel;
     }
-    const next = stepWalker(state.position, dx, dz);
+    if (!next) next = stepWalker(state.position, dx, dz);
     const movedX = next.x - state.position.x, movedZ = next.z - state.position.z;
+    if (Math.abs(dx) > 1e-8 && Math.abs(movedX) < Math.abs(dx) * .25) velocity.x = 0;
+    if (Math.abs(dz) > 1e-8 && Math.abs(movedZ) < Math.abs(dz) * .25) velocity.z = 0;
     state.speed = Math.hypot(movedX, movedZ) / Math.max(dt, .001);
     if (state.speed > .02) state.heading = Math.atan2(movedX, movedZ);
     if (state.path.length && state.speed > .02 && !state.manualLook) {
@@ -125,8 +196,9 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
   function tour(dt) {
     if (!tourRoute) return;
     state.tourTime += dt;
-    const next = tourRoute.advance(dt);
-    state.speed = next.speed;
+    const eased = easeVelocity(tourBlend, 1, 10, dt); tourBlend = eased.value;
+    const next = tourRoute.advance(eased.travel);
+    state.speed = dt > 0 ? next.speed * eased.travel / dt : 0;
     if (next.heading !== null && state.speed > .01) {
       state.heading = next.heading;
       if (!state.manualLook) { const wanted = state.heading + Math.PI; state.yaw += Math.atan2(Math.sin(wanted - state.yaw), Math.cos(wanted - state.yaw)) * (1 - Math.exp(-dt * 2)); }
@@ -213,7 +285,10 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
   });
   canvas.addEventListener('pointercancel', e => pointers.delete(e.pointerId));
   canvas.addEventListener('wheel', e => {
-    if (state.locked || state.mode === 'overview' || state.mode === 'transfer' || state.mode === 'blast') return; e.preventDefault(); state.distance = THREE.MathUtils.clamp(state.distance + e.deltaY * .004, 2, 6.8);
+    if (state.locked || state.mode === 'overview' || state.mode === 'transfer' || state.mode === 'blast') return;
+    e.preventDefault();
+    const units = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? canvas.getBoundingClientRect().height : 1;
+    state.distance = THREE.MathUtils.clamp(state.distance + e.deltaY * units * .004, 2, 6.8);
   }, { passive: false });
   const movement = ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'shift'];
   window.addEventListener('keydown', e => {
@@ -252,18 +327,18 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
     blastSession = { machine, elapsed: 0 }; setMode('blast'); applyBlastCamera(); return true;
   }
   return { state, setMode, reset, update, focusTransfer, focusDestruction,
-    lock(value) { if (value && state.mode === 'blast') setMode('walk'); state.locked = value; clearInput(); state.path = []; targetRing.visible = false; cameraSnap = true; },
+    lock(value) { if (value && state.mode === 'blast') setMode('walk'); state.locked = value; clearInput(); state.path = []; targetRing.visible = false; },
     focusEquipment(machine) {
       if (state.locked) return;
       setMode('walk'); const bay = bays[machine.bayId];
       state.position.set(machine.x, 0, bay.z);
       state.yaw = machine.sign === 1 ? .15 : Math.PI + .15;
       state.heading = machine.sign === 1 ? Math.PI : 0;
-      state.distance = 3.6; state.elevation = .12;
+      state.distance = 3.6; state.elevation = .12; cameraSnap = true;
     },
     focusRear() {
       setMode('walk'); const bay = bays[7], previous = bays[6];
-      state.position.set(-28.7, 0, (bay.z + previous.z) / 2); state.yaw = Math.PI / 2; state.heading = -Math.PI / 2; state.distance = 4.2; state.elevation = .3;
+      state.position.set(-28.7, 0, (bay.z + previous.z) / 2); state.yaw = Math.PI / 2; state.heading = -Math.PI / 2; state.distance = 4.2; state.elevation = .3; cameraSnap = true;
       onToast('장비 뒤쪽 통로 1.4m · 옆 장비 사이 틈 0.65m');
     },
     nextVehicle() { state.followId = (state.followId + 1) % vehicles.length; cameraSnap = true; onToast('OHT ' + String(state.followId + 1).padStart(2, '0') + '의 경로를 따라갑니다'); } };
