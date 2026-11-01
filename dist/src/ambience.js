@@ -1,9 +1,9 @@
 // Ventilation is generated locally. Construction is silent until activate() is
 // called from a trusted gesture; a later gesture never overrides explicit mute.
 const clamp01 = value => Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
-export const EXPLOSION_DURATION = 1.2;
+export const EXPLOSION_DURATION = 2.8;
 export const MAX_EXPLOSION_VOICES = 4;
-const EXPLOSION_GAIN = .8; // +9.1 dB over the original .28 mix.
+const EXPLOSION_GAIN = 1.2;
 export const EMO_PRESS_DURATION = .16;
 
 /** A spring-loaded button clack with enough midrange for phone speakers. */
@@ -51,33 +51,44 @@ export function createFanNoise({ sampleRate = 48000, duration = 6, seed = 0x6fab
   return samples;
 }
 
-/** Locally synthesized thump, crackle and metallic decay; no sharp sample edge. */
+/** Big initial bang, then staggered casing crashes and bouncing metal fragments. */
 export function createExplosionSound({ sampleRate = 48000, seed = 0x3eaf0127 } = {}) {
   if (!Number.isFinite(sampleRate) || sampleRate < 8000 || sampleRate > 192000) throw new RangeError('Unsupported explosion sample rate');
   const samples = new Float32Array(Math.floor(sampleRate * EXPLOSION_DURATION));
-  const fastAlpha = 1 - Math.exp(-2 * Math.PI * 2100 / sampleRate);
-  const slowAlpha = 1 - Math.exp(-2 * Math.PI * 130 / sampleRate);
-  const crackleDecay = Math.exp(-1 / (sampleRate * .003));
-  let randomState = (seed >>> 0) || 1, fast = 0, slow = 0, crackle = 0;
+  const fastAlpha = 1 - Math.exp(-2 * Math.PI * Math.min(5200, sampleRate * .42) / sampleRate);
+  const slowAlpha = 1 - Math.exp(-2 * Math.PI * 380 / sampleRate);
+  // Irregular hits keep the collapse sounding like falling panels, not a tone.
+  const impacts = [
+    [.055, .90, 274], [.13, .85, 419], [.235, .82, 327], [.36, .75, 587],
+    [.49, .73, 231], [.65, .64, 743], [.82, .58, 362], [1.02, .49, 926],
+    [1.24, .41, 477], [1.48, .34, 1129], [1.75, .25, 653], [2.07, .17, 1381],
+    [2.31, .09, 827]
+  ];
+  let randomState = (seed >>> 0) || 1, fast = 0, slow = 0;
   for (let i = 0; i < samples.length; i++) {
     const t = i / sampleRate;
     randomState ^= randomState << 13; randomState ^= randomState >>> 17; randomState ^= randomState << 5;
     const white = (randomState >>> 0) / 0x100000000 * 2 - 1;
     fast += fastAlpha * (white - fast); slow += slowAlpha * (white - slow);
-    crackle = white > .996 ? .65 : crackle * crackleDecay;
-    const phase = 2 * Math.PI * (48 * t + 106 * (1 - Math.exp(-22 * t)) / 22);
-    const thump = Math.sin(phase) * Math.exp(-t / .15);
-    const blast = (fast - slow) * 1.1 * Math.exp(-t / .19);
-    const fragments = (white - fast) * crackle * Math.exp(-t / .3);
-    const tailTime = Math.max(0, t - .045);
-    const metalAttack = Math.min(1, tailTime / .008) ** 2;
-    const metal = metalAttack * .16 * (
-      Math.sin(2 * Math.PI * 428 * tailTime) * Math.exp(-tailTime / .33) +
-      .7 * Math.sin(2 * Math.PI * 714 * tailTime) * Math.exp(-tailTime / .23) +
-      .45 * Math.sin(2 * Math.PI * 1141 * tailTime) * Math.exp(-tailTime / .18));
-    const attack = Math.sin(Math.min(1, t / .009) * Math.PI / 2) ** 2;
-    const release = Math.sin(Math.min(1, (samples.length - 1 - i) / (sampleRate * .055)) * Math.PI / 2) ** 2;
-    samples[i] = .65 * Math.tanh((thump + blast + fragments + metal) * 1.15) * attack * release;
+    const phase = 2 * Math.PI * (52 * t + 128 * (1 - Math.exp(-18 * t)) / 18);
+    const thump = 1.25 * Math.sin(phase) * Math.exp(-t / .23);
+    const punch = .45 * Math.sin(2 * Math.PI * 172 * t) * Math.exp(-t / .13);
+    const blast = (fast - slow) * 2.5 * Math.exp(-t / .24);
+    let debris = 0;
+    for (const [start, strength, frequency] of impacts) {
+      const age = t - start;
+      if (age < 0 || age > .7) continue;
+      const attack = Math.min(1, age / .003);
+      const clank = Math.sin(2 * Math.PI * frequency * age) +
+        .57 * Math.sin(2 * Math.PI * frequency * 1.47 * age) +
+        .31 * Math.sin(2 * Math.PI * frequency * 2.31 * age);
+      const plate = (fast - slow) * 2.1 * Math.exp(-age / .055);
+      const rattle = white * .7 * Math.exp(-age / .1) * (.5 + .5 * Math.sin(age * 237));
+      debris += strength * attack * (plate + rattle + .38 * clank * Math.exp(-age / .13));
+    }
+    const attack = Math.sin(Math.min(1, t / .006) * Math.PI / 2) ** 2;
+    const release = Math.sin(Math.min(1, (samples.length - 1 - i) / (sampleRate * .18)) * Math.PI / 2) ** 2;
+    samples[i] = .78 * Math.tanh(thump + punch + blast + debris) * attack * release;
   }
   return samples;
 }
@@ -174,7 +185,7 @@ export function createAmbience(options = {}) {
     ambienceBus = keep(context.createGain()); ambienceBus.gain.value = 1; ambienceBus.connect(master);
     // Keep overlapping effects controlled while retaining the initial impact.
     effectsBus = keep(context.createDynamicsCompressor());
-    effectsBus.threshold.value = -8; effectsBus.knee.value = 6; effectsBus.ratio.value = 12;
+    effectsBus.threshold.value = -4; effectsBus.knee.value = 6; effectsBus.ratio.value = 12;
     effectsBus.attack.value = .002; effectsBus.release.value = .18; effectsBus.connect(master);
 
     const data = createFanNoise({ sampleRate: context.sampleRate });

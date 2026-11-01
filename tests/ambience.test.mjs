@@ -46,14 +46,15 @@ test('generated wash has bounded energy and a smooth loop boundary at mobile sam
   }
 });
 
-test('explosion signal has a bounded transient, softer tail and smooth endpoints', () => {
+test('explosion has a big transient, sustained cascading debris and a smooth fading tail', () => {
   for (const sampleRate of [8000, 48000]) {
     const data = createExplosionSound({ sampleRate });
     const rms = values => Math.sqrt(values.reduce((sum, value) => sum + value * value, 0) / values.length);
     assert.equal(data.length, Math.floor(sampleRate * EXPLOSION_DURATION));
-    assert.ok(data.every(value => Number.isFinite(value) && Math.abs(value) <= .65));
+    assert.ok(data.every(value => Number.isFinite(value) && Math.abs(value) <= .78));
     assert.ok(rms(data.subarray(0, sampleRate / 5)) > .1);
-    assert.ok(rms(data.subarray(sampleRate)) < .015);
+    assert.ok(rms(data.subarray(Math.floor(sampleRate * .8), Math.floor(sampleRate * 1.6))) > .035);
+    assert.ok(rms(data.subarray(Math.floor(sampleRate * 2.6))) < .015);
     assert.equal(Math.abs(data[0]), 0); assert.equal(Math.abs(data.at(-1)), 0);
     assert.ok(Math.abs(data[1]) < .001); assert.ok(Math.abs(data.at(-2)) < .001);
     assert.deepEqual(data, createExplosionSound({ sampleRate }));
