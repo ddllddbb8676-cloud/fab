@@ -3,7 +3,27 @@
 const clamp01 = value => Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
 export const EXPLOSION_DURATION = 1.2;
 export const MAX_EXPLOSION_VOICES = 4;
-const EXPLOSION_GAIN = .28;
+const EXPLOSION_GAIN = .8; // +9.1 dB over the original .28 mix.
+export const EMO_PRESS_DURATION = .16;
+
+/** A spring-loaded button clack with enough midrange for phone speakers. */
+export function createEmoPressSound({ sampleRate = 48000 } = {}) {
+  if (!Number.isFinite(sampleRate) || sampleRate < 8000 || sampleRate > 192000) throw new RangeError('Unsupported button sample rate');
+  const samples = new Float32Array(Math.floor(sampleRate * EMO_PRESS_DURATION));
+  let randomState = 0x517cc12;
+  for (let i = 0; i < samples.length; i++) {
+    const t = i / sampleRate;
+    randomState ^= randomState << 13; randomState ^= randomState >>> 17; randomState ^= randomState << 5;
+    const white = (randomState >>> 0) / 0x100000000 * 2 - 1;
+    const latchTime = Math.max(0, t - .022);
+    const body = Math.sin(2 * Math.PI * 620 * t) * Math.exp(-t / .025);
+    const latch = t > .022 ? Math.sin(2 * Math.PI * 1350 * latchTime) * Math.exp(-latchTime / .012) : 0;
+    const attack = Math.min(1, t / .002);
+    const release = Math.min(1, (samples.length - 1 - i) / (sampleRate * .015));
+    samples[i] = .7 * Math.tanh(body + .55 * latch + .6 * white * Math.exp(-t / .014)) * attack * release;
+  }
+  return samples;
+}
 
 /** A deterministic, bounded fan wash with a quiet, continuous loop boundary. */
 export function createFanNoise({ sampleRate = 48000, duration = 6, seed = 0x6fab0321 } = {}) {
@@ -66,16 +86,16 @@ export function createExplosionSound({ sampleRate = 48000, seed = 0x3eaf0127 } =
  * activate(): call only in a trusted user gesture, also to recover interruption.
  * toggle(): changes explicit preference; muted preference survives activate().
  * update(): safe in requestAnimationFrame; never creates/resumes a context.
- * playExplosion(): returns false while muted, hidden, interrupted, or at the
+ * playExplosion()/playEmoPress(): return false while muted, hidden, interrupted, or at the
  * four-voice limit. It never creates/resumes a context or changes preference.
  * state.rms/peak: measured after the master gain, before the destination.
  */
 export function createAmbience(options = {}) {
   const Context = Object.hasOwn(options, 'AudioContext') ? options.AudioContext : (globalThis.AudioContext || globalThis.webkitAudioContext);
-  let context = null, master = null, wash = null, lowpass = null, analyser = null, waveform = null;
+  let context = null, master = null, ambienceBus = null, effectsBus = null, wash = null, lowpass = null, analyser = null, waveform = null;
   let sources = [], nodes = [], desired = true, hidden = false, jet = 0, disposed = false;
   let error = null, starting = false, generation = 0, appliedJet = NaN, ready = false;
-  let explosionBuffer = null, totalEffects = 0, effectError = null;
+  let explosionBuffer = null, pressBuffer = null, totalEffects = 0, totalPresses = 0, totalExplosions = 0, effectError = null;
   const effects = new Set();
   const supported = typeof Context === 'function';
 
@@ -89,6 +109,13 @@ export function createAmbience(options = {}) {
     }
     try { effect.gain?.disconnect(); } catch { /* partially initialized */ }
     effects.delete(effect);
+    updateDucking();
+  }
+
+  function updateDucking() {
+    if (!ambienceBus || context?.state === 'closed') return;
+    const active = effects.size > 0;
+    fade(ambienceBus.gain, active ? .4 : 1, active ? .025 : .25);
   }
 
   function stopEffects(immediate = false) {
@@ -129,11 +156,11 @@ export function createAmbience(options = {}) {
   }
 
   function releaseNodes() {
-    stopEffects(true); explosionBuffer = null;
+    stopEffects(true); explosionBuffer = pressBuffer = null;
     for (const source of sources) { try { source.stop(); } catch { /* already stopped */ } }
     for (const node of nodes) { try { node.disconnect(); } catch { /* disconnected */ } }
     sources = []; nodes = [];
-    master = wash = lowpass = analyser = waveform = null;
+    master = ambienceBus = effectsBus = wash = lowpass = analyser = waveform = null;
     ready = false;
   }
 
@@ -144,6 +171,11 @@ export function createAmbience(options = {}) {
     analyser = keep(context.createAnalyser()); analyser.fftSize = 2048;
     waveform = new Float32Array(analyser.fftSize);
     master.connect(analyser); analyser.connect(context.destination);
+    ambienceBus = keep(context.createGain()); ambienceBus.gain.value = 1; ambienceBus.connect(master);
+    // Keep overlapping effects controlled while retaining the initial impact.
+    effectsBus = keep(context.createDynamicsCompressor());
+    effectsBus.threshold.value = -8; effectsBus.knee.value = 6; effectsBus.ratio.value = 12;
+    effectsBus.attack.value = .002; effectsBus.release.value = .18; effectsBus.connect(master);
 
     const data = createFanNoise({ sampleRate: context.sampleRate });
     const buffer = context.createBuffer(1, data.length, context.sampleRate);
@@ -153,18 +185,21 @@ export function createAmbience(options = {}) {
     const highpass = keep(context.createBiquadFilter()); highpass.type = 'highpass'; highpass.frequency.value = 135; highpass.Q.value = .55;
     lowpass = keep(context.createBiquadFilter()); lowpass.type = 'lowpass'; lowpass.frequency.value = 4700; lowpass.Q.value = .55;
     wash = keep(context.createGain()); wash.gain.value = .30;
-    source.connect(highpass); highpass.connect(lowpass); lowpass.connect(wash); wash.connect(master);
+    source.connect(highpass); highpass.connect(lowpass); lowpass.connect(wash); wash.connect(ambienceBus);
     source.start();
 
     const explosion = createExplosionSound({ sampleRate: context.sampleRate });
     explosionBuffer = context.createBuffer(1, explosion.length, context.sampleRate);
     explosionBuffer.getChannelData(0).set(explosion);
+    const press = createEmoPressSound({ sampleRate: context.sampleRate });
+    pressBuffer = context.createBuffer(1, press.length, context.sampleRate);
+    pressBuffer.getChannelData(0).set(press);
 
     // Quiet motor harmonics add recognizable fan body without musical notes.
     for (const [frequency, level] of [[180, .009], [360, .005], [720, .0028]]) {
       const motor = keep(context.createOscillator()); motor.type = 'sine'; motor.frequency.value = frequency;
       const gain = keep(context.createGain()); gain.gain.value = level;
-      motor.connect(gain); gain.connect(master); sources.push(motor); motor.start();
+      motor.connect(gain); gain.connect(ambienceBus); sources.push(motor); motor.start();
     }
     ready = true;
   }
@@ -183,7 +218,7 @@ export function createAmbience(options = {}) {
       } catch (cause) { error = String(cause?.message || cause); }
     }
     const status = disposed ? 'disposed' : !supported ? 'not-supported' : error ? 'error' : !desired ? 'muted' : hidden ? 'hidden' : enabled ? 'running' : starting ? 'starting' : context ? contextState : 'idle';
-    return { enabled: enabled && !error, desired, status, contextState, rms, peak, jet, hidden, error, activeEffects: effects.size, totalEffects, effectError };
+    return { enabled: enabled && !error, desired, status, contextState, rms, peak, jet, hidden, error, activeEffects: effects.size, totalEffects, totalPresses, totalExplosions, effectError };
   }
 
   async function activate() {
@@ -230,19 +265,22 @@ export function createAmbience(options = {}) {
     return snapshot();
   }
 
-  function playExplosion() {
+  function playEffect(kind) {
     if (disposed || !desired || hidden || !ready || error || context?.state !== 'running') return false;
     pruneEffects();
     if (effects.size >= MAX_EXPLOSION_VOICES) return false;
-    const effect = { source: null, gain: null, endsAt: context.currentTime + EXPLOSION_DURATION, finished: false, stopping: false };
+    const press = kind === 'press';
+    const effect = { source: null, gain: null, endsAt: context.currentTime + (press ? EMO_PRESS_DURATION : EXPLOSION_DURATION), finished: false, stopping: false };
     try {
-      effect.source = context.createBufferSource(); effect.source.buffer = explosionBuffer;
-      effect.gain = context.createGain(); effect.gain.gain.value = EXPLOSION_GAIN;
-      effect.source.connect(effect.gain); effect.gain.connect(master);
+      effect.source = context.createBufferSource(); effect.source.buffer = press ? pressBuffer : explosionBuffer;
+      effect.gain = context.createGain(); effect.gain.gain.value = press ? .58 : EXPLOSION_GAIN;
+      effect.source.connect(effect.gain); effect.gain.connect(effectsBus);
       effect.source.onended = () => finishEffect(effect);
       effects.add(effect);
+      updateDucking();
       effect.source.start(context.currentTime);
       totalEffects++; effectError = null;
+      if (press) totalPresses++; else totalExplosions++;
       return true;
     } catch (cause) {
       effectError = String(cause?.message || cause);
@@ -260,5 +298,5 @@ export function createAmbience(options = {}) {
     }
   }
 
-  return { activate, toggle, update, playExplosion, dispose, get state() { return snapshot(); } };
+  return { activate, toggle, update, playExplosion: () => playEffect('explosion'), playEmoPress: () => playEffect('press'), dispose, get state() { return snapshot(); } };
 }

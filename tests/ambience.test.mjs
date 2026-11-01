@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createAmbience, createFanNoise, createExplosionSound, EXPLOSION_DURATION, MAX_EXPLOSION_VOICES } from '../src/ambience.js';
+import { createAmbience, createFanNoise, createExplosionSound, createEmoPressSound, EMO_PRESS_DURATION, EXPLOSION_DURATION, MAX_EXPLOSION_VOICES } from '../src/ambience.js';
 
 class Parameter {
   constructor() { this.value = 0; }
@@ -21,6 +21,7 @@ function fakeContextClass() {
     constructor() { this.state = 'suspended'; this.sampleRate = 8000; this.currentTime = 0; this.destination = {}; this.resumeCalls = 0; this.closeCalls = 0; this.nodes = []; this.constructor.instances.push(this); }
     node() { const node = new AudioNode(); this.nodes.push(node); return node; }
     createGain() { return this.node(); }
+    createDynamicsCompressor() { const node = this.node(); for (const key of ['threshold', 'knee', 'ratio', 'attack', 'release']) node[key] = new Parameter(); return node; }
     createBufferSource() { return this.node(); }
     createBiquadFilter() { return this.node(); }
     createOscillator() { return this.node(); }
@@ -78,6 +79,31 @@ test('explosions require the existing running context and preserve mute preferen
   ambience.update({ hidden: false }); assert.equal(ambience.playExplosion(), true);
   assert.equal(Context.instances.length, 1);
   await ambience.dispose();
+});
+
+test('button clack is short, bounded and works at phone sample rates', () => {
+  for (const sampleRate of [8000, 44100, 48000]) {
+    const data = createEmoPressSound({ sampleRate });
+    assert.equal(data.length, Math.floor(sampleRate * EMO_PRESS_DURATION));
+    assert.ok(data.every(value => Number.isFinite(value) && Math.abs(value) <= .7));
+    assert.equal(Math.abs(data[0]), 0); assert.equal(Math.abs(data.at(-1)), 0);
+    assert.ok(Math.sqrt(data.reduce((n, x) => n + x * x, 0) / data.length) > .08);
+  }
+});
+
+test('press cue observes mute/visibility, expires, and does not count as an explosion', async () => {
+  const Context = fakeContextClass(), ambience = createAmbience({ AudioContext: Context });
+  assert.equal(ambience.playEmoPress(), false); assert.equal(Context.instances.length, 0);
+  await ambience.activate(); const context = Context.instances[0];
+  assert.equal(ambience.playEmoPress(), true);
+  assert.equal(ambience.state.totalPresses, 1); assert.equal(ambience.state.totalExplosions, 0);
+  context.currentTime += EMO_PRESS_DURATION + .01;
+  assert.equal(ambience.state.activeEffects, 0);
+  await ambience.toggle(); assert.equal(ambience.playEmoPress(), false);
+  await ambience.activate(); assert.equal(ambience.state.desired, false);
+  await ambience.toggle(); ambience.update({ hidden: true }); assert.equal(ambience.playEmoPress(), false);
+  ambience.update({ hidden: false }); assert.equal(ambience.playEmoPress(), true);
+  await ambience.dispose(); assert.equal(ambience.playEmoPress(), false);
 });
 
 test('interruption recovery cancels stale explosions instead of replaying their tails', async () => {

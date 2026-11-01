@@ -658,7 +658,10 @@ function animate(now) {
   const nextEmoPhase = press ? `${press.id}:${press.phase}` : '';
   if (nextEmoPhase !== emoPhase) {
     emoPhase = nextEmoPhase; updateEmoCard();
-    if (press?.phase === 'hold') toast(`${equipmentById.get(press.id)?.code ?? 'EMO'} · 꾹 누르는 중`);
+    if (press?.phase === 'hold') {
+      audio.playEmoPress();
+      toast(`${equipmentById.get(press.id)?.code ?? 'EMO'} · 꾹 누르는 중`);
+    }
   }
   emoControls.update({ mode, locked: entry.active || directory.isOpen || !$('help').classList.contains('hidden') });
   destruction.update(dt);
