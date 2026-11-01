@@ -40,7 +40,7 @@ button:hover { filter: brightness(.98); }
 .sound-toggle[aria-pressed=false] { color: #819397; background: #f8fbfba8; }
 .resident-note { margin: 8px 10px; font-size: 12px; line-height: 1.8; }
 .resident-note small { color: var(--muted); font-size: 10px; }
-@media (max-width: 380px) { .topbar { gap: 6px; } .brand-sub { display: none !important; } .sound-toggle { padding: 0 6px; } }
+@media (max-width: 380px) { .topbar { gap: 6px; } .brand-sub:not(.online-count) { display: none !important; } .sound-toggle { padding: 0 6px; } }
 .brand {
   display: flex; align-items: center; gap: 9px; min-height: 44px; text-decoration: none;
   color: #214e59; font-size: 18px; line-height: 1; font-weight: 700; letter-spacing: .025em;

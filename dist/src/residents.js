@@ -198,12 +198,11 @@ export function createResidents({ THREE, scene, ...options }) {
     } });
     return { actor, avatar, badge, clock: 1, parts };
   });
-  const zero = new THREE.Matrix4().makeScale(0,0,0), white = new THREE.Color('#ffffff');
-  const colors = { thrower:'#fff0e3', rider:'#e9e5ff', resting:'#f0fae0', repairer:'#ddfff2', breaker:'#ffe5e8' };
+  const zero = new THREE.Matrix4().makeScale(0,0,0);
   for (const group of groups.values()) {
     group.instance = new THREE.InstancedMesh(group.geometry, group.material, group.sources.length);
     group.instance.name = 'Resident avatars'; group.instance.instanceMatrix.setUsage(THREE.DynamicDrawUsage); group.instance.frustumCulled = false;
-    group.sources.forEach(({mesh,actor},i) => { group.instance.setMatrixAt(i,zero); group.instance.setColorAt(i, mesh.name === 'torso' ? new THREE.Color(colors[actor.role]) : white); });
+    group.sources.forEach((_,i) => group.instance.setMatrixAt(i,zero));
     scene.add(group.instance);
   }
   function update(dt, camera, overview = false) {

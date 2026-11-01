@@ -7,15 +7,19 @@ export function boardingMachine(car) {
   return machines.find(m => Math.abs(car.x - m.x) <= TOOL_WIDTH / 2 && Math.abs(car.z - (m.z + m.sign * PORT_Z)) < .65) ?? null;
 }
 
-export function createPlayActions({ THREE, scene, materials, fleet, explorer, avatar, initialPortIds, hideOriginal, isDestroyed, toast, onCue = () => {} }) {
-  const store = createFoupStore({ ports, initialPortIds, hideOriginal, isDestroyed, onImpact: record => onCue('bounce', record) });
+export function createPlayActions({ THREE, scene, materials, fleet, explorer, avatar, initialPortIds, hideOriginal, showOriginal, isDestroyed, toast, onCue = () => {}, network = null }) {
+  const store = createFoupStore({ ports, initialPortIds, hideOriginal, showOriginal, isDestroyed, onImpact: record => onCue('bounce', record) });
   const renderer = createFoupRenderer(THREE, scene, materials);
   const byPort = new Map(ports.map(port => [port.id, port]));
   const box = new THREE.Box3(), hit = new THREE.Vector3();
-  let action = null, pending = null, passengerId = null;
+  let action = null, pending = null, passengerId = null, awaiting = false, requestGeneration = 0;
   const pose = () => ({ x: explorer.state.position.x, y: explorer.state.position.y, z: explorer.state.position.z, heading: explorer.state.heading });
   const vehicle = id => fleet.vehicles.find(v => v.id === id);
-  function onFoot() { return !action && passengerId === null && ['walk', 'tour'].includes(explorer.state.mode) && !explorer.state.locked; }
+  function onFoot() { return !awaiting && !action && passengerId === null && (!network || network.connected) && ['walk', 'tour'].includes(explorer.state.mode) && !explorer.state.locked; }
+  function remote(kind,data,success) {
+    if(!network)return false;awaiting=true;const generation=++requestGeneration;
+    network.command(kind,data).then(result=>{if(generation!==requestGeneration)return;awaiting=false;if(result.ok)success?.(result);else {if(['climb','ride'].includes(kind)){network.command('cancel');resetOnline();}toast(result.message??'다시 시도해 주세요');}});return true;
+  }
   function reserved(port) {
     return reservedPortIds.has(port.id) && fleet.vehicles.some(v => !v.cargoDetached && [v.homePort.id, v.currentPort.id, v.destinationPort.id].includes(port.id));
   }
@@ -24,7 +28,7 @@ export function createPlayActions({ THREE, scene, materials, fleet, explorer, av
   }
   function clearPending() {
     if (!pending) return;
-    if (pending.kind === 'board') fleet.holdVehicle(pending.vehicleId, false);
+    if (pending.kind === 'board') { if(network)network.command('cancel');else fleet.holdVehicle(pending.vehicleId, false); }
     pending = null;
   }
   function startWalk(target, task) {
@@ -46,9 +50,10 @@ export function createPlayActions({ THREE, scene, materials, fleet, explorer, av
     if (!onFoot()) return false;
     if (store.carried) { toast('FOUP을 내려놓고 타주세요'); return true; }
     const v = vehicle(id), m = v && boardingMachine(v.state.car);
-    if (v?.residentId) { toast('친구가 타고 있는 OHT예요. 다른 OHT를 눌러주세요'); return true; }
+    if (v?.residentId || v?.playerId) { toast('친구가 타고 있는 OHT예요. 다른 OHT를 눌러주세요'); return true; }
     if (!m || isDestroyed(m.id)) { toast('장비가 부셔져서 탈 수가 없어요'); return true; }
     const destination = { x: v.state.car.x, z: m.z + m.sign * (TOOL_FRONT + .43) };
+    if(network){clearPending();remote('board',{id},result=>{const actual=machines[result.machineId];if(!startWalk({x:v.state.car.x,z:actual.z+actual.sign*(TOOL_FRONT+.43)},{kind:'board',vehicleId:id,machine:actual}))network.command('cancel');else toast('장비를 딛고 올라가 OHT에 점프해요');});return true;}
     if (!startWalk(destination, { kind: 'board', vehicleId: id, machine: m })) return true;
     fleet.holdVehicle(id, true); toast('장비를 딛고 올라가 OHT에 점프해요'); return true;
   }
@@ -106,6 +111,16 @@ export function createPlayActions({ THREE, scene, materials, fleet, explorer, av
     return requestPickup(candidate.record, candidate.port, candidate.v);
   }
   function begin(task) {
+    if(network) {
+      if(task.kind==='board')remote('climb',{},()=>startClimb(task));
+      else {
+        const port=byPort.get(task.portId);if(port)explorer.state.heading=port.sign===1?Math.PI:0;
+        remote(task.kind==='pickup'?'pickup':'place',task.kind==='pickup'?{id:task.recordId,portId:task.portId,vehicleId:task.vehicleId}:{id:task.portId},()=>{
+          explorer.state.carrying=Boolean(store.carried);toast(task.kind==='pickup'?'FOUP을 들었어요 · 빈 로드포트를 누르면 내려놓아요':'FOUP을 이 로드포트에 내려놓았어요');
+        });
+      }
+      return;
+    }
     if (task.kind === 'board') {
       const v = vehicle(task.vehicleId);
       if (!v || isDestroyed(task.machine.id)) { fleet.holdVehicle(task.vehicleId, false); toast('장비가 부셔져서 탈 수가 없어요'); return; }
@@ -128,9 +143,18 @@ export function createPlayActions({ THREE, scene, materials, fleet, explorer, av
       } else if (port && !reserved(port) && !movingAtPort(port) && store.place(port.id)) { explorer.state.carrying = false; onCue('place'); toast('FOUP을 이 로드포트에 내려놓았어요'); }
     }
   }
+  function startClimb(task) {
+    const v=vehicle(task.vehicleId);
+    action={...task,phase:'climb',elapsed:0,from:pose(),car:{...v.state.car}};
+    onCue('climb');explorer.setMode('passenger');explorer.state.rideYaw=.5;
+  }
   function dismount() {
     if (passengerId === null || action) return false;
-    const from = pose(); fleet.leavePassenger(passengerId); passengerId = null;
+    if(network){if(awaiting)return false;return remote('dismount',{},dropFromOht);}
+    return dropFromOht();
+  }
+  function dropFromOht() {
+    const from = pose(); if(!network)fleet.leavePassenger(passengerId); passengerId = null;
     const landingY = Math.min(from.y, supportHeight(from.x, from.z));
     const destination = floorSpot(from);
     action = { phase: 'fall', elapsed: 0, from, landingY, destination: destination ?? { x: from.x, z: from.z } };
@@ -138,12 +162,13 @@ export function createPlayActions({ THREE, scene, materials, fleet, explorer, av
   }
   function throwFoup(drop = false) {
     const record = store.carried; if (!record || action || passengerId !== null) return false;
+    if(network){if(awaiting)return false;return remote('throw',{drop},()=>{explorer.state.carrying=Boolean(store.carried);toast(drop?'FOUP을 내려놓았어요':'FOUP을 던졌어요');});}
     const p = pose(), heading = p.heading;
     store.launch(record, { x: record.x, y: record.y, z: record.z, yaw: record.yaw }, { x: Math.sin(heading) * (drop ? .8 : 4.7), y: drop ? .2 : 3.1, z: Math.cos(heading) * (drop ? .8 : 4.7) });
     explorer.state.carrying = false; onCue(drop ? 'place' : 'throw'); toast(drop ? 'FOUP을 바닥에 내려놓았어요' : 'FOUP을 던졌어요'); return true;
   }
   function update(dt) {
-    store.step(dt);
+    if(!network)store.step(dt);
     if (pending) {
       const distance = Math.hypot(explorer.state.position.x - pending.destination.x, explorer.state.position.z - pending.destination.z);
       const last = explorer.state.path.at(-1);
@@ -155,7 +180,7 @@ export function createPlayActions({ THREE, scene, materials, fleet, explorer, av
       action.elapsed += Math.min(dt, .05); const a = action;
       if (a.phase === 'climb') {
         if (a.elapsed >= 1.7 && !a.jumped) { a.jumped = true; onCue('jump'); }
-        if (isDestroyed(a.machine.id)) { fleet.holdVehicle(a.vehicleId, false); explorer.setScriptedPose(null); explorer.setMode('walk'); action = null; toast('장비가 부셔져서 탈 수가 없어요'); return; }
+        if (isDestroyed(a.machine.id)) { if(network)network.command('cancel');else fleet.holdVehicle(a.vehicleId, false); resetOnline();toast('장비가 부셔져서 탈 수가 없어요'); return; }
         const sign = a.machine.sign, ledge = { x: a.car.x, y: 1.47, z: a.machine.z + sign * 2.92 };
         const roof = { x: a.car.x, y: 3.4, z: a.machine.z + sign * 1.9 };
         const hang = { x: a.car.x, y: 2.16, z: a.car.z };
@@ -165,7 +190,11 @@ export function createPlayActions({ THREE, scene, materials, fleet, explorer, av
         const p = smooth(time / segment[2]), [start, end] = segment;
         explorer.setScriptedPose({ x: start.x + (end.x - start.x) * p, y: start.y + (end.y - start.y) * p + Math.sin(p * Math.PI) * .12, z: start.z + (end.z - start.z) * p,
           heading: sign === 1 ? Math.PI : 0, crouch: .7, hanging: a.elapsed > 1.7, cameraYaw: sign === 1 ? .55 : Math.PI + .55, cameraDistance: 4.5 });
-        if (a.elapsed >= 2.5) { passengerId = a.vehicleId; fleet.boardPassenger(passengerId); action = null; onCue('grab'); toast('만세! OHT와 FAB 산책 중 · 아래의 내리기를 눌러보세요'); }
+        if (a.elapsed >= 2.5) {
+          const complete=()=>{passengerId=a.vehicleId;if(!network)fleet.boardPassenger(passengerId);action=null;onCue('grab');toast('만세! OHT와 FAB 산책 중 · 아래의 내리기를 눌러보세요');};
+          if(network){a.elapsed=2.5;if(!a.requestedRide){a.requestedRide=true;remote('ride',{},complete);}}
+          else complete();
+        }
       } else if (a.phase === 'fall') {
         const y = Math.max(a.landingY, a.from.y - 4.9 * a.elapsed * a.elapsed);
         explorer.setScriptedPose({ ...a.from, y, hanging: false, crouch: .5, cameraY: Math.max(2.8, y + 1.5) });
@@ -218,7 +247,12 @@ export function createPlayActions({ THREE, scene, materials, fleet, explorer, av
     }
     return result.sort((a,b) => a.distance - b.distance).slice(0, 30);
   }
-  return { tap, update, render, requestBoard, requestPlace, dismount, throwFoup, clearPending, targets, store,
+  function resetOnline() {
+    requestGeneration++;awaiting=false;pending=null;action=null;passengerId=null;
+    explorer.setScriptedPose(null);const p=floorSpot(explorer.state.position);if(p)explorer.state.position.set(p.x,0,p.z);
+    explorer.state.carrying=false;explorer.setMode('walk');
+  }
+  return { tap, update, render, requestBoard, requestPlace, dismount, throwFoup, clearPending, targets, store, resetOnline,
     detachVehicleCargo: detachedVehicleCargo,
     get protectedMachineId() { return pending?.machine?.id ?? action?.machine?.id ?? byPort.get(pending?.portId)?.machineId ?? null; },
     get busy() { return Boolean(action || passengerId !== null); },

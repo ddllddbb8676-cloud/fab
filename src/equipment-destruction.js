@@ -200,7 +200,7 @@ export function createEquipmentDestruction({ THREE, scene, machines, reducedMoti
     record.effect.group.visible = false; record.effect.record = null; record.effect = null;
     active.delete(record);
   }
-  function trigger(id) {
+  function trigger(id, { age = 0, silent = false } = {}) {
     if (disposed || destroyed.has(id) || !byId.has(id)) return false;
     let effect = effects.find(item => item.record === null);
     if (!effect) {
@@ -209,11 +209,11 @@ export function createEquipmentDestruction({ THREE, scene, machines, reducedMoti
     }
     const storageIndex = freeSlots.pop(); slotOwners[storageIndex] = id;
     drawnSlots = Math.max(drawnSlots, storageIndex + 1); updateDrawCounts();
-    const record = { id, ...byId.get(id), storageIndex, age: 0, serial: serial++, settled: false, effect };
+    const record = { id, ...byId.get(id), storageIndex, age: Math.max(0,Math.min(DESTRUCTION_LIMITS.effectSeconds,age)), serial: serial++, settled: false, effect };
     record.parts = makeParts(record); destroyed.set(id, record); active.add(record);
     effect.record = record; effect.group.userData.machineId = id; effect.group.visible = true; root.visible = true;
     updateParts(record); updateEffect(record); markDebris();
-    onVisibility(id, false); onBurst(id, { x: record.machine.x, z: record.machine.z, reducedMotion }); changed(); return true;
+    onVisibility(id, false); if(!silent)onBurst(id, { x: record.machine.x, z: record.machine.z, reducedMotion }); changed(); return true;
   }
   function update(dt) {
     if (disposed || !Number.isFinite(dt) || dt <= 0 || !active.size) return;

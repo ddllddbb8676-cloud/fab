@@ -1,5 +1,5 @@
 import { TOUR_POINTS, HALL, TOOL_WIDTH, bays, isBlocked } from './layout.js';
-import { findWalkPath, stepWalker } from './walking.js';
+import { findWalkPath, stepWalker, resolveWalkTap } from './walking.js';
 import { createTourRoute } from './tour-route.js';
 import { createTransferSession, updateTransferSession, transferCameraFrame, transferTransitFrame } from './transfer-view.js';
 import { getRuntimeObstacles } from './runtime-obstacles.js';
@@ -42,7 +42,7 @@ export function destructionCameraFrame(machine, aspect = 1, baseFov = 64) {
   return { position, target, landmarks, fov: Math.atan(tangent) * 360 / Math.PI };
 }
 
-export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, colliders, vehicles, onMode, onInspect, onToast, onActionTap = () => false }) {
+export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, colliders, vehicles, onMode, onInspect, onToast, onActionTap = () => false, isEquipmentVisible = () => true }) {
   const $ = id => document.getElementById(id);
   const state = { mode: 'walk', position: new THREE.Vector3(TOUR_POINTS[0][0], 0, TOUR_POINTS[0][1]),
     yaw: Math.PI / 2, elevation: .36, distance: 4.4, heading: -Math.PI / 2, speed: 0,
@@ -53,7 +53,7 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
   let tourRoute = null, transferSession = null, transferBaseFov = camera.fov, blastSession = null, blastBaseFov = camera.fov;
   let emoSession = null;
   let scriptedPose = null;
-  const colliderBoxes = colliders.map(c => new THREE.Box3(new THREE.Vector3(c.minX - .12, c.minY ?? 0, c.minZ - .12), new THREE.Vector3(c.maxX + .12, c.maxY ?? 3.4, c.maxZ + .12)));
+  const tapColliders=colliders.flatMap(c=>(c.cameraBounds??[c]).map(b=>({machineId:c.equipment?.id,box:new THREE.Box3(new THREE.Vector3(b.minX,b.minY??0,b.minZ),new THREE.Vector3(b.maxX,b.maxY??3.4,b.maxZ))})));
   const cameraColliderBoxes = colliders.flatMap(c => c.cameraBounds ?? [c]).map(c => new THREE.Box3(new THREE.Vector3(c.minX - .12, c.minY ?? 0, c.minZ - .12), new THREE.Vector3(c.maxX + .12, c.maxY ?? 3.4, c.maxZ + .12)));
   const cast = new THREE.Raycaster(), floor = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hit = new THREE.Vector3();
   const cameraRay = new THREE.Ray(), cameraHit = new THREE.Vector3();
@@ -350,36 +350,43 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
     if (onActionTap(cast.ray) === true) return;
     cancelEmo('tap');
     const floorHit = cast.ray.intersectPlane(floor, hit), groundDistance = floorHit ? camera.position.distanceTo(floorHit) : Infinity;
-    let nearest = null, nearestDistance = Math.min(groundDistance, 24);
-    for (let i = 0; i < colliderBoxes.length; i++) {
-      const p = cast.ray.intersectBox(colliderBoxes[i], cameraHit);
-      if (p && camera.position.distanceTo(p) < nearestDistance) { nearest = colliders[i]; nearestDistance = camera.position.distanceTo(p); }
+    let obscured = false;
+    for (const {box,machineId} of tapColliders) {
+      if(machineId!==undefined&&!isEquipmentVisible(machineId))continue;
+      // A clipped back face behind the camera must not swallow visible floor taps.
+      if(box.containsPoint(cast.ray.origin))continue;
+      const p = cast.ray.intersectBox(box, cameraHit);
+      if(p&&camera.position.distanceTo(p)<camera.near+.02)continue;
+      if (p && camera.position.distanceTo(p) < groundDistance - .02) { obscured = true; break; }
     }
-    if (nearest) { if (nearest.equipment) onInspect(nearest.equipment); return; }
+    // Only the red EMO area opens equipment actions; broad cabinet boxes never do.
+    if (obscured) { onToast('통로 바닥을 누르면 걸어가요'); return; }
     if (!floorHit || Math.abs(floorHit.x) >= 58.8 || Math.abs(floorHit.z) >= 88.5) return;
-    const destination = { x: floorHit.x, z: floorHit.z }, route = findWalkPath(state.position, destination);
-    if (!route) { onToast('장비를 피해 통로 바닥을 눌러주세요'); return; }
+    const resolved = resolveWalkTap(state.position,{ x: floorHit.x, z: floorHit.z });
+    if (!resolved) { onToast('장비를 피해 통로 바닥을 눌러주세요'); return; }
+    const {destination,route}=resolved;$('tool-card').classList.add('hidden');
     if (state.mode !== 'walk') setMode('walk');
     state.posture = 'stand';
     state.path = route; targetRing.position.set(destination.x, .012, destination.z); targetRing.visible = true;
   }
   canvas.addEventListener('pointerdown', e => {
-    if (state.locked || state.mode === 'overview' || state.mode === 'transfer' || state.mode === 'blast') return;
-    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY }); canvas.setPointerCapture(e.pointerId);
+    if (state.locked || state.mode === 'overview' || state.mode === 'transfer') return;
+    if(state.mode==='blast')setMode('walk');
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, startX:e.clientX, startY:e.clientY }); canvas.setPointerCapture(e.pointerId);
     if (pointers.size === 1) { dragged = 0; gestureDragged = false; pinched = false; }
     if (pointers.size === 2) { const p = [...pointers.values()]; pinchDistance = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y); pinched = true; }
   });
   canvas.addEventListener('pointermove', e => {
     const old = pointers.get(e.pointerId); if (!old || state.mode === 'overview') return;
-    const dx = e.clientX - old.x, dy = e.clientY - old.y; pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const dx = e.clientX - old.x, dy = e.clientY - old.y; pointers.set(e.pointerId, { ...old, x: e.clientX, y: e.clientY });
     if (pointers.size === 2) {
       cancelEmo('look-input');
       const p = [...pointers.values()], distance = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
       if (distance > 1 && pinchDistance > 1) state.distance = THREE.MathUtils.clamp(state.distance * pinchDistance / distance, 2, 6.8);
       pinchDistance = distance; return;
     }
-    dragged += Math.abs(dx) + Math.abs(dy);
-    if (dragged > 4) {
+    dragged = Math.max(dragged, Math.hypot(e.clientX-old.startX,e.clientY-old.startY));
+    if (dragged > (e.pointerType==='touch'?10:4)) {
       cancelEmo('look-input');
       gestureDragged = true;
       state.manualLook = true;
@@ -390,7 +397,7 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
   canvas.addEventListener('pointerup', e => {
     if (!pointers.has(e.pointerId)) return;
     pointers.delete(e.pointerId);
-    if (!pointers.size && !pinched && !gestureDragged && dragged < 6 && state.mode !== 'ride') tap(e);
+    if (!pointers.size && !pinched && !gestureDragged && dragged <= (e.pointerType==='touch'?10:4) && state.mode !== 'ride') tap(e);
   });
   canvas.addEventListener('pointercancel', e => pointers.delete(e.pointerId));
   canvas.addEventListener('wheel', e => {

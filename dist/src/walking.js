@@ -77,3 +77,15 @@ export function stepWalker(position, dx, dz) {
   }
   return result;
 }
+
+// A floor tap next to a cabinet may need a few centimetres of body clearance.
+export function resolveWalkTap(start, point) {
+  const direct=findWalkPath(start,point);if(direct)return {destination:point,route:direct};
+  if(!isBlocked(point.x,point.z,WALK_RADIUS))return null;
+  for(let radius=.05;radius<=.651;radius+=.05){
+    const candidates=Array.from({length:48},(_,i)=>({x:point.x+Math.cos(i*Math.PI/24)*radius,z:point.z+Math.sin(i*Math.PI/24)*radius}));
+    candidates.sort((a,b)=>distance(start,a)-distance(start,b));
+    for(const p of candidates){if(isBlocked(p.x,p.z,WALK_RADIUS))continue;const route=findWalkPath(start,p);if(route)return {destination:p,route};}
+  }
+  return null;
+}

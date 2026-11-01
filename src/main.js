@@ -22,6 +22,13 @@ import { createSpatialBatch } from './spatial-batch.js';
 import { createPlayActions } from './play-actions.js';
 import { createVisitorName, createVisitorBadge } from './visitor-name.js';
 import { createResidents } from './residents.js';
+import { multiplayerConfiguration, createMultiplayer } from './multiplayer.js';
+import { createSharedWorldView } from './shared-world-view.js';
+import { createRemotePeople } from './remote-people.js';
+
+const connectionConfig = await multiplayerConfiguration();
+let multiplayer = null, sharedWorld = null, remotePeople = null, realVisitorCount = 0;
+const onlineLink = connectionConfig ? { get connected(){return Boolean(multiplayer?.connected);}, command:(...args)=>multiplayer?.command(...args)??Promise.resolve({ok:false,message:'팹에 연결 중이에요'}) } : null;
 
 const $ = (id) => document.getElementById(id);
 const mobile = matchMedia('(pointer: coarse)').matches || innerWidth < 700;
@@ -81,7 +88,7 @@ function addSpatialBatch(parent, geometry, material, transforms, owners, maxDist
   spatialBatches.push(batch); parent.add(batch.mesh);
   owners?.forEach((id, i) => {
     const portId = portIds[i];
-    if (portId) { if (!originalFoupParts.has(portId)) originalFoupParts.set(portId, []); originalFoupParts.get(portId).push(() => batch.setVisible(i, false)); }
+    if (portId) { if (!originalFoupParts.has(portId)) originalFoupParts.set(portId, []); originalFoupParts.get(portId).push((visible=false) => batch.setVisible(i,visible && !destruction?.isDestroyed(id))); }
     if (id !== null && id !== undefined) equipmentVisibility.register(id, visible => batch.setVisible(i, visible && !removedOriginalFoups.has(portId)));
   });
   return batch;
@@ -399,6 +406,7 @@ function showMachine(item) {
   $('tool-card').classList.remove('hidden');
 }
 const explorer = createExplorer({ THREE, camera, scene, canvas: renderer.domElement, avatar, orbit, colliders, vehicles,
+  isEquipmentVisible: id => equipmentVisibility.isVisible(id),
   onToast: toast, onInspect: showMachine,
   onActionTap: ray => playActions?.tap(ray) || emoControls.press(ray),
   onMode(next) {
@@ -453,7 +461,7 @@ const entryCopy = {
 };
 let entryStage = '';
 function startEntry() {
-  visitorBadge.rename(createVisitorName(Math.random, residents?.state.people.map(p => p.name) ?? []));
+  if(!connectionConfig)visitorBadge.rename(createVisitorName(Math.random, residents?.state.people.map(p => p.name) ?? []));
   viewControls.closeAll();
   setRuntimeObstacles([]);
   explorer.lock(false); explorer.setMode('walk');
@@ -516,7 +524,8 @@ function motionCue(kind, position) {
   if (volume > .025) { if (kind === 'press') audio.playEmoPress(volume); else audio.playCue(kind, volume); }
 }
 const emoControls = createEmoControls({ THREE, scene, machines: layoutMachines, equipment,
-  isDestroyed: id => destruction?.isDestroyed(id) ?? false, onPress: triggerEmo });
+  isDestroyed: id => destruction?.isDestroyed(id) ?? false,
+  onPress: id => { const item=equipmentById.get(id);if(item){explorer.cancelEmo('tap');playActions?.clearPending();explorer.state.path=[];showMachine(item);} } });
 destruction = createEquipmentDestruction({ THREE, scene, machines: layoutMachines, reducedMotion,
   onVisibility(id, visible) { equipmentVisibility.setVisible(id, visible); emoControls.setDestroyed(id, !visible); },
   onBurst(id, position) { const volume = localVolume(position, 34); if (volume > .02) audio.playExplosion(volume); if (!reducedMotion && volume > .25) burstShake = .45 * volume; },
@@ -524,10 +533,24 @@ destruction = createEquipmentDestruction({ THREE, scene, machines: layoutMachine
 });
 playActions = createPlayActions({ THREE, scene, materials: M, fleet, explorer, avatar, initialPortIds,
   hideOriginal(portId) { removedOriginalFoups.add(portId); for (const hide of originalFoupParts.get(portId) ?? []) hide(); },
-  isDestroyed: id => destruction.isDestroyed(id), toast, onCue: motionCue });
-residents = createResidents({ THREE, scene, fleet, store: playActions.store, destruction, detachCargo: v => playActions.detachVehicleCargo(v),
+  showOriginal(portId) { removedOriginalFoups.delete(portId);for(const show of originalFoupParts.get(portId)??[])show(true); },
+  isDestroyed: id => destruction.isDestroyed(id), toast, onCue: motionCue, network:onlineLink });
+if(!connectionConfig)residents = createResidents({ THREE, scene, fleet, store: playActions.store, destruction, detachCargo: v => playActions.detachVehicleCargo(v),
   excludedNames: [visitorBadge.name], onCue: motionCue,
   protectedIds: () => [explorer.state.emoInteraction?.id, explorer.state.repairInteraction?.id, playActions.protectedMachineId].filter(Number.isFinite) });
+else {
+  remotePeople=createRemotePeople({THREE,scene,store:playActions.store,maxDetailed:mobile?32:48});
+  sharedWorld=createSharedWorldView({fleet,store:playActions.store,destruction,onPeople:rows=>remotePeople.synchronize(rows),onCue:motionCue,onCount:n=>{realVisitorCount=n;updateConnectionLabel();}});
+  multiplayer=createMultiplayer({config:connectionConfig,getPose:()=>({x:+explorer.state.position.x.toFixed(3),y:+explorer.state.position.y.toFixed(3),z:+explorer.state.position.z.toFixed(3),heading:+explorer.state.heading.toFixed(3),speed:+(explorer.state.speed||0).toFixed(2),posture:explorer.state.posture,hidden:entry.active}),
+    onWelcome:data=>{sharedWorld.welcome(data.id);visitorBadge.rename(data.name);},onRoster:rows=>remotePeople.setRoster(rows),onFrame:(frame,initial)=>sharedWorld.apply(frame,initial),onError:toast,
+    onStatus:status=>{updateConnectionLabel(status);if(status==='reconnecting'){playActions.resetOnline();explorer.cancelEmo('disconnect');toast('연결이 끊겨 다시 접속하고 있어요');}}
+  });
+}
+function updateConnectionLabel(status=multiplayer?.status) {
+  if(!connectionConfig)return;
+  const label=document.querySelector('.brand-sub');label.classList.add('online-count');label.textContent=status==='connected'?`함께 ${realVisitorCount}명`:status==='full'?'100명 · 입장 대기':status==='version'?'새로고침 필요':'팹 연결 중';
+  label.setAttribute('aria-label',status==='connected'?`실제 접속자 ${realVisitorCount}명`:'연결 상태');
+}
 $('oht-dismount').addEventListener('click', () => playActions.dismount());
 $('foup-drop').addEventListener('click', () => playActions.throwFoup(true));
 $('foup-throw').addEventListener('click', () => playActions.throwFoup());
@@ -545,11 +568,12 @@ function updateEmoCard() {
   $('restore-equipment').classList.toggle('hidden', count === 0);
   $('destroyed-count').textContent = `${count}대`;
 }
-function triggerEmo(id) {
+function triggerEmo(id, claimed = false) {
   if (entry.active || directory.isOpen || explorer.state.locked) return false;
   if (playActions?.state.carriedId) { toast('FOUP을 먼저 내려놓아 주세요'); return false; }
   const item = equipmentById.get(id); if (!item) return false;
   if (destruction.isDestroyed(id)) { toast(`${item.code} · 먼저 장비를 복구해 주세요`); return false; }
+  if(onlineLink&&!claimed){if(!onlineLink.connected){toast('팹에 연결 중이에요');return false;}onlineLink.command('claim',{id,kind:'emo'}).then(r=>{if(r.ok&&!triggerEmo(id,true))onlineLink.command('cancel');});return true;}
   selectedEquipment = item;
   const machine = layoutMachines.find(machine => machine.id === id);
   residents?.yieldMachine(id);
@@ -557,11 +581,13 @@ function triggerEmo(id) {
     isValid: () => !entry.active && !directory.isOpen && !destruction.isDestroyed(id),
     onPress() {
       emoControls.setPress(null);
+      if(onlineLink){onlineLink.command('explode',{id}).then(r=>{if(r.ok){explorer.focusDestruction(machine);updateEmoCard();toast(`${item.code} · EMO 작동`);}});return;}
       if (!destruction.trigger(id)) return;
       explorer.focusDestruction(machine);
       updateEmoCard(); toast(`${item.code} · EMO 작동`);
     },
     onCancel(reason) {
+      if(onlineLink)onlineLink.command('cancel');
       emoControls.setPress(null); updateEmoCard();
       if (['movement', 'tap', 'look-input', 'escape', 'mode-change'].includes(reason)) toast('EMO 누르기를 취소했어요');
     }
@@ -573,19 +599,20 @@ function triggerEmo(id) {
   return accepted;
 }
 $('tool-emo').addEventListener('click', () => { if (selectedEquipment) triggerEmo(selectedEquipment.id); });
-function triggerRepair(id) {
+function triggerRepair(id, claimed = false) {
   if (entry.active || directory.isOpen || explorer.state.locked || !destruction.isDestroyed(id)) return false;
   if (playActions?.state.carriedId) { toast('FOUP을 먼저 내려놓아 주세요'); return false; }
   const item = equipmentById.get(id), machine = layoutMachines.find(m => m.id === id);
   if (!item || !machine) return false;
+  if(onlineLink&&!claimed){if(!onlineLink.connected){toast('팹에 연결 중이에요');return false;}onlineLink.command('claim',{id,kind:'repair'}).then(r=>{if(r.ok&&!triggerRepair(id,true))onlineLink.command('cancel');});return true;}
   residents?.yieldMachine(id);
   selectedEquipment = item;
   const accepted = explorer.approachRepair(machine, {
     isValid: () => !entry.active && !directory.isOpen && destruction.isDestroyed(id),
-    onStart() { destruction.beginRepair(id); toast(`${item.code} · 뚝딱뚝딱 수리 중`); },
-    onProgress(progress) { destruction.setRepairProgress(id, progress); },
-    onComplete() { destruction.reset(id); motionCue('complete'); updateEmoCard(); toast(`${item.code} · 수리 완료!`); },
-    onCancel() { destruction.cancelRepair(id); updateEmoCard(); toast(`${item.code} · 수리를 멈췄어요`); }
+    onStart() { destruction.beginRepair(id); if(onlineLink)onlineLink.command('repair',{id}).then(r=>{if(!r.ok)explorer.cancelEmo('server');});toast(`${item.code} · 뚝딱뚝딱 수리 중`); },
+    onProgress(progress) { if(!onlineLink)destruction.setRepairProgress(id, progress); },
+    onComplete() { if(onlineLink)onlineLink.command('finish',{id}).then(r=>{if(r.ok){updateEmoCard();toast(`${item.code} · 수리 완료!`);}});else{destruction.reset(id); motionCue('complete'); updateEmoCard(); toast(`${item.code} · 수리 완료!`);} },
+    onCancel() { if(onlineLink)onlineLink.command('cancel');destruction.cancelRepair(id); updateEmoCard(); toast(`${item.code} · 수리를 멈췄어요`); }
   });
   if (accepted) { $('tool-card').classList.add('hidden'); updateEmoCard(); }
   return accepted;
@@ -714,7 +741,7 @@ function animate(now) {
   const frameMs = lastTime ? now - lastTime : 0;
   const dt = frameMs ? Math.min(frameMs / 1000, .05) : .016; lastTime = now; elapsed += dt;
   updateFrameBudget(now, frameMs);
-  fleet.step(dt);
+  if(connectionConfig)sharedWorld.update(dt);else fleet.step(dt);
   for (const v of vehicles) {
     const state = v.controller.state; v.state = state;
     v.foup.scale.setScalar(v.controller.cargoDetached || destruction.isDestroyed(state.target.machineId) && (state.parked || !state.travelling) ? 0 : 1);
@@ -725,7 +752,8 @@ function animate(now) {
     for (const belt of v.belts) { belt.position.y = (upper + bottom) / 2; belt.scale.y = Math.max(.02, upper - bottom); }
   }
   updateEntry(dt); playActions.update(dt); explorer.update(dt);
-  if (!entry.active) residents.update(dt, camera, mode === 'overview');
+  if(connectionConfig){remotePeople.update(dt,camera,mode==='overview');explorer.state.carrying=Boolean(playActions.store.carried);multiplayer.update();}
+  else if (!entry.active) residents.update(dt, camera, mode === 'overview');
   playActions.render(); visitorBadge.update(avatar, explorer.state.posture);
   const walked = lastStepPosition.distanceTo(explorer.state.position);
   if (mode === 'walk' || mode === 'tour') { if (walked < 1) stepDistance += walked; if (stepDistance > .86) { motionCue('step'); stepDistance = 0; } }
@@ -740,7 +768,7 @@ function animate(now) {
   if (nextEmoPhase !== emoPhase) {
     emoPhase = nextEmoPhase; updateEmoCard();
     if (press?.phase === 'hold') {
-      audio.playEmoPress();
+      if(onlineLink)onlineLink.command('press',{id:press.id});else audio.playEmoPress();
       toast(`${equipmentById.get(press.id)?.code ?? 'EMO'} · 꾹 누르는 중`);
     }
   }
@@ -766,7 +794,7 @@ function animate(now) {
     nextDiagnosticAt = now + 500;
     const demo = observedVehicle();
     updateSoundButton();
-    $('world').dataset.diagnostics = JSON.stringify({ ready: true, revision: 'fab-residents-17', mode, audio: audio.state, residents: residents.state, destruction: destruction.state, equipmentVisibility: equipmentVisibility.state, emoInteraction: explorer.state.emoInteraction, repairInteraction: explorer.state.repairInteraction, posture: explorer.state.posture, play: playActions.state, actionTargets: new URLSearchParams(location.search).has('qa') ? playActions.targets(camera, { width: innerWidth, height: innerHeight }) : undefined, visitorName: visitorBadge.name, controlsOpen: viewControls.isOpen, mapVisible: viewControls.mapVisible, emoButtons: layoutMachines.length, amberBays: bayLighting.bayIds.map(id => id + 1), amberLights: bayLighting.lights.length, amberLightsVisible: bayLighting.root.visible, entry: { active: entry.active, ...entry.state }, width: WIDTH, length: LENGTH, ceiling: HEIGHT,
+    $('world').dataset.diagnostics = JSON.stringify({ ready: true, revision: 'fab-online-18', mode, audio: audio.state, multiplayer: multiplayer ? {status:multiplayer.status,id:multiplayer.id,count:realVisitorCount,capacity:100} : null, residents: residents?.state ?? {total:30,simulated:true,actions:sharedWorld.totals,people:remotePeople.state.people.filter(p=>p.role!=='visitor')}, remotePlayers:remotePeople?.state.people.filter(p=>p.role==='visitor'), destruction: destruction.state, equipmentVisibility: equipmentVisibility.state, emoInteraction: explorer.state.emoInteraction, repairInteraction: explorer.state.repairInteraction, posture: explorer.state.posture, play: playActions.state, actionTargets: new URLSearchParams(location.search).has('qa') ? playActions.targets(camera, { width: innerWidth, height: innerHeight }) : undefined, visitorName: visitorBadge.name, controlsOpen: viewControls.isOpen, mapVisible: viewControls.mapVisible, emoButtons: layoutMachines.length, amberBays: bayLighting.bayIds.map(id => id + 1), amberLights: bayLighting.lights.length, amberLightsVisible: bayLighting.root.visible, entry: { active: entry.active, ...entry.state }, width: WIDTH, length: LENGTH, ceiling: HEIGHT,
       equipmentCount: equipment.length, equipmentFamilies: families.length, uniqueEquipmentCodes: new Set(equipment.map(e => e.code)).size, selectedEquipment: selectedEquipment?.code ?? null,
       machines: machinePositions.length, bays: bays.length, toolsPerRow: 10, loadports: layoutMachines.length * 3,
       frontAisle: AISLE, rearAisle: SERVICE_AISLE, sideGap: SIDE_GAP, vehicles: vehicles.length, junctions: network.junctions.length,

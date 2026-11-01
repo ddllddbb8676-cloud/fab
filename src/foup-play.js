@@ -18,14 +18,19 @@ export function supportHeight(x, z) {
 }
 
 // A FOUP keeps the same identity across port, hands, throw and ground states.
-export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () => {}, isDestroyed = () => false, onImpact = () => {} }) {
+export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () => {}, showOriginal = () => {}, isDestroyed = () => false, onImpact = () => {} }) {
   const byPort = new Map(ports.map(p => [p.id, p])), records = new Map(), occupancy = new Map();
   const hands = new Map();
-  for (const id of initialPortIds) {
+  function reset() {
+    records.clear();occupancy.clear();hands.clear();
+    for (const id of initialPortIds) {
     const p = byPort.get(id); if (!p) continue;
     const record = { id: `port:${id}`, mode: 'port', portId: id, original: true, x: p.x, y: SEATED_FOUP_Y, z: p.z, yaw: p.sign === 1 ? Math.PI : 0 };
     records.set(record.id, record); occupancy.set(id, record.id);
+    showOriginal(id);
+    }
   }
+  reset();
   function atPort(id) { const p = byPort.get(id); return p && !isDestroyed(p.machineId) ? records.get(occupancy.get(id)) ?? null : null; }
   function adopt(id, pose, portId = null) {
     if (records.has(id)) return records.get(id);
@@ -70,7 +75,22 @@ export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () 
       }
     }
   }
-  return { records, atPort, adopt, pickup, place, launch, step, occupied: id => occupancy.has(id),
+  function synchronize(rows, selfId) {
+    // Clear all previous slots first: two records can exchange ports in one frame.
+    for(const incoming of rows){const old=records.get(incoming.id);if(old?.original)hideOriginal(old.portId);if(old?.portId)occupancy.delete(old.portId);if(old?.owner)hands.delete(old.owner);}
+    for(const incoming of rows) {
+      let r=records.get(incoming.id);
+      const owner=incoming.owner===selfId?'player':incoming.owner;
+      const next={...incoming,owner,original:false};
+      if(r && incoming.mode==='flying') {const {x,y,z,yaw}=r;Object.assign(r,next,{x,y,z,yaw,goal:next});}
+      else {r=Object.assign(r??{},next);delete r.goal;}
+      records.set(r.id,r);
+      if(r.portId)occupancy.set(r.portId,r.id);
+      if(r.mode==='carried'&&owner)hands.set(owner,r.id);
+    }
+  }
+  function interpolate(dt) {const f=1-Math.exp(-dt*16);for(const r of records.values())if(r.goal){for(const k of ['x','y','z'])r[k]+=(r.goal[k]-r[k])*f;r.yaw=r.goal.yaw;}}
+  return { records, atPort, adopt, pickup, place, launch, step, reset, synchronize, interpolate, occupied: id => occupancy.has(id),
     getCarried: owner => records.get(hands.get(owner)) ?? null,
     get carried() { return records.get(hands.get('player')) ?? null; },
     get state() { return { carriedId: hands.get('player') ?? null, managed: records.size, moved: [...records.values()].filter(r => !r.original).map(r => ({ id: r.id, mode: r.mode, owner: r.owner, portId: r.portId, x: r.x, y: r.y, z: r.z })) }; }
