@@ -1,4 +1,4 @@
-import { bays, CARRIED_FOUP_Y, SEATED_FOUP_Y } from './layout.js';
+import { bays, ports, CARRIED_FOUP_Y, SEATED_FOUP_Y } from './layout.js';
 import { network, findRoute, sampleRoute, joinRoutes } from './rail-network.js';
 
 const smooth = t => t * t * (3 - 2 * t);
@@ -13,6 +13,7 @@ export const reservedPortIds = new Set(assignments.flatMap(({ bay, lane }) => [h
 const labels = ['로드포트 정차', 'FOUP 내려놓기', 'FOUP 분리', '빈 호이스트 회수', '빈 OHT 순환', '빈 호이스트 하강', 'FOUP 체결', 'FOUP 들어올리기', '다른 BAY로 운반'];
 const durations = [1.5, 4, .8, 3.5, Infinity, 3.5, .8, 4, Infinity];
 const circuitCache = new Map(), tripCache = new Map();
+const portsById = new Map(ports.map(port => [port.id, port]));
 function trip(a, b) {
   const k = `${a.id}>${b.id}`;
   if (!tripCache.has(k)) tripCache.set(k, findRoute(a.id, b.id));
@@ -31,12 +32,12 @@ function makeState(v) {
   const travelling = v.phase === 4 || v.phase === 8;
   const car = travelling ? sampleRoute(v.route, v.distance) : poseAtPort(v.currentPort);
   const f = Math.min(1, v.time / (durations[v.phase] || 1)), e = smooth(f);
-  const lowered = v.phase === 1 || v.phase === 5 ? e : v.phase === 2 || v.phase === 6 ? 1 : v.phase === 3 || v.phase === 7 ? 1 - e : 0;
+  const lowered = v.passenger ? 0 : v.phase === 1 || v.phase === 5 ? e : v.phase === 2 || v.phase === 6 ? 1 : v.phase === 3 || v.phase === 7 ? 1 - e : 0;
   const gripperY = CARRIED_FOUP_Y + .265 - lowered * (CARRIED_FOUP_Y - SEATED_FOUP_Y);
   const parked = v.phase >= 2 && v.phase <= 6;
   const foup = parked ? { x: v.currentPort.x, y: SEATED_FOUP_Y, z: v.currentPort.z, yaw: v.currentPort.sign === 1 ? Math.PI : 0 } :
     { x: car.x, y: gripperY - .265, z: car.z, yaw: car.yaw + Math.PI / 2 };
-  return { car, foup, gripperY, parked, lowered, phase: v.phase, label: v.waiting ? '교차로 양보' : labels[v.phase],
+  return { car, foup, gripperY, parked, lowered, phase: v.phase, hasCargo: !v.cargoDetached, passenger: Boolean(v.passenger), label: v.passenger ? '함께 FAB 산책' : v.waiting ? '교차로 양보' : labels[v.phase],
     travelling, waiting: v.waiting, target: v.currentPort, origin: v.currentPort, destination: v.destinationPort,
     delivered: v.delivered, routeDistance: v.distance, routeLength: v.route?.length ?? 0 };
 }
@@ -67,6 +68,7 @@ export function createFleet(count = DEFAULT_FLEET_SIZE) {
     releasePassed(v);
   }
   function advance(v, dt) {
+    if (v.boardingHold) { v.state = makeState(v); return; }
     releasePassed(v); v.waiting = false;
     if (v.phase !== 4 && v.phase !== 8) {
       v.time += dt;
@@ -89,7 +91,12 @@ export function createFleet(count = DEFAULT_FLEET_SIZE) {
     v.waiting = candidateDistance < nextDistance - 1e-7;
     v.distance = candidateDistance;
     if (v.distance >= v.route.length - 1e-8) {
-      if (v.phase === 4) beginPhase(v, 5);
+      if (v.passenger || v.cargoDetached) {
+        v.currentPort = portsById.get(v.route.to);
+        v.tourIndex = ((v.tourIndex ?? v.currentPort.bayId) + 1) % bays.length;
+        v.destinationPort = bays[v.tourIndex].target;
+        beginPhase(v, 8);
+      } else if (v.phase === 4) beginPhase(v, 5);
       else {
         const prior = v.currentPort; v.currentPort = v.destinationPort; v.destinationPort = prior; v.delivered++;
         beginPhase(v, 0);
@@ -99,6 +106,15 @@ export function createFleet(count = DEFAULT_FLEET_SIZE) {
   }
   return {
     vehicles, junctionLocks,
+    holdVehicle(id, held = true) { const v = vehicles.find(v => v.id === id); if (!v) return false; v.boardingHold = held; return true; },
+    detachCargo(id) { const v = vehicles.find(v => v.id === id); if (!v || v.cargoDetached) return false; v.cargoDetached = true; v.state = makeState(v); return true; },
+    boardPassenger(id) {
+      const v = vehicles.find(v => v.id === id); if (!v) return false;
+      v.passenger = true; v.boardingHold = false;
+      if (![4, 8].includes(v.phase)) beginPhase(v, 8);
+      v.state = makeState(v); return true;
+    },
+    leavePassenger(id) { const v = vehicles.find(v => v.id === id); if (!v) return false; v.passenger = false; v.boardingHold = false; v.state = makeState(v); return true; },
     get elapsed() { return elapsed; },
     step(dt) {
       if (!Number.isFinite(dt) || dt < 0) return;

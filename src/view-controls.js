@@ -22,8 +22,7 @@ export function createViewControls({ onLock = () => {}, onOpen = () => {} } = {}
   $('controls-close').addEventListener('click', () => show(null));
   $('map-toggle').addEventListener('click', () => show('map'));
   $('map-close').addEventListener('click', () => show(null));
-  // Unlock before the existing equipment/mode handlers run. Sound remains in
-  // the menu so its state is visible; choosing another feature closes the menu.
+  // Unlock before the existing equipment/mode handlers run.
   panel.addEventListener('click', event => {
     const button = event.target.closest('button');
     if (!button || ['controls-close', 'map-toggle', 'sound'].includes(button.id)) return;

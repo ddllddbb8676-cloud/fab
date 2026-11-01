@@ -171,24 +171,51 @@ export function createAvatar(THREE) {
     object.scale.y = direction.length() / baseLength; object.quaternion.setFromUnitVectors(up, direction.normalize());
   }
   let phase = 0, activity = 0, facing = 0, currentSpeed = 0, disposed = false;
-  function update(dt, { speed = 0, heading = facing, pressTarget = null, pressProgress = 0 } = {}) {
+  let seated = 0, reclining = 0, hammer = null;
+  function makeHammer() {
+    const group = new THREE.Group(); group.name = 'repair-hammer';
+    const handle = new THREE.Mesh(new THREE.CylinderGeometry(.018, .023, .19, 8), new THREE.MeshStandardMaterial({ color: '#dbac66', roughness: .65 }));
+    handle.position.y = -.1;
+    const head = new THREE.Mesh(new THREE.BoxGeometry(.16, .06, .065), new THREE.MeshStandardMaterial({ color: '#5d8991', metalness: .5, roughness: .32 }));
+    head.position.y = -.21; group.add(handle, head); rightArm.glove.add(group); return group;
+  }
+  function update(dt, { speed = 0, heading = facing, pressTarget = null, pressProgress = 0, posture = 'stand', repairTime = null, hanging = false, carrying = false, crouch = 0 } = {}) {
     if (disposed) return;
     const step = Number.isFinite(dt) ? Math.max(0, Math.min(dt, .1)) : 0;
     speed = Number.isFinite(speed) ? Math.max(0, speed) : 0; heading = Number.isFinite(heading) ? heading : facing;
     const pressing = pressTarget && [pressTarget.x, pressTarget.y, pressTarget.z].every(Number.isFinite)
       ? Math.max(0, Math.min(1, Number.isFinite(pressProgress) ? pressProgress : 0)) : 0;
+    const working = Number.isFinite(repairTime);
+    if (posture !== 'stand' || seated + reclining > .01 || working) speed = 0;
     currentSpeed += (speed - currentSpeed) * (1 - Math.exp(-step * 12)); activity += ((speed > .02 ? 1 : 0) - activity) * (1 - Math.exp(-step * 10));
-    facing += Math.atan2(Math.sin(heading - facing), Math.cos(heading - facing)) * (1 - Math.exp(-step * 12)); body.rotation.y = facing;
+    const turn = Math.atan2(Math.sin(heading - facing), Math.cos(heading - facing));
+    facing += turn * (1 - Math.exp(-step * 12));
+    const restReady = Math.abs(turn) < .07;
+    const approach = (value, goal) => { const next = value + Math.sign(goal - value) * Math.min(Math.abs(goal - value), step * 1.7); return Math.abs(goal - next) < 1e-6 ? goal : next; };
+    seated = approach(seated, posture === 'sit' && restReady ? 1 : 0);
+    reclining = approach(reclining, posture === 'lie' && restReady ? 1 : 0);
+    const sit = seated * seated * (3 - 2 * seated), lie = reclining * reclining * (3 - 2 * reclining);
+    body.rotation.order = 'YXZ'; body.rotation.set(-Math.PI / 2 * lie, facing, 0, 'YXZ');
+    const restShift = .72 * lie - .10 * sit;
+    body.position.set(Math.sin(facing) * restShift, .26 * Math.sin(Math.PI / 2 * lie), Math.cos(facing) * restShift);
+    shadow.scale.set(1, 1 + 1.9 * lie, 1); shadow.rotation.y = facing;
+    root.userData.resting = seated + reclining > .01;
+    root.userData.posture = posture;
+    root.userData.viewHeight = 1.02 - .36 * sit - .68 * lie;
+    if (working && !hammer) hammer = makeHammer();
+    if (hammer) hammer.visible = working;
     phase = (phase + step * (1.35 + Math.min(currentSpeed, 4.3) * .25) * activity) % 1;
     const wave = Math.sin(phase * Math.PI * 2), stride = Math.min(.065, .025 + currentSpeed * .010) * activity, bob = -Math.abs(wave) * .006 * activity;
-    upper.position.set(wave * .002 * activity, bob, 0); upper.rotation.z = wave * .003 * activity;
+    const duck = Math.max(0, Math.min(1, crouch)) * .16;
+    upper.position.set(wave * .002 * activity, bob - .37 * sit - duck, 0); upper.rotation.z = wave * .003 * activity;
+    upper.rotation.x = working ? .035 + .025 * Math.sin(repairTime * 15) : 0;
     for (const leg of legs) {
       const p = (phase + (leg.side === 1 ? .5 : 0)) % 1, stance = p < .6, q = stance ? p / .6 : (p - .6) / .4;
       const footZ = stride * (stance ? 1 - 2 * q : -1 + 2 * q * q * (3 - 2 * q));
       const lift = stance ? 0 : Math.sin(q * Math.PI) ** 2 * .034 * activity;
       leg.footZ = footZ;
-      leg.hip.set(leg.side * .088, .55 + bob, 0); leg.ankle.set(leg.side * .088, .105 + lift, footZ);
-      between(leg.pants, leg.ankle, leg.hip); leg.boot.position.set(leg.side * .088, lift, footZ);
+      leg.hip.set(leg.side * .088, .55 + bob - .37 * sit - duck, 0); leg.ankle.set(leg.side * .088, .105 + lift, footZ + .30 * sit);
+      between(leg.pants, leg.ankle, leg.hip); leg.boot.position.set(leg.side * .088, lift, footZ + .30 * sit);
     }
     root.userData.pressReachable = false;
     if (pressing > 0) { root.updateMatrixWorld(true); pressLocal.set(pressTarget.x, pressTarget.y, pressTarget.z); upper.worldToLocal(pressLocal); }
@@ -198,6 +225,10 @@ export function createAvatar(THREE) {
       arm.shoulder.set(arm.side * .167, .89, 0);
       arm.elbow.set(arm.side * .206, .69 + Math.abs(swing) * .04, -.010 + swing * .45);
       arm.wrist.set(arm.side * .212, .49 + Math.abs(swing) * .06, .012 + swing);
+      if (sit > 0) { arm.elbow.lerp(reachElbow.set(arm.side * .20, .71, .10), sit); arm.wrist.lerp(reachWrist.set(arm.side * .17, .63, .24), sit); }
+      if (working && arm !== rightArm) { arm.elbow.set(-.21, .72, .13); arm.wrist.set(-.17, .74, .24); }
+      if (carrying) { arm.elbow.set(arm.side * .22, .69, .16); arm.wrist.set(arm.side * .23, .83, .34); }
+      if (hanging) { arm.shoulder.y = .95; arm.elbow.set(arm.side * .24, 1.27, .035); arm.wrist.set(arm.side * .20, 1.60, .015); }
       if (arm === rightArm && pressing > 0) {
         // Lift the shoulder only for the deliberate press; ordinary walking stays relaxed.
         arm.shoulder.y += .065 * pressing;
@@ -228,6 +259,7 @@ export function createAvatar(THREE) {
   return { root, body, update, height: 1.44, radius: .295,
     dispose() {
       if (disposed) return; disposed = true; root.removeFromParent();
+      if (hammer) hammer.traverse(node => { if (node.isMesh) { node.geometry.dispose(); node.material.dispose(); } });
       if (--resources.references !== 0) return;
       for (const name of ['hood', 'face', 'torso', 'upperArm', 'forearm', 'glove', 'pants', 'boot', 'shadow']) resources[name].dispose();
       resources.material.dispose(); resources.faceMaterial.dispose(); resources.shadowMaterial.dispose(); resources.faceTexture.dispose(); resources.shadowTexture.dispose(); resourcePools.delete(THREE);

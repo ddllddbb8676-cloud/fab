@@ -5,6 +5,32 @@ export const EXPLOSION_DURATION = 2.8;
 export const MAX_EXPLOSION_VOICES = 4;
 const EXPLOSION_GAIN = 1.2;
 export const EMO_PRESS_DURATION = .16;
+export const MOTION_CUES = {
+  step: [.13, 120, .28], sit: [.26, 220, .36], lie: [.4, 160, .38], stand: [.26, 300, .32],
+  repair: [.19, 740, .62], complete: [.6, 690, .45], climb: [.2, 175, .48],
+  jump: [.32, 420, .46], grab: [.2, 1050, .58], land: [.3, 110, .7],
+  pickup: [.22, 380, .48], place: [.28, 260, .6], throw: [.34, 650, .5], bounce: [.3, 430, .6]
+};
+/** Small cloth, shoe, metal and air gestures; buffers are cached by the mixer. */
+export function createMotionSound(kind, { sampleRate = 48000 } = {}) {
+  const spec = MOTION_CUES[kind];
+  if (!spec) throw new RangeError('Unknown motion cue');
+  if (!Number.isFinite(sampleRate) || sampleRate < 8000 || sampleRate > 192000) throw new RangeError('Unsupported motion sample rate');
+  const [duration, frequency] = spec, data = new Float32Array(Math.floor(sampleRate * duration));
+  const cloth = ['sit', 'lie', 'stand', 'throw', 'jump'].includes(kind);
+  let seed = 0x7fa51, filtered = 0;
+  for (let i = 0; i < data.length; i++) {
+    const t = i / sampleRate, p = t / duration;
+    seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5;
+    const noise = (seed >>> 0) / 0x100000000 * 2 - 1;
+    filtered += .22 * (noise - filtered);
+    const f = kind === 'complete' ? frequency * (p < .33 ? 1 : p < .66 ? 1.25 : 1.5) : frequency;
+    const tone = Math.sin(2 * Math.PI * f * t) + .3 * Math.sin(2 * Math.PI * f * 1.46 * t);
+    const envelope = cloth ? Math.sin(Math.PI * p) ** 2 : Math.min(1, t / .003) * Math.exp(-p * 5) * Math.min(1, (1 - p) * 12);
+    data[i] = .65 * Math.tanh(cloth ? filtered * 3 : tone * .7 + noise * .45) * envelope;
+  }
+  return data;
+}
 
 /** A spring-loaded button clack with enough midrange for phone speakers. */
 export function createEmoPressSound({ sampleRate = 48000 } = {}) {
@@ -105,6 +131,8 @@ export function createAmbience(options = {}) {
   const Context = Object.hasOwn(options, 'AudioContext') ? options.AudioContext : (globalThis.AudioContext || globalThis.webkitAudioContext);
   let context = null, master = null, ambienceBus = null, effectsBus = null, wash = null, lowpass = null, analyser = null, waveform = null;
   let sources = [], nodes = [], desired = true, hidden = false, jet = 0, disposed = false;
+  let ambienceDesired = true, effectsDesired = true, totalCues = 0;
+  const cueBuffers = new Map(), cueCounts = {};
   let error = null, starting = false, generation = 0, appliedJet = NaN, ready = false;
   let explosionBuffer = null, pressBuffer = null, totalEffects = 0, totalPresses = 0, totalExplosions = 0, effectError = null;
   const effects = new Set();
@@ -126,7 +154,7 @@ export function createAmbience(options = {}) {
   function updateDucking() {
     if (!ambienceBus || context?.state === 'closed') return;
     const active = effects.size > 0;
-    fade(ambienceBus.gain, active ? .4 : 1, active ? .025 : .25);
+    fade(ambienceBus.gain, ambienceDesired ? (active ? .32 : 1) : 0, active ? .025 : .25);
   }
 
   function stopEffects(immediate = false) {
@@ -164,10 +192,12 @@ export function createAmbience(options = {}) {
     fade(wash.gain, .30 + .28 * jet, .12);
     fade(lowpass.frequency, 4700 + 900 * jet, .18);
     appliedJet = jet;
+    updateDucking();
   }
 
   function releaseNodes() {
     stopEffects(true); explosionBuffer = pressBuffer = null;
+    cueBuffers.clear();
     for (const source of sources) { try { source.stop(); } catch { /* already stopped */ } }
     for (const node of nodes) { try { node.disconnect(); } catch { /* disconnected */ } }
     sources = []; nodes = [];
@@ -229,7 +259,7 @@ export function createAmbience(options = {}) {
       } catch (cause) { error = String(cause?.message || cause); }
     }
     const status = disposed ? 'disposed' : !supported ? 'not-supported' : error ? 'error' : !desired ? 'muted' : hidden ? 'hidden' : enabled ? 'running' : starting ? 'starting' : context ? contextState : 'idle';
-    return { enabled: enabled && !error, desired, status, contextState, rms, peak, jet, hidden, error, activeEffects: effects.size, totalEffects, totalPresses, totalExplosions, effectError };
+    return { enabled: enabled && !error, desired, ambienceDesired, effectsDesired, ambienceEnabled: enabled && ambienceDesired, effectsEnabled: enabled && effectsDesired, ducked: effects.size > 0 && ambienceDesired, status, contextState, rms, peak, jet, hidden, error, activeEffects: effects.size, totalEffects, totalPresses, totalExplosions, totalCues, cueCounts: { ...cueCounts }, effectError };
   }
 
   async function activate() {
@@ -276,22 +306,33 @@ export function createAmbience(options = {}) {
     return snapshot();
   }
 
-  function playEffect(kind) {
-    if (disposed || !desired || hidden || !ready || error || context?.state !== 'running') return false;
+  function playEffect(kind, volume = 1) {
+    if (disposed || !desired || !effectsDesired || hidden || !ready || error || context?.state !== 'running' || volume <= 0) return false;
     pruneEffects();
-    if (effects.size >= MAX_EXPLOSION_VOICES) return false;
+    const motion = MOTION_CUES[kind];
+    if (effects.size >= MAX_EXPLOSION_VOICES) {
+      if (motion) return false;
+      const quiet = [...effects].find(e => e.motion);
+      if (!quiet) return false;
+      finishEffect(quiet, true);
+    }
     const press = kind === 'press';
-    const effect = { source: null, gain: null, endsAt: context.currentTime + (press ? EMO_PRESS_DURATION : EXPLOSION_DURATION), finished: false, stopping: false };
+    const effect = { source: null, gain: null, motion: Boolean(motion), endsAt: context.currentTime + (motion?.[0] ?? (press ? EMO_PRESS_DURATION : EXPLOSION_DURATION)), finished: false, stopping: false };
     try {
-      effect.source = context.createBufferSource(); effect.source.buffer = press ? pressBuffer : explosionBuffer;
-      effect.gain = context.createGain(); effect.gain.gain.value = press ? .58 : EXPLOSION_GAIN;
+      if (motion && !cueBuffers.has(kind)) {
+        const data = createMotionSound(kind, { sampleRate: context.sampleRate }), buffer = context.createBuffer(1, data.length, context.sampleRate);
+        buffer.getChannelData(0).set(data); cueBuffers.set(kind, buffer);
+      }
+      effect.source = context.createBufferSource(); effect.source.buffer = motion ? cueBuffers.get(kind) : press ? pressBuffer : explosionBuffer;
+      effect.gain = context.createGain(); effect.gain.gain.value = (motion?.[2] ?? (press ? .58 : EXPLOSION_GAIN)) * clamp01(volume);
       effect.source.connect(effect.gain); effect.gain.connect(effectsBus);
       effect.source.onended = () => finishEffect(effect);
       effects.add(effect);
       updateDucking();
       effect.source.start(context.currentTime);
       totalEffects++; effectError = null;
-      if (press) totalPresses++; else totalExplosions++;
+      if (motion) { totalCues++; cueCounts[kind] = (cueCounts[kind] ?? 0) + 1; }
+      else if (press) totalPresses++; else totalExplosions++;
       return true;
     } catch (cause) {
       effectError = String(cause?.message || cause);
@@ -309,5 +350,8 @@ export function createAmbience(options = {}) {
     }
   }
 
-  return { activate, toggle, update, playExplosion: () => playEffect('explosion'), playEmoPress: () => playEffect('press'), dispose, get state() { return snapshot(); } };
+  async function toggleAmbience() { ambienceDesired = !ambienceDesired; updateDucking(); if (ambienceDesired) await activate(); return snapshot(); }
+  async function toggleEffects() { effectsDesired = !effectsDesired; if (!effectsDesired) stopEffects(); else await activate(); return snapshot(); }
+  return { activate, toggle, toggleAmbience, toggleEffects, update, playCue: (kind, volume) => MOTION_CUES[kind] ? playEffect(kind, volume) : false,
+    playExplosion: volume => playEffect('explosion', volume), playEmoPress: volume => playEffect('press', volume), dispose, get state() { return snapshot(); } };
 }

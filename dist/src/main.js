@@ -19,6 +19,9 @@ import { createEquipmentVisibility } from './equipment-visibility.js';
 import { createEquipmentDestruction } from './equipment-destruction.js';
 import { createEmoControls } from './emo-controls.js';
 import { createSpatialBatch } from './spatial-batch.js';
+import { createPlayActions } from './play-actions.js';
+import { createVisitorName, createVisitorBadge } from './visitor-name.js';
+import { createResidents } from './residents.js';
 
 const $ = (id) => document.getElementById(id);
 const mobile = matchMedia('(pointer: coarse)').matches || innerWidth < 700;
@@ -70,12 +73,17 @@ const cylinderGeometry = new THREE.CylinderGeometry(1, 1, 1, 16);
 const planeGeometry = new THREE.PlaneGeometry(1, 1);
 const batches = new Map();
 const equipmentVisibility = createEquipmentVisibility();
-let buildingMachineId = null;
+let buildingMachineId = null, buildingPortId = null;
+const initialPortIds = [], removedOriginalFoups = new Set(), originalFoupParts = new Map();
 const spatialBatches = [], viewFrustum = new THREE.Frustum(), viewProjection = new THREE.Matrix4();
-function addSpatialBatch(parent, geometry, material, transforms, owners, maxDistance = Infinity) {
+function addSpatialBatch(parent, geometry, material, transforms, owners, maxDistance = Infinity, portIds = []) {
   const batch = createSpatialBatch(THREE, { geometry, material, transforms, owners, maxDistance });
   spatialBatches.push(batch); parent.add(batch.mesh);
-  owners?.forEach((id, i) => { if (id !== null && id !== undefined) equipmentVisibility.register(id, visible => batch.setVisible(i, visible)); });
+  owners?.forEach((id, i) => {
+    const portId = portIds[i];
+    if (portId) { if (!originalFoupParts.has(portId)) originalFoupParts.set(portId, []); originalFoupParts.get(portId).push(() => batch.setVisible(i, false)); }
+    if (id !== null && id !== undefined) equipmentVisibility.register(id, visible => batch.setVisible(i, visible && !removedOriginalFoups.has(portId)));
+  });
   return batch;
 }
 const dummy = new THREE.Object3D();
@@ -84,10 +92,11 @@ function solid(geometry, material, x, y, z, sx, sy, sz, rotationY = 0) {
   const longest = Math.max(Math.abs(sx), Math.abs(sy), Math.abs(sz)), shortest = Math.min(Math.abs(sx), Math.abs(sy), Math.abs(sz));
   const detail = buildingMachineId !== null && (longest <= .7 || (shortest < .06 && longest < 3.6));
   const key = geometry.uuid + material.uuid + (detail ? ':detail' : ':body');
-  if (!batches.has(key)) batches.set(key, { geometry, material, transforms: [], owners: [], maxDistance: detail ? 55 : Infinity });
+  if (!batches.has(key)) batches.set(key, { geometry, material, transforms: [], owners: [], portIds: [], maxDistance: detail ? 55 : Infinity });
   dummy.position.set(x, y, z); dummy.rotation.set(0, rotationY, 0); dummy.scale.set(sx, sy, sz); dummy.updateMatrix();
   batches.get(key).transforms.push(dummy.matrix.clone());
   batches.get(key).owners.push(buildingMachineId);
+  batches.get(key).portIds.push(buildingPortId);
 }
 const box = (material, x, y, z, sx, sy, sz, ry = 0) => solid(boxGeometry, material, x, y, z, sx, sy, sz, ry);
 const cyl = (material, x, y, z, r, h) => solid(cylinderGeometry, material, x, y, z, r, h, r);
@@ -224,7 +233,10 @@ function machine(layout, family) {
     const port = layout.ports[j], lx = port.x;
     box(M.edge, lx, 1.43, port.z, .71, .065, .66);
     localBox(x, z, s, M.black, -1.23 + j * 1.02, 1.76, 2.4, .57, .64, .035);
-    if (!reservedPortIds.has(port.id) && (index + j) % 4 !== 0) staticFoup(lx, SEATED_FOUP_Y, port.z, s);
+    if (!reservedPortIds.has(port.id) && (index + j) % 4 !== 0) {
+      buildingPortId = port.id; initialPortIds.push(port.id);
+      staticFoup(lx, SEATED_FOUP_Y, port.z, s); buildingPortId = null;
+    }
   }
   localBox(x, z, s, M.edge, 2.12, 1.61, 2.57, .065, .8, .13);
   const monitor = mesh(scene, planeGeometry, screenMat, x + s * 2.12 * TOOL_SCALE_X, 1.91, z + s * 2.66, .56, .46, 1); monitor.rotation.y = s === 1 ? 0 : Math.PI;
@@ -340,8 +352,8 @@ for (const batch of movingBatches.values()) {
 
 // Static geometry is instanced by material so the huge hall stays lightweight.
 let staticInstances = 0;
-for (const { geometry, material, transforms, owners, maxDistance } of batches.values()) {
-  addSpatialBatch(scene, geometry, material, transforms, owners, maxDistance); staticInstances += transforms.length;
+for (const { geometry, material, transforms, owners, maxDistance, portIds } of batches.values()) {
+  addSpatialBatch(scene, geometry, material, transforms, owners, maxDistance, portIds); staticInstances += transforms.length;
 }
 // Batch repeated roof lights, screens, labels and contact shadows as well.
 function consolidate(parent) {
@@ -371,7 +383,8 @@ colliders.push(...AIR_SHOWER.bounds.map(b => ({ ...b, maxY: 3.15 })));
 colliders.push({ minX: -2.02, maxX: 2.02, minZ: 82.2, maxZ: 88.92, minY: 3.07, maxY: 3.23 },
   { minX: -2.58, maxX: 2.58, minZ: 82.02, maxZ: 82.38, minY: 2.65, maxY: 3.23 });
 const entry = createEntrySequence({ reducedMotion });
-let mode = 'walk', elapsed = 0, lastTime = 0, currentZone = '', toastTimer, selectedEquipment = null;
+let mode = 'walk', elapsed = 0, lastTime = 0, currentZone = '', toastTimer, selectedEquipment = null, playActions = null;
+const visitorBadge = createVisitorBadge(THREE, scene, createVisitorName());
 function toast(text) { $('zone-toast').textContent = text; $('zone-toast').classList.add('visible'); clearTimeout(toastTimer); toastTimer = setTimeout(() => $('zone-toast').classList.remove('visible'), 3200); }
 function showMachine(item) {
   selectedEquipment = item;
@@ -387,7 +400,7 @@ function showMachine(item) {
 }
 const explorer = createExplorer({ THREE, camera, scene, canvas: renderer.domElement, avatar, orbit, colliders, vehicles,
   onToast: toast, onInspect: showMachine,
-  onActionTap: ray => emoControls.press(ray),
+  onActionTap: ray => playActions?.tap(ray) || emoControls.press(ray),
   onMode(next) {
     mode = next; document.body.classList.add('exploring');
     document.body.dataset.viewMode = next;
@@ -409,7 +422,10 @@ const explorer = createExplorer({ THREE, camera, scene, canvas: renderer.domElem
 });
 const directory = createEquipmentDirectory({ equipment, families,
   onToggle(open) { explorer.lock(open); if (open) { $('help').classList.add('hidden'); $('tool-card').classList.add('hidden'); } },
-  onSelect(item) { explorer.focusEquipment(layoutMachines.find(m => m.id === item.id)); showMachine(item); }
+  onSelect(item, { repair = false } = {}) {
+    if (repair) { triggerRepair(item.id); return; }
+    explorer.focusEquipment(layoutMachines.find(m => m.id === item.id)); showMachine(item);
+  }
 });
 $('equipment-list').addEventListener('click', () => { if (!entry.active) directory.open(); });
 for (const id of ['tour', 'walk', 'ride', 'overview']) $(id).addEventListener('click', () => explorer.setMode(id));
@@ -426,7 +442,7 @@ const viewControls = createViewControls({
 });
 document.addEventListener('visibilitychange', () => { lastTime = 0; });
 
-const entryUi = [...document.querySelectorAll('#controls-toggle,#controls-panel,#map-panel,.view-label')];
+const entryUi = [...document.querySelectorAll('#controls-toggle,#controls-panel,#map-panel,.view-label,#posture-controls')];
 const entryCopy = {
   ready: ['에어샤워실에 오신 걸 환영해요.', '잠시 뒤 바람이 나옵니다.'],
   shower: ['깨끗한 바람으로 준비 중', '양옆 노즐에서 바람이 나옵니다. 잠시만 기다려주세요.'],
@@ -437,6 +453,7 @@ const entryCopy = {
 };
 let entryStage = '';
 function startEntry() {
+  visitorBadge.rename(createVisitorName(Math.random, residents?.state.people.map(p => p.name) ?? []));
   viewControls.closeAll();
   setRuntimeObstacles([]);
   explorer.lock(false); explorer.setMode('walk');
@@ -487,32 +504,55 @@ window.addEventListener('keydown', e => { if (entry.active && e.key === 'Escape'
 
 // Browsers require a user gesture; the first touch starts the intended ambience.
 const audio = createAmbience();
-let destruction, burstShake = 0, emoPhase = '';
+let destruction, residents, burstShake = 0, emoPhase = '', stepDistance = 0, lastHammer = -1, previousPosture = 'stand';
+const lastStepPosition = explorer.state.position.clone();
+function localVolume(position, range = 22) {
+  if (!position) return 1;
+  const d = Math.hypot(position.x - explorer.state.position.x, position.z - explorer.state.position.z);
+  return d >= range ? 0 : Math.min(1, (1 - d / range) ** 2 * 1.3);
+}
+function motionCue(kind, position) {
+  const volume = localVolume(position);
+  if (volume > .025) { if (kind === 'press') audio.playEmoPress(volume); else audio.playCue(kind, volume); }
+}
 const emoControls = createEmoControls({ THREE, scene, machines: layoutMachines, equipment,
   isDestroyed: id => destruction?.isDestroyed(id) ?? false, onPress: triggerEmo });
 destruction = createEquipmentDestruction({ THREE, scene, machines: layoutMachines, reducedMotion,
   onVisibility(id, visible) { equipmentVisibility.setVisible(id, visible); emoControls.setDestroyed(id, !visible); },
-  onBurst() { audio.playExplosion(); if (!reducedMotion) burstShake = .45; },
+  onBurst(id, position) { const volume = localVolume(position, 34); if (volume > .02) audio.playExplosion(volume); if (!reducedMotion && volume > .25) burstShake = .45 * volume; },
   onChange() { updateEmoCard(); }
 });
+playActions = createPlayActions({ THREE, scene, materials: M, fleet, explorer, avatar, initialPortIds,
+  hideOriginal(portId) { removedOriginalFoups.add(portId); for (const hide of originalFoupParts.get(portId) ?? []) hide(); },
+  isDestroyed: id => destruction.isDestroyed(id), toast, onCue: motionCue });
+residents = createResidents({ THREE, scene, fleet, store: playActions.store, destruction, detachCargo: v => playActions.detachVehicleCargo(v),
+  excludedNames: [visitorBadge.name], onCue: motionCue,
+  protectedIds: () => [explorer.state.emoInteraction?.id, explorer.state.repairInteraction?.id, playActions.protectedMachineId].filter(Number.isFinite) });
+$('oht-dismount').addEventListener('click', () => playActions.dismount());
+$('foup-drop').addEventListener('click', () => playActions.throwFoup(true));
+$('foup-throw').addEventListener('click', () => playActions.throwFoup());
 function updateEmoCard() {
   if (!destruction) return;
   const id = selectedEquipment?.id, damaged = id !== undefined && destruction.isDestroyed(id);
-  const busy = explorer.state.emoInteraction !== null && explorer.state.emoInteraction !== undefined;
+  const busy = Boolean(explorer.state.emoInteraction || explorer.state.repairInteraction);
   $('tool-emo').disabled = id === undefined || damaged || busy;
   $('tool-emo').setAttribute('aria-label', id === undefined ? 'EMO 누르기' : `${selectedEquipment.code} EMO 누르기`);
   $('tool-emo').querySelector('strong').textContent = damaged ? '파손된 장비' : busy ? '캐릭터가 누르러 가는 중' : 'EMO 누르기';
   $('tool-repair').classList.toggle('hidden', !damaged);
+  $('tool-repair').disabled = busy;
+  $('tool-repair').textContent = explorer.state.repairInteraction?.id === id ? '열심히 수리하는 중…' : '이 장비 수리하기 🔧';
   const count = destruction.state.destroyedIds.length;
   $('restore-equipment').classList.toggle('hidden', count === 0);
   $('destroyed-count').textContent = `${count}대`;
 }
 function triggerEmo(id) {
   if (entry.active || directory.isOpen || explorer.state.locked) return false;
+  if (playActions?.state.carriedId) { toast('FOUP을 먼저 내려놓아 주세요'); return false; }
   const item = equipmentById.get(id); if (!item) return false;
   if (destruction.isDestroyed(id)) { toast(`${item.code} · 먼저 장비를 복구해 주세요`); return false; }
   selectedEquipment = item;
   const machine = layoutMachines.find(machine => machine.id === id);
+  residents?.yieldMachine(id);
   const accepted = explorer.approachEmo(machine, {
     isValid: () => !entry.active && !directory.isOpen && !destruction.isDestroyed(id),
     onPress() {
@@ -533,35 +573,49 @@ function triggerEmo(id) {
   return accepted;
 }
 $('tool-emo').addEventListener('click', () => { if (selectedEquipment) triggerEmo(selectedEquipment.id); });
-$('tool-repair').addEventListener('click', () => {
-  if (!selectedEquipment) return;
-  explorer.cancelEmo('repair');
-  destruction.reset(selectedEquipment.id); updateEmoCard(); toast(`${selectedEquipment.code} · 복구 완료`);
-});
-$('restore-equipment').addEventListener('click', () => {
-  explorer.cancelEmo('repair');
-  destruction.resetAll(); if (mode === 'blast') explorer.setMode('walk'); updateEmoCard(); toast('모든 장비를 복구했어요');
-});
+function triggerRepair(id) {
+  if (entry.active || directory.isOpen || explorer.state.locked || !destruction.isDestroyed(id)) return false;
+  if (playActions?.state.carriedId) { toast('FOUP을 먼저 내려놓아 주세요'); return false; }
+  const item = equipmentById.get(id), machine = layoutMachines.find(m => m.id === id);
+  if (!item || !machine) return false;
+  residents?.yieldMachine(id);
+  selectedEquipment = item;
+  const accepted = explorer.approachRepair(machine, {
+    isValid: () => !entry.active && !directory.isOpen && destruction.isDestroyed(id),
+    onStart() { destruction.beginRepair(id); toast(`${item.code} · 뚝딱뚝딱 수리 중`); },
+    onProgress(progress) { destruction.setRepairProgress(id, progress); },
+    onComplete() { destruction.reset(id); motionCue('complete'); updateEmoCard(); toast(`${item.code} · 수리 완료!`); },
+    onCancel() { destruction.cancelRepair(id); updateEmoCard(); toast(`${item.code} · 수리를 멈췄어요`); }
+  });
+  if (accepted) { $('tool-card').classList.add('hidden'); updateEmoCard(); }
+  return accepted;
+}
+$('tool-repair').addEventListener('click', () => { if (selectedEquipment) triggerRepair(selectedEquipment.id); });
+$('restore-equipment').addEventListener('click', () => directory.open({ ids: destruction.state.destroyedIds }));
+for (const posture of ['sit', 'lie']) $(`posture-${posture}`).addEventListener('click', () => explorer.setPosture(explorer.state.posture === posture ? 'stand' : posture));
 updateEmoCard();
 function updateSoundButton() {
-  const s = audio.state, button = $('sound');
-  button.setAttribute('aria-pressed', String(s.enabled));
-  button.setAttribute('aria-label', s.enabled ? '공조 소리 끄기' : '공조 소리 켜기');
-  button.dataset.soundState = s.status;
-  $('sound-label').textContent = s.enabled ? '공조 켜짐' : !s.desired ? '공조 꺼짐' : s.error ? '소리 재시도' : '터치로 소리 켜기';
-  button.title = s.enabled ? '공조 소리 끄기' : '화면을 터치하면 공조 소리가 시작됩니다';
+  const s = audio.state;
+  for (const [id, desired, label, full] of [['sound',s.ambienceDesired,'공조음','공조 소리'],['effects-sound',s.effectsDesired,'효과음','효과음']]) {
+    const button = $(id); button.setAttribute('aria-pressed',String(desired));
+    button.setAttribute('aria-label',`${full} ${desired ? '끄기' : '켜기'}`);
+    button.dataset.soundState = desired ? s.status : 'muted';
+    $(`${id}-label`).textContent = `${label}${desired ? '' : ' ×'}`;
+    button.title = `${full} ${desired ? '끄기' : '켜기'}`;
+  }
 }
 async function activateSound(event) {
-  if (!event.isTrusted || event.target.closest?.('#sound')) return;
+  if (!event.isTrusted || event.target.closest?.('#sound,#effects-sound')) return;
   await audio.activate(); updateSoundButton();
 }
 document.addEventListener('pointerdown', activateSound, { capture: true, passive: true });
 document.addEventListener('keydown', activateSound, { capture: true });
 $('sound').addEventListener('click', async () => {
-  if (audio.state.desired && !audio.state.enabled) await audio.activate();
-  else await audio.toggle();
+  await audio.toggleAmbience();
   updateSoundButton();
-  toast(audio.state.enabled ? '공조 소리를 켰어요' : audio.state.desired ? '소리를 시작하려면 다시 눌러주세요' : '공조 소리를 껐어요');
+});
+$('effects-sound').addEventListener('click', async () => {
+  await audio.toggleEffects(); updateSoundButton();
 });
 document.addEventListener('visibilitychange', () => { audio.update({ hidden: document.hidden }); updateSoundButton(); });
 updateSoundButton();
@@ -597,6 +651,23 @@ function drawMap() {
   }
 }
 function updateZone() {
+  const repair = explorer.state.repairInteraction;
+  const play = playActions.state;
+  $('oht-dismount').classList.toggle('hidden', !playActions.busy);
+  $('oht-dismount').disabled = !play.canDismount;
+  $('oht-dismount').textContent = play.phase === 'riding' ? '내리기 ↓' : play.phase === 'climb' ? '올라가는 중…' : '내려오는 중…';
+  $('foup-actions').classList.toggle('hidden', !play.carriedId || entry.active);
+  for (const id of ['walk', 'tour', 'ride', 'overview', 'equipment-list', 'restore-equipment', 'reset', 'rear-view', 'transfer-view']) $(id).disabled = playActions.busy;
+  for (const posture of ['sit', 'lie']) {
+    const active = explorer.state.posture === posture, button = $(`posture-${posture}`);
+    button.setAttribute('aria-pressed', String(active)); button.textContent = active ? '일어나기' : posture === 'sit' ? '앉기' : '눕기';
+  }
+  $('posture-controls').classList.toggle('hidden', entry.active || !['walk', 'tour'].includes(mode));
+  if (playActions.busy) { $('view-title').textContent = play.phase === 'riding' ? 'OHT · 만세 산책' : 'OHT 타기'; $('view-subtitle').textContent = play.phase === 'riding' ? '드래그로 둘러보기 · 내리기 ↓' : play.phase === 'climb' ? '장비를 딛고 점프!' : '바닥으로 착지하는 중'; currentZone = ''; return; }
+  if (repair) {
+    $('view-title').textContent = `${equipmentById.get(repair.id)?.code ?? '장비'} · 수리`;
+    $('view-subtitle').textContent = repair.phase === 'repair' ? `뚝딱뚝딱 · ${Math.round(repair.progress * 100)}%` : '장비 앞으로 걸어가는 중'; currentZone = ''; return;
+  }
   if (mode === 'overview' || mode === 'blast') return;
   let text = '중앙 통로', sub = mode === 'tour' ? '자동 산책 중' : '바닥을 눌러 이동';
   const focus = viewFocus();
@@ -610,6 +681,7 @@ function updateZone() {
   if (mode === 'ride') { const v = vehicles[explorer.state.followId]; text = 'OHT ' + String(explorer.state.followId + 1).padStart(2, '0') + ' · ' + v.state.label; sub = 'BAY ' + (v.state.origin.bayId + 1) + ' → BAY ' + (v.state.destination.bayId + 1); }
   if (mode === 'transfer') { const v = observedVehicle(); text = 'FOUP 반송 · OHT ' + String(explorer.state.transferVehicleId + 1).padStart(2, '0'); sub = 'BAY ' + String(focus.bayId + 1).padStart(2, '0') + ' · ' + (explorer.state.transferLabel || v.state.label); }
   if (text !== currentZone) { currentZone = text; $('view-title').textContent = text; $('map-location').textContent = mode === 'ride' ? 'OHT ' + String(explorer.state.followId + 1).padStart(2, '0') : text.split(' · ')[0]; }
+  if (explorer.state.posture !== 'stand') sub = explorer.state.posture === 'sit' ? '앉아서 쉬는 중' : '누워서 쉬는 중';
   if ($('view-subtitle').textContent !== sub) $('view-subtitle').textContent = sub;
 }
 // Static transforms are composed once. Dynamic branches still update normally.
@@ -645,14 +717,23 @@ function animate(now) {
   fleet.step(dt);
   for (const v of vehicles) {
     const state = v.controller.state; v.state = state;
-    v.foup.scale.setScalar(destruction.isDestroyed(state.target.machineId) && (state.parked || !state.travelling) ? 0 : 1);
+    v.foup.scale.setScalar(v.controller.cargoDetached || destruction.isDestroyed(state.target.machineId) && (state.parked || !state.travelling) ? 0 : 1);
     v.root.position.set(state.car.x, VEHICLE_Y, state.car.z); v.root.rotation.y = state.car.yaw;
     v.foup.position.set(state.foup.x, state.foup.y, state.foup.z); v.foup.rotation.y = state.foup.yaw;
     v.gripper.position.y = state.gripperY - VEHICLE_Y;
     const upper = .32, bottom = v.gripper.position.y + .0275;
     for (const belt of v.belts) { belt.position.y = (upper + bottom) / 2; belt.scale.y = Math.max(.02, upper - bottom); }
   }
-  updateEntry(dt); explorer.update(dt);
+  updateEntry(dt); playActions.update(dt); explorer.update(dt);
+  if (!entry.active) residents.update(dt, camera, mode === 'overview');
+  playActions.render(); visitorBadge.update(avatar, explorer.state.posture);
+  const walked = lastStepPosition.distanceTo(explorer.state.position);
+  if (mode === 'walk' || mode === 'tour') { if (walked < 1) stepDistance += walked; if (stepDistance > .86) { motionCue('step'); stepDistance = 0; } }
+  lastStepPosition.copy(explorer.state.position);
+  if (previousPosture !== explorer.state.posture) { previousPosture = explorer.state.posture; motionCue(previousPosture); }
+  const repair = explorer.state.repairInteraction;
+  const hammer = repair?.phase === 'repair' ? Math.floor(repair.progress * 5 * 15 / (Math.PI * 2)) : -1;
+  if (hammer !== lastHammer) { lastHammer = hammer; if (hammer >= 0) motionCue('repair'); }
   const press = explorer.state.emoInteraction;
   emoControls.setPress(press?.id, press?.phase === 'hold' ? Math.min(1, press.holdProgress * 6) : 0);
   const nextEmoPhase = press ? `${press.id}:${press.phase}` : '';
@@ -685,12 +766,12 @@ function animate(now) {
     nextDiagnosticAt = now + 500;
     const demo = observedVehicle();
     updateSoundButton();
-    $('world').dataset.diagnostics = JSON.stringify({ ready: true, revision: 'relaxed-avatar-quiet-ui-12', mode, audio: audio.state, destruction: destruction.state, equipmentVisibility: equipmentVisibility.state, emoInteraction: explorer.state.emoInteraction, controlsOpen: viewControls.isOpen, mapVisible: viewControls.mapVisible, emoButtons: layoutMachines.length, amberBays: bayLighting.bayIds.map(id => id + 1), amberLights: bayLighting.lights.length, amberLightsVisible: bayLighting.root.visible, entry: { active: entry.active, ...entry.state }, width: WIDTH, length: LENGTH, ceiling: HEIGHT,
+    $('world').dataset.diagnostics = JSON.stringify({ ready: true, revision: 'fab-residents-17', mode, audio: audio.state, residents: residents.state, destruction: destruction.state, equipmentVisibility: equipmentVisibility.state, emoInteraction: explorer.state.emoInteraction, repairInteraction: explorer.state.repairInteraction, posture: explorer.state.posture, play: playActions.state, actionTargets: new URLSearchParams(location.search).has('qa') ? playActions.targets(camera, { width: innerWidth, height: innerHeight }) : undefined, visitorName: visitorBadge.name, controlsOpen: viewControls.isOpen, mapVisible: viewControls.mapVisible, emoButtons: layoutMachines.length, amberBays: bayLighting.bayIds.map(id => id + 1), amberLights: bayLighting.lights.length, amberLightsVisible: bayLighting.root.visible, entry: { active: entry.active, ...entry.state }, width: WIDTH, length: LENGTH, ceiling: HEIGHT,
       equipmentCount: equipment.length, equipmentFamilies: families.length, uniqueEquipmentCodes: new Set(equipment.map(e => e.code)).size, selectedEquipment: selectedEquipment?.code ?? null,
       machines: machinePositions.length, bays: bays.length, toolsPerRow: 10, loadports: layoutMachines.length * 3,
       frontAisle: AISLE, rearAisle: SERVICE_AISLE, sideGap: SIDE_GAP, vehicles: vehicles.length, junctions: network.junctions.length,
       networkNodes: network.nodes.length, networkEdges: network.edges.length, traffic: fleet.stats, instances: staticInstances, fps: displayedFPS,
-      calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, renderPixelRatio, frameMedianMs: frameMedian, frameP95Ms: frameP95, visibleInstances: spatialBatches.reduce((n, b) => n + (b.mesh.parent.visible ? b.visibleCount : 0), 0), mirrorPass: false, position: { x: explorer.state.position.x, y: 0, z: explorer.state.position.z },
+      calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, renderPixelRatio, frameMedianMs: frameMedian, frameP95Ms: frameP95, visibleInstances: spatialBatches.reduce((n, b) => n + (b.mesh.parent.visible ? b.visibleCount : 0), 0), mirrorPass: false, position: { x: explorer.state.position.x, y: explorer.state.position.y, z: explorer.state.position.z },
       camera: { x: camera.position.x, y: camera.position.y, z: camera.position.z }, character: { visible: avatar.root.visible, height: avatar.height, speed: explorer.state.speed, heading: explorer.state.heading,
         pressReachable: avatar.root.userData.pressReachable, pressHand: avatar.root.userData.pressHandWorld },
       walkPathPoints: explorer.state.path.length, cameraDistance: explorer.state.distance, cameraYaw: explorer.state.yaw,

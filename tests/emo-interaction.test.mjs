@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { createAvatar } from '../src/avatar.js';
-import { createExplorer } from '../src/explorer.js';
+import { createExplorer, REPAIR_SECONDS } from '../src/explorer.js';
 import { getEmoApproach, planEmoApproach, emoPressCameraFrame, EMO_HOLD_SECONDS } from '../src/emo-interaction.js';
 import { getEmoOccluders } from '../src/emo-controls.js';
 import { machines, bays, isBlocked } from '../src/layout.js';
@@ -45,6 +45,38 @@ function advanceTo(h, phase) {
   for (let i = 0; i < 900 && h.explorer.state.emoInteraction?.phase !== phase; i++) h.explorer.update(1 / 60);
   assert.equal(h.explorer.state.emoInteraction?.phase, phase);
 }
+
+test('repair walks to one machine, works for five seconds and finishes exactly once', () => {
+  for (const sign of [1, -1]) {
+    const h = setup({ sign });
+    try {
+      let starts = 0, completed = 0, frames = 0, progress = 0;
+      h.explorer.approachRepair(h.machine, { onStart: () => starts++, onProgress: p => { assert.ok(p >= progress); progress = p; frames++; }, onComplete: () => completed++ });
+      assert.equal(h.explorer.state.emoInteraction, null);
+      assert.equal(completed, 0);
+      for (let i = 0; i < 720; i++) h.explorer.update(1 / 60);
+      assert.equal(starts, 1); assert.equal(completed, 1); assert.ok(progress >= 1 - 1e-8);
+      assert.ok(frames >= REPAIR_SECONDS * 60);
+      assert.equal(h.explorer.state.repairInteraction, null);
+      assert.equal(h.avatar.root.getObjectByName('repair-hammer').visible, false);
+    } finally { h.dispose(); }
+  }
+});
+
+test('resting or changing views cancels repair without a late completion', () => {
+  for (const action of [h => h.explorer.setPosture('sit'), h => h.key('Escape'), h => h.explorer.setMode('tour'), h => h.hide()]) {
+    const h = setup();
+    try {
+      let completed = 0, cancelled = 0;
+      h.explorer.approachRepair(h.machine, { onComplete: () => completed++, onCancel: () => cancelled++ });
+      for (let i = 0; i < 300 && h.explorer.state.repairInteraction?.phase !== 'repair'; i++) h.explorer.update(1 / 60);
+      assert.equal(h.explorer.state.repairInteraction?.phase, 'repair');
+      action(h);
+      for (let i = 0; i < 600; i++) h.explorer.update(1 / 60);
+      assert.equal(completed, 0); assert.equal(cancelled, 1);
+    } finally { h.dispose(); }
+  }
+});
 
 test('every EMO has a clear real-avatar stance and a walkable front-aisle approach', () => {
   assert.equal(machines.length, 360);

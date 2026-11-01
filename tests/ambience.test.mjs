@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createAmbience, createFanNoise, createExplosionSound, createEmoPressSound, EMO_PRESS_DURATION, EXPLOSION_DURATION, MAX_EXPLOSION_VOICES } from '../src/ambience.js';
+import { MOTION_CUES, createMotionSound } from '../src/ambience.js';
 
 class Parameter {
   constructor() { this.value = 0; }
@@ -31,6 +32,29 @@ function fakeContextClass() {
     async close() { this.closeCalls++; this.state = 'closed'; }
   };
 }
+
+test('independent sound switches persist through gestures, with HVAC ducking and recovery',async()=>{
+  const Context=fakeContextClass(),audio=createAmbience({AudioContext:Context});
+  await audio.activate();const ctx=Context.instances[0],bus=ctx.nodes[2];
+  await audio.toggleAmbience();assert.equal(audio.state.ambienceDesired,false);assert.equal(bus.gain.value,0);
+  assert.equal(audio.playCue('repair'),true);assert.equal(audio.state.totalCues,1);assert.equal(audio.state.totalExplosions,0);
+  await audio.activate();assert.equal(audio.state.ambienceDesired,false);
+  await audio.toggleAmbience();assert.equal(bus.gain.value,.32);assert.equal(audio.state.ducked,true);
+  ctx.currentTime+=1;audio.update();assert.equal(bus.gain.value,1);
+  await audio.toggleEffects();assert.equal(audio.playExplosion(),false);assert.equal(audio.playCue('step'),false);
+  await audio.activate();assert.equal(audio.state.effectsDesired,false);assert.equal(audio.state.ambienceEnabled,true);
+  await audio.toggleEffects();assert.equal(audio.playCue('land'),true);
+  audio.update({hidden:true});assert.equal(audio.playCue('throw'),false);
+  await audio.dispose();
+});
+
+test('all motion cues are short, bounded and have silent ends at phone sample rates',()=>{
+  for(const rate of [8000,48000])for(const kind of Object.keys(MOTION_CUES)) {
+    const data=createMotionSound(kind,{sampleRate:rate});
+    assert.ok(data.length<=rate*.6);assert.equal(Math.abs(data[0]),0);assert.ok(Math.abs(data.at(-1))<.001);
+    assert.ok(data.every(v=>Number.isFinite(v)&&Math.abs(v)<=.65));assert.ok(data.some(v=>Math.abs(v)>.1),kind);
+  }
+});
 
 test('generated wash has bounded energy and a smooth loop boundary at mobile sample rates', () => {
   for (const sampleRate of [8000, 44100, 48000]) {

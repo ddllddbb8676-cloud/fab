@@ -82,6 +82,7 @@ export function createEquipmentDestruction({ THREE, scene, machines, reducedMoti
 
   function state() {
     return { destroyedIds: [...destroyed.keys()], destroyedCount: destroyed.size, activeCount: active.size,
+      repairing: [...destroyed.values()].filter(record => record.repairProgress !== undefined).map(record => ({ id: record.id, progress: record.repairProgress })),
       activeEffects: [...active].map(record => ({ id: record.id, age: record.age, stage: record.age < DESTRUCTION_LIMITS.burstSeconds ? 'burst' : record.age < DESTRUCTION_LIMITS.collapseSeconds ? 'collapse' : 'smoke' })),
       activeIds: [...active].map(record => record.id), settledCount: [...destroyed.values()].filter(record => record.settled).length,
       debrisCount: destroyed.size * templates.parts.length, partsPerMachine: templates.parts.length,
@@ -232,6 +233,37 @@ export function createEquipmentDestruction({ THREE, scene, machines, reducedMoti
     slotOwners[record.storageIndex] = null; freeSlots.push(record.storageIndex); freeSlots.sort((a, b) => b - a); updateDrawCounts();
     destroyed.delete(id); onVisibility(id, true); return true;
   }
+  function beginRepair(id, owner = 'player') {
+    const record = destroyed.get(id);
+    if (disposed || !record || record.repairProgress !== undefined || [...destroyed.values()].some(item => item.repairOwner === owner)) return false;
+    if (record.effect) finishEffect(record);
+    record.repairProgress = 0;
+    record.repairOwner = owner;
+    record.repairParts = [...record.parts].sort((a, b) => a.start.y - b.start.y);
+    markDebris(); changed(); return true;
+  }
+  function setRepairProgress(id, progress) {
+    const record = destroyed.get(id);
+    if (disposed || !record || record.repairProgress === undefined || !Number.isFinite(progress)) return false;
+    record.repairProgress = clamp(progress);
+    for (let i = 0; i < record.repairParts.length; i++) {
+      const part = record.repairParts[i], u = smooth((record.repairProgress - i / record.repairParts.length * .66) / .34);
+      rotation.copy(part.endRotation).slerp(part.startRotation, u);
+      position.copy(part.end); clampPart(position, partExtents(part.size, part.endRotation), record.machine.bounds);
+      position.lerp(part.start, u); position.y += reducedMotion ? 0 : Math.sin(u * Math.PI) * .18;
+      clampPart(position, partExtents(part.size, rotation), record.machine.bounds);
+      transform.position.copy(position); transform.quaternion.copy(rotation); transform.scale.copy(part.size); transform.updateMatrix();
+      debris[part.material].setMatrixAt(part.slot, transform.matrix);
+      color.copy(part.endColor).lerp(part.baseColor, u); debris[part.material].setColorAt(part.slot, color);
+    }
+    markDebris(); return true;
+  }
+  function cancelRepair(id) {
+    const record = destroyed.get(id);
+    if (!record || record.repairProgress === undefined) return false;
+    delete record.repairProgress; delete record.repairParts; delete record.repairOwner;
+    updateParts(record, true); markDebris(); changed(); return true;
+  }
   function resetAll() {
     if (disposed) return false;
     const hadDestroyed = destroyed.size > 0;
@@ -251,5 +283,5 @@ export function createEquipmentDestruction({ THREE, scene, machines, reducedMoti
     for (const effect of effects) for (const mesh of [effect.fire, effect.smoke, effect.sparks]) mesh.material.dispose();
     root.clear(); changed();
   }
-  return { root, trigger, update, reset, resetAll, dispose, isDestroyed: id => destroyed.has(id), get state() { return state(); } };
+  return { root, trigger, update, reset, resetAll, beginRepair, setRepairProgress, cancelRepair, dispose, isDestroyed: id => destroyed.has(id), get state() { return state(); } };
 }

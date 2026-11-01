@@ -29,6 +29,21 @@ function assertDebrisBounds(effect, list) {
   });
 }
 
+test('single-machine repair reassembles bounded pieces and leaves other damaged tools alone', () => {
+  const list = machines.slice(0, 3), { effect, visibility } = create(list);
+  try {
+    effect.trigger(0); effect.trigger(1); effect.update(6);
+    assert.equal(effect.beginRepair(0), true); assert.equal(effect.beginRepair(1), false);
+    for (let i = 0; i <= 50; i++) { effect.setRepairProgress(0, i / 50); assertDebrisBounds(effect, list); }
+    assert.equal(effect.isDestroyed(0), true, 'restoration waits for completion');
+    assert.equal(effect.reset(0), true); assert.deepEqual(effect.state.destroyedIds, [1]);
+    assert.deepEqual(visibility, [[0, false], [1, false], [0, true]]);
+    assert.equal(effect.beginRepair(1), true); effect.setRepairProgress(1, .5);
+    assert.equal(effect.cancelRepair(1), true); assert.equal(effect.isDestroyed(1), true);
+    assert.equal(effect.state.repairing.length, 0); assertDebrisBounds(effect, list);
+  } finally { effect.dispose(); }
+});
+
 test('one press destroys one unique machine and repeated presses do not replay it', () => {
   const { effect, visibility, bursts } = create();
   try {

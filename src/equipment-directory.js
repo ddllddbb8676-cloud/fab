@@ -19,6 +19,7 @@ export function filterEquipment(equipment, query = '', familyKey = '') {
 
 export function createEquipmentDirectory({ equipment, families, onSelect = () => {}, onToggle = () => {} }) {
   const items = [...equipment].sort((a, b) => a.id - b.id);
+  let allowedIds = null;
   const byId = new Map(items.map(item => [String(item.id), item]));
   const familyCounts = new Map();
   for (const item of items) familyCounts.set(item.familyKey, (familyCounts.get(item.familyKey) ?? 0) + 1);
@@ -52,22 +53,23 @@ export function createEquipmentDirectory({ equipment, families, onSelect = () =>
     const node = document.createElement('span'); node.className = className; node.textContent = text; return node;
   }
   function render() {
-    const result = filterEquipment(items, search.value, select.value);
+    const available = allowedIds ? items.filter(item => allowedIds.has(item.id)) : items;
+    const result = filterEquipment(available, search.value, select.value);
     const fragment = document.createDocumentFragment();
     for (const item of result) {
       const li = document.createElement('li'), button = document.createElement('button');
       button.type = 'button'; button.className = 'equipment-directory-row'; button.dataset.equipmentId = item.id;
       const location = `${item.fabName} · ${item.bayLabel} · ${item.rowLabel}열 ${String(item.column + 1).padStart(2, '0')}번`;
-      button.setAttribute('aria-label', `${item.code}, ${item.name}, ${location}으로 이동`);
+      button.setAttribute('aria-label', allowedIds ? `${item.code} 수리하기` : `${item.code}, ${item.name}, ${location}으로 이동`);
       const identity = span('equipment-directory-identity', '');
       identity.append(span('equipment-directory-code', item.code), span('equipment-directory-name', item.typeName));
       const detail = span('equipment-directory-detail', '');
       detail.append(span('equipment-directory-kind', item.bayPurpose ?? item.familyName), span('equipment-directory-location', location));
-      const arrow = span('equipment-directory-arrow', '↗'); arrow.setAttribute('aria-hidden', 'true');
+      const arrow = span('equipment-directory-arrow', allowedIds ? '🔧' : '↗'); arrow.setAttribute('aria-hidden', 'true');
       button.append(identity, detail, arrow); li.appendChild(button); fragment.appendChild(li);
     }
     list.replaceChildren(fragment); list.scrollTop = 0;
-    count.textContent = `${result.length.toLocaleString('ko-KR')} / ${items.length.toLocaleString('ko-KR')}대`;
+    count.textContent = `${result.length.toLocaleString('ko-KR')} / ${available.length.toLocaleString('ko-KR')}대`;
     empty.hidden = result.length !== 0; list.hidden = result.length === 0;
   }
   let previousFocus = null, announcedOpen = false;
@@ -77,8 +79,13 @@ export function createEquipmentDirectory({ equipment, families, onSelect = () =>
     if (previousFocus?.isConnected && !previousFocus.closest('[inert]')) previousFocus.focus({ preventScroll: true });
   }
   function close() { if (!dialog.open) return; dialog.close(); finishClose(); }
-  function open() {
+  function open({ ids = null } = {}) {
     if (dialog.open) return;
+    allowedIds = ids ? new Set(ids) : null;
+    dialog.querySelector('#equipment-directory-title').textContent = allowedIds ? '수리할 장비 선택' : '장비 목록';
+    dialog.querySelector('.equipment-directory-summary').textContent = allowedIds ? `고장 난 장비 ${allowedIds.size}대 · 한 대씩 수리해요` : `${items.length.toLocaleString('ko-KR')}대 · ${familyCounts.size}개 장비군`;
+    dialog.querySelector('.equipment-directory-results > span:last-child').textContent = allowedIds ? '장비를 고르면 걸어가서 수리해요 🔧' : '장비를 선택하면 앞으로 이동해요 ↗';
+    if (allowedIds) { search.value = ''; select.value = ''; }
     previousFocus = document.activeElement; render();
     announcedOpen = true; onToggle(true); dialog.showModal(); search.focus({ preventScroll: true });
   }
@@ -89,7 +96,8 @@ export function createEquipmentDirectory({ equipment, families, onSelect = () =>
     const button = event.target.closest('[data-equipment-id]');
     if (!button) return;
     const item = byId.get(button.dataset.equipmentId); if (!item) return;
-    close(); onSelect(item);
+    const repair = allowedIds !== null;
+    close(); onSelect(item, { repair });
   });
   dialog.addEventListener('click', event => {
     if (event.target !== dialog) return;
