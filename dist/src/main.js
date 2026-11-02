@@ -4,6 +4,7 @@ import {npcOutfit} from './npc-outfits.js';
 import {createWardrobeNotice,WARDROBE_NOTICE,WARDROBE_NOTICE_DURATION} from './wardrobe-notice.js';
 import {createAvatarAppearance} from './avatar-appearance.js';
 import {createWardrobe} from './wardrobe-ui.js';
+import {destructionTitle} from './destruction-titles.js';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
@@ -442,6 +443,7 @@ function updatePersonalStats(next) {
   const broken=next.brokenCount||0,repaired=next.repairedCount||0;
   if(broken===personalStats.brokenCount&&repaired===personalStats.repairedCount)return;
   personalStats.brokenCount=broken;personalStats.repairedCount=repaired;
+  if(!connectionConfig)visitorBadge.setTitle(destructionTitle(broken)?.id);
   $('personal-broken').textContent=String(broken);$('personal-repaired').textContent=String(repaired);
   $('personal-stats').setAttribute('aria-label',`내 기록: 부순 장비 ${broken}대, 고친 장비 ${repaired}대`);
 }
@@ -619,6 +621,7 @@ const nicknameUI=createNicknameUI({command:(...args)=>onlineLink.command(...args
 const nicknameModeration=createNicknameModeration({button:$('nickname-admin'),command:(...args)=>onlineLink.command(...args),onToggle:open=>explorer.lock(open||entry.active)});
 const wardrobe=createWardrobe({THREE,button:$('wardrobe-open'),command:(...args)=>onlineLink?.command(...args)??Promise.resolve({ok:false,message:'온라인 FAB에 연결해 주세요.'}),connected:()=>Boolean(onlineLink?.connected),getName:()=>visitorBadge.name,onChangeName:()=>nicknameUI.open(),onOpen:()=>{if(entry.active)return false;viewControls.closeAll();directory.close();$('help').classList.add('hidden');$('tool-card').classList.add('hidden');explorer.lock(true);},onClose:()=>explorer.lock(false)});
 function applyNickname(nickname){wardrobe.setNickname(nickname);nicknameUI.sync(nickname);}
+function applyTitles(titles){wardrobe.setTitles(titles);visitorBadge.setTitle(titles.titleId);}
 function applyWallet(wallet){const earned=chipRewardTracker.receive(wallet),delayed=Math.min(earned,destructionRewardTracker.receive(wallet));currentWallet=wallet;appearance.setOutfit(wallet.equipped,safetyState.role);wardrobe.setWallet(wallet);if(!document.hidden){if(delayed)destructionRewards.add(delayed,wallet.lastDestructionId);showChipReward(earned-delayed);}}
 if(!connectionConfig)residents = createResidents({ THREE, scene, fleet, store: playActions.store, destruction, detachCargo: v => playActions.detachVehicleCargo(v),
   getNeighbors:()=>safetyPatrols?.people??[],
@@ -628,7 +631,7 @@ else {
   remotePeople=createRemotePeople({THREE,scene,store:playActions.store,fleet,maxDetailed:mobile?32:48});
   sharedWorld=createSharedWorldView({fleet,store:playActions.store,destruction,onPeople:rows=>remotePeople.synchronize(rows),onCue:motionCue,onCount:(n,total)=>{realVisitorCount=n;totalCharacterCount=total;updateConnectionLabel();},onSelf:updateSafetyState});
   multiplayer=createMultiplayer({config:connectionConfig,getPose:()=>({x:+explorer.state.position.x.toFixed(3),y:+explorer.state.position.y.toFixed(3),z:+explorer.state.position.z.toFixed(3),heading:+explorer.state.heading.toFixed(3),speed:+(explorer.state.speed||0).toFixed(2),posture:explorer.state.posture,hidden:entry.active||nicknameUI.isOpen}),
-    onNickname:applyNickname,onWallet:applyWallet,onWelcome:data=>{chipRewardTracker.reset(data.wallet);destructionRewardTracker.reset(data.wallet);clearChipRewards();sharedWorld.welcome(data.id);leaderboard.setSelf(data.id);visitorBadge.rename(data.name);if(data.resume){finishEntry();airShower.update(entry.state);explorer.state.path=[];explorer.state.position.set(data.resume.x,0,data.resume.z);explorer.state.heading=data.resume.heading;toast('이름과 기록을 이어서 접속했어요.');}$('nickname-admin').classList.toggle('hidden',!data.privileges?.unlimitedChips);applyNickname(data.nickname);},onRoster:rows=>{remotePeople.setRoster(rows);leaderboard.setRoster(rows);const self=rows.find(row=>row[0]===multiplayer?.id);if(self)visitorBadge.rename(self[1]);},onFrame:(frame,initial)=>{sharedWorld.apply(frame,initial);leaderboard.setPeople(frame.people);leaderboard.setRanking(frame.leaderboard);},onError:toast,
+    onTitles:applyTitles,onNickname:applyNickname,onWallet:applyWallet,onWelcome:data=>{chipRewardTracker.reset(data.wallet);destructionRewardTracker.reset(data.wallet);clearChipRewards();sharedWorld.welcome(data.id);leaderboard.setSelf(data.id);visitorBadge.rename(data.name);if(data.resume){finishEntry();airShower.update(entry.state);explorer.state.path=[];explorer.state.position.set(data.resume.x,0,data.resume.z);explorer.state.heading=data.resume.heading;toast('이름과 기록을 이어서 접속했어요.');}$('nickname-admin').classList.toggle('hidden',!data.privileges?.unlimitedChips);applyNickname(data.nickname);},onRoster:rows=>{remotePeople.setRoster(rows);leaderboard.setRoster(rows);const self=rows.find(row=>row[0]===multiplayer?.id);if(self)visitorBadge.rename(self[1]);},onFrame:(frame,initial)=>{sharedWorld.apply(frame,initial);leaderboard.setPeople(frame.people);leaderboard.setRanking(frame.leaderboard);},onError:toast,
     onCatch:data=>toast(`${data.targetName}님을 잡았어요! 장비 3대를 고쳐야 합니다. (${data.caught??0} / ${SAFETY_CATCH_GOAL})${data.completed?` ${SAFETY_CATCH_GOAL}명 잡기 완료! 원래 방진복으로 돌아왔어요.`:''}`,5000),
     onStatus:status=>{updateConnectionLabel(status);wardrobe.refresh();nicknameUI.refresh();if(status==='reconnecting'){clearChipRewards();playActions.resetOnline();explorer.cancelEmo('disconnect');toast('연결이 끊겨 다시 접속하고 있어요');}}
   });
@@ -643,7 +646,7 @@ if(!connectionConfig) {
 function updateSafetyState(next) {
   if(!next)return;const previous=safetyState;
   if(connectionConfig)visitorEmote.set(next.emote,next.emoteSeq,next.emoteLeft);
-  if(connectionConfig)updatePersonalStats(next);
+  if(connectionConfig){updatePersonalStats(next);visitorBadge.setTitle(next.titleId);wardrobe.setTitleProgress(next.brokenCount,next.titleId);}
   safetyState={role:next.role||'visitor',penalty:next.penalty||0,caught:next.safetyCatchCount||0};explorer.state.penalty=safetyState.penalty;
   if(isSafety(safetyState.role)&&explorer.state.emoInteraction)explorer.cancelEmo('safety-duty');
   if(isSafety(safetyState.role)&&explorer.state.position.y<.5&&isRestArea(explorer.state.position,SAFETY_CLEARANCE)){

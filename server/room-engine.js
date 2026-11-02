@@ -15,6 +15,7 @@ import { ROOM_CAPACITY } from '../src/room-population.js';
 import {isEmote,EMOTE_SECONDS} from '../src/emotes.js';
 import {rankScores} from '../src/leaderboard.js';
 import {configuredOwnerId,hasUnlimitedChips} from './owner-privileges.js';
+import {canSelectTitle,restoreTitlePreference,destructionTitle,npcDestructionTitle,OPERATOR_TITLE} from '../src/destruction-titles.js';
 import {isRestArea,canSafetyTraverse,restAreaExit,SAFETY_CLEARANCE} from '../src/rest-area.js';
 
 const distance=(a,b)=>Math.hypot(a.x-b.x,a.z-b.z);
@@ -26,7 +27,7 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
   const fleet=createFleet(), byPort=new Map(ports.map(p=>[p.id,p]));
   let time=0, revision=0,joinOrder=0,nextSafetyAt=SAFETY_DUTY.handover,dutyColor=0,lastRanking='';
   function profile(p){return {id:p.id,name:p.name,civilianName:p.civilianName,safetyName:p.safetyName,role:p.role,brokenCount:p.brokenCount,repairedCount:p.repairedCount,penalty:p.penalty,
-    nicknameChoiceVersion:p.nicknameChoiceVersion,nicknameChoiceKind:p.nicknameChoiceKind,wallet:structuredClone(p.wallet),activeSeconds:p.activeSeconds,safetyTurns:p.safetyTurns,safetyCaughtIds:[...p.safetyCaughtIds],eligibleAfter:p.eligibleAfter,optOut:p.optOut,hasEntered:p.hasEntered,groundPosition:p.groundPosition,...(p.chipUnlimited?{chipUnlimited:true}:{})};}
+    titlePreference:p.titlePreference,nicknameChoiceVersion:p.nicknameChoiceVersion,nicknameChoiceKind:p.nicknameChoiceKind,wallet:structuredClone(p.wallet),activeSeconds:p.activeSeconds,safetyTurns:p.safetyTurns,safetyCaughtIds:[...p.safetyCaughtIds],eligibleAfter:p.eligibleAfter,optOut:p.optOut,hasEntered:p.hasEntered,groundPosition:p.groundPosition,...(p.chipUnlimited?{chipUnlimited:true}:{})};}
   function changed(p){p.lastSavedAt=time;onProfileChange(profile(p));}
   function rosterChanged(){revision++;onRosterChange();}
   function emit(kind,point) { if(events.length<100) events.push([kind,round(point.x),round(point.z)]); }
@@ -120,6 +121,7 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
     const p={id,name:role==='visitor'?civilianName:safetyName,civilianName,safetyName,role,penalty:saved?.penalty||0,safeUntil:time+12,x:0,y:0,z:78.8,heading:Math.PI,speed:0,posture:'stand',phase:'idle',time:0,hidden:true,lastSeen:time,rate:0,rateAt:time,
       activeSeconds:saved?.activeSeconds||0,safetyTurns:saved?.safetyTurns||0,safetyCaughtIds:caught,eligibleAfter:saved?.eligibleAfter||0,optOut:saved?.optOut||false,joinOrder:joinOrder++,assignAfter:time+SAFETY_DUTY.handover,hasEntered:saved?.hasEntered||false,groundPosition:saved?.groundPosition??null,lastSavedAt:time};
     p.brokenCount=saved?.brokenCount||0;p.repairedCount=saved?.repairedCount||0;
+    p.titlePreference=restoreTitlePreference(saved?.titlePreference,p.brokenCount);
     p.chipUnlimited=hasUnlimitedChips(id,ownerId);p.nicknameChoiceVersion=p.chipUnlimited?NICKNAME_CHOICE_VERSION:(saved?.nicknameChoiceVersion||0);p.nicknameChoiceKind=saved?.nicknameChoiceKind||(saved?'existing':'new');p.wallet=restoreWallet(saved||{});p.rideSeconds=0;
     if(p.groundPosition&&!isBlocked(p.groundPosition.x,p.groundPosition.z,.295))Object.assign(p,p.groundPosition);else p.groundPosition=null;
     if(isSafety(p.role)&&isRestArea(p,SAFETY_CLEARANCE)){Object.assign(p,restAreaExit(p));p.groundPosition={x:p.x,y:0,z:p.z,heading:p.heading};}
@@ -146,6 +148,11 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
       if(!p.hasEntered){p.hasEntered=true;changed(p);}
     }
     return true;
+  }
+  function titleState(id) {
+    const p=players.get(id);if(!p)return null;
+    const operator=hasUnlimitedChips(id,ownerId);
+    return {preference:p.titlePreference,brokenCount:p.brokenCount,operator,titleId:(operator?OPERATOR_TITLE:destructionTitle(p.brokenCount,p.titlePreference))?.id??''};
   }
   function nicknameState(id) {
     const p=players.get(id);if(!p)return null;
@@ -178,6 +185,12 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
     if(data.vehicleId!==undefined&&!Number.isInteger(data.vehicleId))return fail('잘못된 대상이에요');
     if(time-p.rateAt>1){p.rate=0;p.rateAt=time;} if(++p.rate>12)return fail('잠시 후 다시 눌러주세요');
     p.lastSeen=time;
+    if(kind==='title-select') {
+      if(hasUnlimitedChips(id,ownerId))return fail('이 계정은 운영자 칭호로 표시돼요.');
+      if(!canSelectTitle(data.preference,p.brokenCount))return fail('아직 획득하지 못한 칭호예요.');
+      if(p.titlePreference!==data.preference){p.titlePreference=data.preference;changed(p);}
+      return {ok:true,titles:titleState(id)};
+    }
     if(kind==='nickname-ticket-buy') {
       if(p.chipUnlimited)return fail('이 계정의 지정 닉네임은 유지됩니다.');
       if(p.nicknameChoiceVersion<NICKNAME_CHOICE_VERSION)return fail('무료 닉네임 변경 기회를 먼저 사용해 주세요.');
@@ -328,11 +341,11 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
     for(const r of store.records.values())if(!r.original){const row=foupPacket(r),key=JSON.stringify(row);if(full||foupVersions.get(r.id)!==key)foups.push(row);if(!full)foupVersions.set(r.id,key);}
     const leaderboard=ranking(),rankingKey=JSON.stringify(leaderboard),includeRanking=full||rankingKey!==lastRanking;
     if(!full)lastRanking=rankingKey;
-    return {type:'frame',v:PROTOCOL,t:round(time),rev:revision,count:players.size,...(includeRanking?{leaderboard}:{}),people:[...residents.people,...safety.people,...players.values()].map(p=>actorPacket({...p,carrying:Boolean(store.getCarried(p.id))})),
+    return {type:'frame',v:PROTOCOL,t:round(time),rev:revision,count:players.size,...(includeRanking?{leaderboard}:{}),people:[...residents.people,...safety.people,...players.values()].map(p=>actorPacket({...p,carrying:Boolean(store.getCarried(p.id)),titleId:players.has(p.id)?titleState(p.id).titleId:npcDestructionTitle(p.id,p.role)?.id??''})),
       broken:[...broken.values()].map(r=>[r.id,round(time-r.at),r.progress??null,r.owner??null]),foups,
       fleet:fleet.vehicles.map(v=>{const s=v.state;return [v.id,round(s.car.x),round(s.car.z),round(s.car.yaw),round(s.foup.x),round(s.foup.y),round(s.foup.z),round(s.foup.yaw),round(s.gripperY),s.phase,s.parked,round(s.lowered),s.target.id,s.destination.id,Boolean(v.cargoDetached),Boolean(v.passenger),Boolean(v.boardingHold),v.residentId??v.playerId??null,s.waiting,s.delivered];}),
       events:full?[]:events.splice(0),totals:residents.state.actions};
   }
   foupReady=true;
-  return {nicknameState,applyNickname,wallet:id=>players.has(id)?walletView(players.get(id)):null,join,remove,pose,command,step,snapshot,roster,ranking,equipmentState,restoreEquipment,restoreFoups,players,fleet,store,residents,safety,destruction,profile:id=>players.has(id)?profile(players.get(id)):null,get time(){return time;}};
+  return {titleState,nicknameState,applyNickname,wallet:id=>players.has(id)?walletView(players.get(id)):null,join,remove,pose,command,step,snapshot,roster,ranking,equipmentState,restoreEquipment,restoreFoups,players,fleet,store,residents,safety,destruction,profile:id=>players.has(id)?profile(players.get(id)):null,get time(){return time;}};
 }

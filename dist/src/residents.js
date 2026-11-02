@@ -5,6 +5,7 @@ import {stepNpc,rerouteNpc,npcDestination} from './npc-navigation.js';
 import { getEmoApproach } from './emo-interaction.js';
 import { findRestHeading } from './posture.js';
 import { createVisitorName, createVisitorBadge } from './visitor-name.js';
+import {npcDestructionTitle} from './destruction-titles.js';
 import { createAvatar } from './avatar.js';
 import {createAvatarAppearance} from './avatar-appearance.js';
 import {npcOutfit} from './npc-outfits.js';
@@ -233,6 +234,7 @@ export function createResidents({ THREE, scene, ...options }) {
   const simulation = createResidentSimulation(options), groups = new Map();
   const visuals = simulation.people.map(actor => {
     const avatar = createAvatar(THREE), badge = createVisitorBadge(THREE, scene, actor.name, { resident: true });
+    badge.setTitle(npcDestructionTitle(actor.id,actor.role)?.id);
     const appearance=createAvatarAppearance(THREE,avatar,{scene,external:true});appearance.setOutfit(npcOutfit(actor.id),actor.role);
     // Build the optional tool once; identical hammer shapes are also batched.
     if (actor.role === 'repairer') avatar.update(0, { repairTime: 0 });

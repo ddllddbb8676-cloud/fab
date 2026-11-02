@@ -13,7 +13,7 @@ function harness(maxDetailed=32){
   const rows=[actor('lying',-1,'lie'),actor('standing',1,'stand')];view.setRoster(rows.map(a=>[a.id,a.name,a.role]));view.synchronize(rows);
   function heads(){const batch=scene.children.find(o=>o.isInstancedMesh&&o.geometry===geometry),result=[];if(!batch)return result;
     for(let i=0;i<batch.count;i++){const matrix=new THREE.Matrix4();batch.getMatrixAt(i,matrix);if(Math.abs(matrix.determinant())<.001)continue;result.push(geometry.boundingBox.getCenter(new THREE.Vector3()).applyMatrix4(matrix));}return result;}
-  return {view,camera,rows,heads,dispose(){view.dispose();reference.dispose();globalThis.document=oldDocument;}};
+  return {view,scene,camera,rows,heads,dispose(){view.dispose();reference.dispose();globalThis.document=oldDocument;}};
 }
 
 test('a stationary lying visitor stays lying as distance order changes at mobile frame rates',()=>{
@@ -45,5 +45,16 @@ test('real posture changes still animate for the same visitor',()=>{
     for(let i=0;i<60;i++)h.view.update(1/30,h.camera);assert.ok(h.heads().find(p=>p.x<0).y>1);
     h.rows[0].posture='lie';h.view.synchronize(h.rows);for(let i=0;i<60;i++)h.view.update(1/30,h.camera);
     assert.ok(h.heads().find(p=>p.x<0).y<.6);
+  }finally{h.dispose();}
+});
+
+test('pooled nameplates refresh title changes and never lend an operator title to the next visitor',()=>{
+  const h=harness(1);try{
+    h.rows[0].titleId='operator';h.rows[1].titleId='break-1000';h.view.synchronize(h.rows);
+    h.camera.position.set(-4,2,3);h.view.update(1/30,h.camera);
+    const badge=h.scene.children.find(o=>o.name==='visitor-nickname');assert.equal(badge.material.map.image.height,176);
+    h.rows[1].titleId='';h.view.synchronize(h.rows);h.camera.position.set(4,2,3);h.view.update(1/30,h.camera);
+    assert.equal(badge.material.map.image.height,96,'reused body clears its previous title');
+    h.rows[1].titleId='break-1000';h.view.synchronize(h.rows);h.view.update(1/30,h.camera);assert.equal(badge.material.map.image.height,176,'the current body updates from a new frame');
   }finally{h.dispose();}
 });

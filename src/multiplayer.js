@@ -5,7 +5,7 @@ export async function multiplayerConfiguration() {
   catch{}
   return location.hostname==='fab.semitoon.com'?{multiplayer:true,protocol:PROTOCOL,ws:'/api/room'}:null;
 }
-export function createMultiplayer({config,getPose,onWelcome,onFrame,onRoster,onStatus,onError,onCatch,onWallet,onNickname}) {
+export function createMultiplayer({config,getPose,onWelcome,onFrame,onRoster,onStatus,onError,onCatch,onWallet,onNickname,onTitles}) {
   let socket=null,status='connecting',id=null,seq=0,retry=0,closed=false,lastPose='',lastSent=0,connection=0,retryTimer=null;
   const pending=new Map();
   function setStatus(s){status=s;onStatus?.(s);}
@@ -20,7 +20,7 @@ export function createMultiplayer({config,getPose,onWelcome,onFrame,onRoster,onS
       let data;try{data=JSON.parse(event.data);}catch{return;}
       if(data.type==='welcome') {
         if(data.v!==PROTOCOL){setStatus('version');socket.close();return;}
-        id=data.id;retry=0;onWelcome?.(data);if(data.wallet)onWallet?.(data.wallet);onRoster?.(data.roster);onFrame?.(data.frame,true);setStatus('connected');sendPose(true);
+        id=data.id;retry=0;onWelcome?.(data);if(data.wallet)onWallet?.(data.wallet);if(data.titles)onTitles?.(data.titles);onRoster?.(data.roster);onFrame?.(data.frame,true);setStatus('connected');sendPose(true);
       } else if(data.type==='wallet')onWallet?.(data.wallet);
       else if(data.type==='nickname')onNickname?.(data.nickname);
       else if(data.type==='frame')onFrame?.(data,false);
@@ -31,6 +31,7 @@ export function createMultiplayer({config,getPose,onWelcome,onFrame,onRoster,onS
       else if(data.type==='ack') {
         if(data.wallet)onWallet?.(data.wallet);
         if(data.nickname)onNickname?.(data.nickname);
+        if(data.titles)onTitles?.(data.titles);
         if(data.frame)onFrame?.(data.frame,false);
         const entry=pending.get(data.seq);if(entry){clearTimeout(entry.timeout);pending.delete(data.seq);entry.resolve(data);}
         if(!data.ok)onError?.(data.message??'잠시 후 다시 시도해 주세요');

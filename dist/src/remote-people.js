@@ -7,6 +7,7 @@ import { getEmoApproach } from './emo-interaction.js';
 import { machines } from './layout.js';
 import { safetyColor, isSuitMesh } from './safety-team.js';
 import {createEmoteView} from './emote-view.js';
+import {npcDestructionTitle} from './destruction-titles.js';
 
 // A shared pool of articulated bodies; distant visitors use two tiny instances.
 export function createRemotePeople({THREE,scene,store,fleet=null,maxDetailed=40}) {
@@ -26,7 +27,7 @@ export function createRemotePeople({THREE,scene,store,fleet=null,maxDetailed=40}
   function setRoster(rows){roster.clear();for(const [id,name,role,outfit]of rows)roster.set(id,{name,role,outfit});for(const a of actors.values())Object.assign(a,roster.get(a.id));}
   function synchronize(rows) {
     const live=new Set(rows.map(r=>r.id));for(const id of actors.keys())if(!live.has(id))actors.delete(id);
-    for(const row of rows){let a=actors.get(row.id);if(!a){a={...row,...roster.get(row.id)};actors.set(row.id,a);}a.goal=row;Object.assign(a,{role:row.role,phase:row.phase,posture:row.posture,targetId:row.targetId,vehicleId:row.vehicleId,carrying:row.carrying,hidden:row.hidden});}
+    for(const row of rows){let a=actors.get(row.id);if(!a){a={...row,...roster.get(row.id)};actors.set(row.id,a);}a.goal=row;Object.assign(a,{role:row.role,phase:row.phase,posture:row.posture,targetId:row.targetId,vehicleId:row.vehicleId,carrying:row.carrying,hidden:row.hidden,titleId:row.titleId??npcDestructionTitle(row.id,row.role)?.id??''});}
   }
   function update(dt,camera,overview=false) {
     const f=1-Math.exp(-dt*14),visible=[];
@@ -54,6 +55,7 @@ export function createRemotePeople({THREE,scene,store,fleet=null,maxDetailed=40}
       const slot=pool[i],a=slot.actor;slot.badge.sprite.visible=false;slot.emote.sprite.visible=false;if(!a){slot.emote.set('');slot.appearance.update(false);continue;}
       slot.appearance.setOutfit(a.outfit,a.role);
       if(slot.badge.name!==a.name)slot.badge.rename(a.name??'방문자');
+      slot.badge.setTitle(a.titleId);
       slot.clock+=dt;const near=a.distance<14;
       if(slot.clock>=(near?1/30:1/15)){
         const avatar=slot.avatar;avatar.root.position.set(a.x,a.y,a.z);

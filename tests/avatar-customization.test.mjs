@@ -41,7 +41,7 @@ test('nearby nickname glyphs retain a readable screen size at wide camera distan
 test('the self nickname uses a native screen label that follows renames and hides during destruction shots',()=>{
   const old={document:globalThis.document,width:globalThis.innerWidth,height:globalThis.innerHeight},labels=[];
   globalThis.innerWidth=390;globalThis.innerHeight=844;
-  globalThis.document={hidden:false,body:{append:e=>labels.push(e)},createElement:tag=>tag==='canvas'?{getContext:()=>({clearRect(){},strokeText(){},fillText(){}})}:{style:{},setAttribute(){},remove(){this.removed=true;}}};
+  globalThis.document={hidden:false,body:{append:e=>labels.push(e)},createElement:tag=>tag==='canvas'?{getContext:()=>({clearRect(){},strokeText(){},fillText(){}})}:{style:{setProperty(){}},setAttribute(){},remove(){this.removed=true;}}};
   const scene=new THREE.Scene(),avatar=createAvatar(THREE),badge=createAvatarNameplate(THREE,scene,'작은 칩',{screenLabel:true}),camera=new THREE.PerspectiveCamera(64,390/844,.08,420);scene.add(avatar.root);
   try{
     camera.position.set(0,3,12);camera.lookAt(0,1.5,0);camera.updateMatrixWorld();badge.update(avatar,'stand');badge.updateScreen(camera);
@@ -50,4 +50,43 @@ test('the self nickname uses a native screen label that follows renames and hide
     avatar.root.visible=false;badge.update(avatar,'stand');badge.updateScreen(camera);assert.equal(labels[0].hidden,true);
   }finally{badge.dispose();avatar.dispose();globalThis.document=old.document;globalThis.innerWidth=old.width;globalThis.innerHeight=old.height;}
   assert.equal(labels[0].removed,true);
+});
+
+test('titles extend above the unchanged nickname without reducing its pixels or crossing headwear',()=>{
+  const old=globalThis.document,draws=[];
+  globalThis.document={createElement:()=>({getContext:()=>({clearRect(){},strokeText(){},fillText(text,x,y){draws.push({text,x,y,color:this.fillStyle});}})})};
+  const scene=new THREE.Scene(),avatar=createAvatar(THREE),appearance=createAvatarAppearance(THREE,avatar),badge=createAvatarNameplate(THREE,scene,'FAB짱 세미',{resident:true}),camera=new THREE.PerspectiveCamera(64,390/844,.08,420);scene.add(avatar.root);
+  try{
+    for(const head of ['helmet-white','bunny-ears','crown'])for(const posture of ['stand','sit','lie'])for(const distance of [4,8,18]){
+      appearance.setOutfit({...DEFAULT_OUTFIT,head});avatar.update(.1,{posture,snap:true});appearance.update();
+      camera.position.set(0,1.6,distance);camera.lookAt(0,1.6,0);camera.updateMatrixWorld();
+      badge.setTitle('');badge.update(avatar,posture,{camera,viewportHeight:844,headwear:appearance.headwear});
+      const original=badge.sprite.position.clone(),height=badge.sprite.scale.y;
+      badge.setTitle('operator');badge.update(avatar,posture,{camera,viewportHeight:844,headwear:appearance.headwear});
+      const canvas=badge.sprite.material.map.image;
+      assert.ok(Math.abs(badge.sprite.scale.y*96/canvas.height-height)<1e-10,'nickname glyph size stays unchanged');
+      assert.ok(Math.abs(badge.sprite.position.y-height*80/96/2-original.y)<1e-10,'nickname baseline stays in place');
+      assert.ok(badge.sprite.position.y-badge.sprite.scale.y/2>new THREE.Box3().setFromObject(appearance.headwear[0]).max.y);
+      const depth=-badge.sprite.position.clone().applyMatrix4(camera.matrixWorldInverse).z;
+      const pixels=badge.sprite.scale.y*38/canvas.height*844/(2*Math.tan(camera.fov*Math.PI/360)*depth);
+      assert.ok(pixels>=11&&pixels<=14.3,`title remains legible: ${pixels}px`);
+    }
+    assert.deepEqual(draws.slice(-2).map(d=>[d.text,d.color]),[['〈운영자〉','#b02d78'],['FAB짱 세미','#204e55']]);
+    const texture=badge.sprite.material.map;badge.setTitle('operator');assert.equal(badge.sprite.material.map,texture,'unchanged titles do not create textures');
+    badge.setTitle('unknown');assert.equal(badge.titleId,'');badge.update(avatar,'lie');assert.equal(badge.sprite.material.map.image.height,96);
+  }finally{badge.dispose();appearance.dispose();avatar.dispose();globalThis.document=old;}
+});
+
+test('self title uses separate colored text above the nickname, follows hiding and preserves renames',()=>{
+  const old={document:globalThis.document,width:globalThis.innerWidth,height:globalThis.innerHeight},labels=[];
+  globalThis.innerWidth=390;globalThis.innerHeight=844;
+  globalThis.document={hidden:false,body:{append:e=>labels.push(e)},createElement:tag=>tag==='canvas'?{getContext:()=>({clearRect(){},strokeText(){},fillText(){}})}:{attributes:{},style:{setProperty(k,v){this[k]=v;}},setAttribute(k,v){this.attributes[k]=v;},remove(){}}};
+  const scene=new THREE.Scene(),avatar=createAvatar(THREE),badge=createAvatarNameplate(THREE,scene,'작은 칩',{screenLabel:true}),camera=new THREE.PerspectiveCamera(64,390/844,.08,420);scene.add(avatar.root);
+  try{
+    camera.position.set(0,3,12);camera.lookAt(0,1.5,0);camera.updateMatrixWorld();badge.update(avatar,'stand');badge.updateScreen(camera);const anchor=labels[0].style.transform;
+    badge.setTitle('break-5');badge.rename('다른 이름');badge.update(avatar,'stand');badge.updateScreen(camera);
+    assert.equal(labels[0].textContent,'다른 이름');assert.equal(labels[0].attributes['data-title'],'〈꼬마 사고뭉치〉');assert.equal(labels[0].style['--title-color'],'#277044');assert.equal(labels[0].style.transform,anchor);
+    badge.setTitle('');assert.equal(labels[0].attributes['data-title'],'');assert.equal(labels[0].textContent,'다른 이름');
+    globalThis.document.hidden=true;badge.updateScreen(camera);assert.equal(labels[0].hidden,true);
+  }finally{badge.dispose();avatar.dispose();globalThis.document=old.document;globalThis.innerWidth=old.width;globalThis.innerHeight=old.height;}
 });

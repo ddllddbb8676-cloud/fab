@@ -62,7 +62,7 @@ export class FabRoom extends DurableObject {
   }
   send(ws,data){try{ws.send(typeof data==='string'?data:JSON.stringify(data));return true;}catch{return false;}}
   async checkpoint(){do{await this.profiles.flush();}while(this.profiles.hasPending);}
-  welcome(ws,id){const p=this.room.players.get(id);this.send(ws,{type:'welcome',v:PROTOCOL,id,name:p.name,privileges:{unlimitedChips:Boolean(p.chipUnlimited)},wallet:this.room.wallet(id),nickname:this.room.nicknameState(id),resume:p.hasEntered?p.groundPosition:null,roster:this.room.roster(),frame:this.room.snapshot(true)});}
+  welcome(ws,id){const p=this.room.players.get(id);this.send(ws,{type:'welcome',v:PROTOCOL,id,name:p.name,privileges:{unlimitedChips:Boolean(p.chipUnlimited)},wallet:this.room.wallet(id),nickname:this.room.nicknameState(id),titles:this.room.titleState(id),resume:p.hasEntered?p.groundPosition:null,roster:this.room.roster(),frame:this.room.snapshot(true)});}
   sendWallets(){for(const [ws,s] of this.sockets){const player=this.room.players.get(s.id);if(player&&s.walletRevision!==player.wallet.revision){const wallet=this.room.wallet(s.id);this.send(ws,{type:'wallet',wallet});s.walletRevision=wallet.revision;}}}
   broadcastRoster(){const data=JSON.stringify({type:'roster',roster:this.room.roster(),count:this.room.players.size});for(const ws of this.sockets.keys())this.send(ws,data);}
   async fetch(request) {
@@ -122,7 +122,7 @@ export class FabRoom extends DurableObject {
       if(data.kind==='civilian'&&result.ok)this.broadcastRoster();
       try{await this.checkpoint();}catch{this.send(ws,{type:'ack',seq:data.seq,ok:false,message:'기록 저장이 지연되고 있어요. 잠시 후 다시 확인해 주세요.'});return;}
       if(result.ok&&['nickname-confirm','nickname-reset'].includes(data.kind)){this.broadcastRoster();for(const [peer,s] of this.sockets)this.send(peer,{type:'nickname',nickname:this.room.nicknameState(s.id)});}
-      this.send(ws,{type:'ack',seq:data.seq,...result,wallet:this.room.wallet(session.id),frame:this.room.snapshot(true)});
+      this.send(ws,{type:'ack',seq:data.seq,...result,wallet:this.room.wallet(session.id),titles:this.room.titleState(session.id),frame:this.room.snapshot(true)});
     }
   }
   close(ws){const s=this.sockets.get(ws);if(s){this.room.remove(s.id);this.sockets.delete(ws);this.broadcastRoster();this.ctx.waitUntil(this.checkpoint());}if(!this.sockets.size&&this.timer){clearInterval(this.timer);this.timer=null;}}
