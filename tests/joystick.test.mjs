@@ -102,3 +102,16 @@ test('manual sliding preserves 65 cm passages and stops at doors and protected-z
   try { p = stepWalker({ x: 0, z: 78 }, 0, -10); assert.ok(p.z >= 77 + WALK_RADIUS); }
   finally { setRuntimeObstacles([]); }
 });
+
+test('repair penalty permits overview and returning to walking without clearing the penalty', () => {
+  const h=setup();
+  try {
+    const e=h.explorer;e.state.penalty=3;
+    const before=e.state.position.clone();e.setMode('overview');
+    assert.equal(e.state.mode,'overview');assert.ok(e.state.position.equals(before));
+    e.setMode('ride');assert.equal(e.state.mode,'overview','OHT spectator mode is still restricted');
+    e.setMode('walk');assert.equal(e.state.mode,'walk');assert.equal(e.state.penalty,3);
+    assert.equal(e.beginJoystick(),true);e.moveJoystick(0,1);e.update(.05);
+    assert.ok(e.state.position.distanceTo(before)>0);
+  } finally {h.close();}
+});

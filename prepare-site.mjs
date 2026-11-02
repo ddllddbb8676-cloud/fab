@@ -12,6 +12,7 @@ await copyFile(new URL('src/residents.js', root), new URL('src/residents.js', di
 await copyFile(new URL('src/scene-depth.js', root), new URL('src/scene-depth.js', dist));
 await copyFile(new URL('src/foup-debris.js', root), new URL('src/foup-debris.js', dist));
 for(const name of ['destruction-titles.js','title-picker.js'])await copyFile(new URL('src/'+name,root),new URL('src/'+name,dist));
+for(const name of ['repair-ranking.js','repair-ranking-worker.js'])await copyFile(new URL('src/'+name,root),new URL('src/'+name,dist));
 for (const name of ['locomotion.js', 'touch-joystick.js', 'avatar-nameplate.js','cosmetics-catalog.js','avatar-appearance.js','accessories.js','cute-accessories.js','face-styles.js','icons.js','wardrobe-ui.js','wardrobe-view.js','wardrobe.css','npc-outfits.js','wardrobe-notice.js','nickname-policy.js','nickname-ui.js','nickname.css','chip-rewards.js','chip-rewards.css']) await copyFile(new URL('src/' + name, root), new URL('src/' + name, dist));
 await copyFile(new URL('node_modules/nipplejs/dist/index.mjs', root), new URL('vendor/nipplejs/index.mjs', dist));
 // The npm 1.0.4 tarball omits LICENSE; preserve the notice from its release tag.

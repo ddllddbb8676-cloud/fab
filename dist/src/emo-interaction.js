@@ -14,20 +14,22 @@ export function getEmoApproach(machine) {
     heading: button.sign === 1 ? Math.PI : 0 };
 }
 
-export function planEmoApproach(machine, position, {canTraverse=()=>true}={}) {
+export function planEmoApproach(machine, position, {canTraverse=()=>true,planner}={}) {
   const plan = getEmoApproach(machine);
   if (!plan || isBlocked(plan.destination.x, plan.destination.z, WALK_RADIUS)) return null;
-  const direct=findWalkPath(position,plan.destination,{canTraverse});if(!direct)return null;
+  const findPath = target => planner ? planner.findPath(target) : findWalkPath(position,target,{canTraverse});
+  const canWalk = planner?.canWalkSegment ?? canWalkSegment;
+  const direct=findPath(plan.destination);if(!direct)return null;
   if(Math.hypot(position.x-plan.destination.x,position.z-plan.destination.z)<.65)return {...plan,path:direct};
   const candidates=[direct];
   // Approach from the open front aisle, rather than overshooting to a distant
   // graph junction then doubling back into the small EMO stance.
   for(const z of [plan.destination.z+machine.sign*.85,plan.destination.z+machine.sign*1.4,bays[machine.bayId].z]){
     const gate={x:plan.destination.x,z};
-    if(!canTraverse(gate,plan.destination)||!canWalkSegment(gate,plan.destination))continue;
-    const route=findWalkPath(position,gate,{canTraverse});if(route)candidates.push([...route,plan.destination]);
+    if(!canTraverse(gate,plan.destination)||!canWalk(gate,plan.destination))continue;
+    const route=findPath(gate);if(route)candidates.push([...route,plan.destination]);
     const exit={x:position.x,z};
-    if(canTraverse(position,exit)&&canWalkSegment(position,exit)&&canTraverse(exit,gate)&&canWalkSegment(exit,gate))candidates.push([exit,gate,plan.destination]);
+    if(canTraverse(position,exit)&&canWalk(position,exit)&&canTraverse(exit,gate)&&canWalk(exit,gate))candidates.push([exit,gate,plan.destination]);
   }
   function cost(path){
     let length=0,previous=position,heading=null;
@@ -39,7 +41,7 @@ export function planEmoApproach(machine, position, {canTraverse=()=>true}={}) {
     return length+.8*Math.abs(Math.atan2(Math.sin((heading??plan.heading)-plan.heading),Math.cos((heading??plan.heading)-plan.heading)));
   }
   candidates.sort((a,b)=>cost(a)-cost(b));
-  return {...plan,path:smoothWalkPath(position,candidates[0],{canTraverse})};
+  return {...plan,path:smoothWalkPath(position,candidates[0],{canTraverse,canWalk})};
 }
 
 // The operator's right side and the mushroom stay visible together. This is a

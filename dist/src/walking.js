@@ -1,5 +1,5 @@
 import { machines, bays, BAY_CENTERS, TOOL_WIDTH, isBlocked } from './layout.js';
-import { canTraverseRuntimeObstacles } from './runtime-obstacles.js';
+import { canTraverseRuntimeObstacles, getRuntimeObstacles } from './runtime-obstacles.js';
 export const WALK_RADIUS = .295;
 export function canWalkSegment(a, b) {
   if (!canTraverseRuntimeObstacles(a, b, WALK_RADIUS)) return false;
@@ -31,15 +31,22 @@ for (let iz = 0; iz < zs.length; iz++) for (let ix = 0; ix < xs.length; ix++) {
   }
 }
 const distance = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
-function connections(point,canTraverse) {
-  return walkNodes.map(n => ({ id: n.id, cost: distance(point, n) })).sort((a, b) => a.cost - b.cost)
-    .slice(0, 18).filter(c => canTraverse(point,walkNodes[c.id])&&canWalkSegment(point, walkNodes[c.id])).slice(0, 6);
+const pointKey = point => `${point.x},${point.z}`;
+function connections(point,canTraverse,cache) {
+  const key = pointKey(point);
+  if (cache?.connections.has(key)) return cache.connections.get(key);
+  const clear = cache?.clear ?? canWalkSegment;
+  const result = walkNodes.map(n => ({ id: n.id, cost: distance(point, n) })).sort((a, b) => a.cost - b.cost)
+    .slice(0, 18).filter(c => canTraverse(point,walkNodes[c.id])&&clear(point, walkNodes[c.id])).slice(0, 6);
+  cache?.connections.set(key, result);
+  return result;
 }
-export function findWalkPath(start, target, {canTraverse=()=>true}={}) {
+export function findWalkPath(start, target, {canTraverse=()=>true, cache}={}) {
+  const clear = cache?.clear ?? canWalkSegment;
   if(!canTraverse(target,target))return null;
   if (isBlocked(target.x, target.z, WALK_RADIUS)) return null;
-  if (canTraverse(start,target)&&canWalkSegment(start, target)) return [{ x: target.x, z: target.z }];
-  const starts = connections(start,canTraverse), ends = connections(target,canTraverse), endCosts = new Map(ends.map(c => [c.id, c.cost]));
+  if (canTraverse(start,target)&&clear(start, target)) return [{ x: target.x, z: target.z }];
+  const starts = connections(start,canTraverse,cache), ends = connections(target,canTraverse,cache), endCosts = new Map(ends.map(c => [c.id, c.cost]));
   if (!starts.length || !ends.length) return null;
   const costs = new Map(), previous = new Map(), open = new Set();
   for (const c of starts) { costs.set(c.id, c.cost); open.add(c.id); }
@@ -51,7 +58,8 @@ export function findWalkPath(start, target, {canTraverse=()=>true}={}) {
     open.delete(id);
     if (endCosts.has(id) && costs.get(id) + endCosts.get(id) < best) { best = costs.get(id) + endCosts.get(id); found = id; }
     for (const edge of walkNodes[id].links) {
-      if (!canTraverse(walkNodes[id],walkNodes[edge.id])||!canTraverseRuntimeObstacles(walkNodes[id], walkNodes[edge.id], WALK_RADIUS)) continue;
+      const a = walkNodes[id], b = walkNodes[edge.id];
+      if (!canTraverse(a,b)||!(cache ? cache.edgeClear(a,b) : canTraverseRuntimeObstacles(a,b,WALK_RADIUS))) continue;
       const next = costs.get(id) + edge.cost;
       if (next < (costs.get(edge.id) ?? Infinity)) { costs.set(edge.id, next); previous.set(edge.id, id); open.add(edge.id); }
     }
@@ -63,10 +71,38 @@ export function findWalkPath(start, target, {canTraverse=()=>true}={}) {
   const result = [], all = [start, ...route];
   for (let i = 0; i < all.length - 1;) {
     let next = i + 1;
-    for (let j = all.length - 1; j > next; j--) if (canTraverse(all[i],all[j])&&canWalkSegment(all[i], all[j])) { next = j; break; }
+    for (let j = all.length - 1; j > next; j--) if (canTraverse(all[i],all[j])&&clear(all[i], all[j])) { next = j; break; }
     result.push(all[next]); i = next;
   }
   return result;
+}
+
+// A directory lookup has one origin and hundreds of destinations. Reuse its
+// entrance connections and repeated segment checks without changing A* choices,
+// turn smoothing, collision tolerances, or the actual player's movement path.
+// Cache lifetime is one lookup; moving doors invalidate it immediately.
+export function createWalkPlanner(start) {
+  const position = { x: start.x, z: start.z };
+  const segments = new Map(), edges = new Map(), links = new Map();
+  let obstacles = getRuntimeObstacles();
+  function refresh() {
+    const current = getRuntimeObstacles();
+    if (current === obstacles) return;
+    obstacles = current; segments.clear(); edges.clear(); links.clear();
+  }
+  function memo(map, a, b, check) {
+    refresh();
+    const key = `${pointKey(a)}>${pointKey(b)}`;
+    if (!map.has(key)) map.set(key, check(a,b));
+    return map.get(key);
+  }
+  const cache = { connections: links,
+    clear: (a,b) => memo(segments,a,b,canWalkSegment),
+    edgeClear: (a,b) => memo(edges,a,b,(from,to) => canTraverseRuntimeObstacles(from,to,WALK_RADIUS)) };
+  return {
+    canWalkSegment: cache.clear,
+    findPath(target) { refresh(); return findWalkPath(position,target,{cache}); }
+  };
 }
 export function stepWalker(position, dx, dz, { canTraverse = () => true } = {}) {
   // Substeps prevent tunnelling through a tool on a slow frame.
@@ -86,10 +122,10 @@ export function stepWalker(position, dx, dz, { canTraverse = () => true } = {}) 
 
 // Round only corners whose entire replacement curve has real walking
 // clearance. Tight equipment gaps retain their exact safe centreline.
-export function smoothWalkPath(start,path,{canTraverse=()=>true,radius=.55}={}) {
+export function smoothWalkPath(start,path,{canTraverse=()=>true,radius=.55,canWalk=canWalkSegment}={}) {
   if(!path||path.length<2)return path;
   const points=[start,...path],result=[];
-  const clear=(a,b)=>canTraverse(a,b)&&canWalkSegment(a,b);
+  const clear=(a,b)=>canTraverse(a,b)&&canWalk(a,b);
   for(let i=1;i<points.length-1;i++){
     const a=points[i-1],b=points[i],c=points[i+1],before=distance(a,b),after=distance(b,c);
     if(before<.01||after<.01){result.push(b);continue;}

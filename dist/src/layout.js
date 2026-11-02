@@ -75,15 +75,36 @@ for (let bank = 0; bank < 2; bank++) for (let b = 0; b < BAY_CENTERS.length; b++
   bays.push(bay);
 }
 export const columns = [-59.2, 59.2].flatMap(x => Array.from({ length: 8 }, (_, i) => ({ x, z: -84 + i * 24 })));
+// The cabinets never move. Index their broad bounds once so each clearance
+// sample checks nearby cabinets instead of scanning all 360. The narrow-phase
+// comparisons below remain identical, including their boundary inequalities.
+const collisionCellSize = 8, collisionCells = new Map();
+for (const machine of machines) {
+  const b = machine.bounds;
+  for (let ix = Math.floor(b.minX / collisionCellSize); ix <= Math.floor(b.maxX / collisionCellSize); ix++) {
+    for (let iz = Math.floor(b.minZ / collisionCellSize); iz <= Math.floor(b.maxZ / collisionCellSize); iz++) {
+      const key = `${ix},${iz}`;
+      if (!collisionCells.has(key)) collisionCells.set(key, []);
+      collisionCells.get(key).push(machine);
+    }
+  }
+}
 export function isBlocked(x, z, margin = .28) {
   if (Math.abs(x) > 58.8 || Math.abs(z) > 88.5) return true;
   if (isRuntimeBlocked(x, z, margin)) return true;
   if (AIR_SHOWER.bounds.some(c => x > c.minX - margin && x < c.maxX + margin && z > c.minZ - margin && z < c.maxZ + margin)) return true;
   if (columns.some(c => Math.abs(x - c.x) < .27 + margin && Math.abs(z - c.z) < .27 + margin)) return true;
-  return machines.some(({ bounds: c, walkBounds }) => {
+  const hits = ({ bounds: c, walkBounds }) => {
     if (x <= c.minX - margin || x >= c.maxX + margin || z <= c.minZ - margin || z >= c.maxZ + margin) return false;
     return walkBounds.some(b => x > b.minX - margin && x < b.maxX + margin && z > b.minZ - margin && z < b.maxZ + margin);
-  });
+  };
+  if (!Number.isFinite(margin) || margin < 0 || margin > collisionCellSize) return machines.some(hits);
+  for (let ix = Math.floor((x - margin) / collisionCellSize); ix <= Math.floor((x + margin) / collisionCellSize); ix++) {
+    for (let iz = Math.floor((z - margin) / collisionCellSize); iz <= Math.floor((z + margin) / collisionCellSize); iz++) {
+      if (collisionCells.get(`${ix},${iz}`)?.some(hits)) return true;
+    }
+  }
+  return false;
 }
 export const TOUR_POINTS = [
   [-4, BAY_CENTERS[7]], [-49, BAY_CENTERS[7]], [-57.4, BAY_CENTERS[7]],

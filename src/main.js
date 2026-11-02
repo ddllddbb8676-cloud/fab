@@ -488,6 +488,7 @@ const explorer = createExplorer({ THREE, camera, scene, canvas: renderer.domElem
 });
 const directory = createEquipmentDirectory({ equipment, families,
   getPosition: () => explorer.state.position,
+  onError: () => toast('장비 목록을 열지 못했어요. 다시 눌러주세요.'),
   onToggle(open) { explorer.lock(open); if (open) { $('help').classList.add('hidden'); $('tool-card').classList.add('hidden'); } },
   onSelect(item, { repair = false } = {}) {
     if (repair) { triggerRepair(item.id); return; }
@@ -821,7 +822,7 @@ function updateZone() {
   $('oht-dismount').disabled = !play.canDismount;
   $('oht-dismount').textContent = play.phase === 'riding' ? '내리기 ↓' : play.phase === 'climb' ? '올라가는 중…' : '내려오는 중…';
   $('foup-actions').classList.toggle('hidden', !play.carriedId || entry.active);
-  for (const id of ['walk', 'tour', 'ride', 'overview', 'equipment-list', 'restore-equipment', 'reset', 'rear-view', 'transfer-view']) $(id).disabled = playActions.busy || Boolean(safetyState.penalty && !['walk','equipment-list','restore-equipment'].includes(id));
+  for (const id of ['walk', 'tour', 'ride', 'overview', 'equipment-list', 'restore-equipment', 'reset', 'rear-view', 'transfer-view']) $(id).disabled = playActions.busy || Boolean(safetyState.penalty && !['walk','overview','equipment-list','restore-equipment'].includes(id));
   for (const posture of ['sit', 'lie']) {
     const active = explorer.state.posture === posture, button = $(`posture-${posture}`);
     button.setAttribute('aria-pressed', String(active)); button.textContent = active ? '일어나기' : posture === 'sit' ? '앉기' : '눕기';

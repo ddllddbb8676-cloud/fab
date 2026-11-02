@@ -169,7 +169,7 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
   }
   function setMode(next) {
     if (state.locked) return;
-    if (state.penalty && next !== 'walk') { onToast(`장비를 ${state.penalty}대 더 수리해 주세요`); return; }
+    if (state.penalty && !['walk', 'overview'].includes(next)) { onToast(`장비를 ${state.penalty}대 더 수리해 주세요`); return; }
     cancelEmo('mode-change');
     state.posture = 'stand';
     if (next === 'tour' && state.mode === 'tour') return;
