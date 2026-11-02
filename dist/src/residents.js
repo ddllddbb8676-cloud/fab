@@ -1,36 +1,38 @@
-import { machines, bays, ports } from './layout.js';
-import { findWalkPath, stepWalker } from './walking.js';
+import { machines, bays, ports, BAY_CENTERS } from './layout.js';
+import { findWalkPath } from './walking.js';
+import {stepNpc,rerouteNpc,npcDestination} from './npc-navigation.js';
 import { getEmoApproach } from './emo-interaction.js';
 import { findRestHeading } from './posture.js';
-import { VISITOR_NAMES, createVisitorBadge } from './visitor-name.js';
+import { createVisitorName, createVisitorBadge } from './visitor-name.js';
 import { createAvatar } from './avatar.js';
 import { floorSpot } from './foup-play.js';
 import { reservedPortIds } from './network-transport.js';
 
-export const RESIDENT_ROLES = Object.freeze({ thrower: 5, rider: 5, resting: 10, repairer: 5, breaker: 5 });
+import { RESIDENT_ROLES } from './room-population.js';
+export { RESIDENT_ROLES };
 const distance = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const clamp = n => Math.max(0, Math.min(1, n));
 
 /** World state, separate from rendering: shared cargo identities and per-tool claims. */
-export function createResidentSimulation({ fleet, store, destruction, detachCargo, protectedIds = () => [], onCue = () => {}, random = Math.random, excludedNames = [] }) {
-  const remainingNames = VISITOR_NAMES.filter(name => !excludedNames.includes(name));
+export function createResidentSimulation({ fleet, store, destruction, detachCargo, protectedIds = () => [], getNeighbors=()=>[], onCue = () => {}, random = Math.random, excludedNames = [] }) {
+  const reservedNames = [...excludedNames];
   const people = [], claims = new Map(), portMap = new Map(ports.map(p => [p.id, p]));
   const totals = { throws: 0, repairs: 0, breaks: 0, pickups: 0, placements: 0 };
   let elapsed = 0, planner = 0;
   const choose = items => items[Math.min(items.length - 1, Math.floor(random() * items.length))];
   for (const [role, count] of Object.entries(RESIDENT_ROLES)) for (let i = 0; i < count; i++) {
     const index = people.length, bay = bays[(index * 7 + 8) % bays.length];
-    const name = remainingNames.splice(Math.floor(random() * remainingNames.length), 1)[0];
-    const actor = { id: `resident:${index}`, role, name, index, x: bay.x + (i % 3 - 1) * 7, y: 0, z: bay.z,
+    const name = createVisitorName(random, reservedNames); reservedNames.push(name);
+    const actor = { id: `resident:${index}`, role, name, index, x: bay.x + (i % 3 - 1) * 7, y: 0, z: bay.z+(Math.floor(index/18)-1)*.85,
       heading: random() * Math.PI * 2, speed: 0, posture: 'stand', phase: 'idle', path: [], time: 0, wait: i * .8,
-      bayId: bay.id, targetId: null, recordId: null, homePortId: null, nextThink: 0, stepDistance: 0, actions: 0 };
+      bayId: bay.id, targetId: null, recordId: null, homePortId: null, nextThink: 0, stepDistance: 0, actions: 0, brokenCount:8+(index*7)%4, repairedCount:0 };
     if (role === 'resting') {
       const m = bay.machines[2 + i % 5], next = bay.machines[3 + i % 5];
       // Some rest in the narrow equipment gaps, some at the edge of the broad aisle.
       if (i % 2 === 0) { actor.x = (m.x + next.x) / 2; actor.z = m.z; }
       else { actor.x = bay.x + (i - 4) * 3; actor.z = bay.z + (i % 3 - 1) * 1.4; }
       if (i === 1 || i === 6) { actor.x = i === 1 ? -1.5 : 1.5; actor.z = i === 1 ? 74 : 69; }
-      actor.posture = i < 5 ? 'sit' : 'lie';
+      actor.posture = i % 2 === 0 ? 'sit' : 'lie';
       actor.heading = findRestHeading(actor, actor.heading, actor.posture) ?? 0;
       actor.phase = 'rest'; actor.wait = 35 + random() * 40;
     }
@@ -52,14 +54,42 @@ export function createResidentSimulation({ fleet, store, destruction, detachCarg
     for (const actor of people) if (actor.targetId === id) { release(actor); actor.wait = 4; }
   }
   function go(actor, destination, phase) {
+    if(['caught-lap','patrol'].includes(phase))destination=npcDestination(actor,destination,[...people,...getNeighbors()]);
     const path = findWalkPath(actor, destination);
     if (!path) return false;
     actor.path = path; actor.phase = phase; actor.time = 0; actor.posture = 'stand'; return true;
   }
   function cue(actor, kind) { onCue(kind, actor); }
   function patrol(actor) {
-    const bay = choose(bays), destination = { x: bay.x + (random() - .5) * 40, z: bay.z };
+    const bay = choose(bays), destination = { x: bay.x + (random() - .5) * 40, z: bay.z+(random()-.5)*1.8 };
     if (!go(actor, destination, 'patrol')) actor.wait = 2;
+  }
+  function beginSafetyLap(actor) {
+    if(!people.includes(actor)||actor.penalty||elapsed<(actor.safeUntil||0)||['repair','riding','climb'].includes(actor.phase))return false;
+    const home={x:actor.x,z:actor.z},posture=actor.posture,heading=actor.heading;
+    const bay=bays.reduce((best,b)=>distance(actor,b)<distance(actor,best)?b:best,bays[0]);
+    const row=bay.machines.filter(m=>m.sign===1);
+    const edges=[bay.bank===0?-57.4:0,...row.slice(0,-1).map((m,i)=>(m.x+row[i+1].x)/2),bay.bank===0?0:57.4];
+    const nearest=edges.reduce((best,x,i)=>Math.abs(x-actor.x)<Math.abs(edges[best]-actor.x)?i:best,0);
+    const other=nearest===edges.length-1?nearest-1:nearest+1;
+    const nextBay=bays[bay.id+(bay.id%BAY_CENTERS.length===BAY_CENTERS.length-1?-1:1)];
+    const corners=[{x:edges[nearest],z:bay.z},{x:edges[other],z:bay.z},{x:edges[other],z:nextBay.z},{x:edges[nearest],z:nextBay.z}];
+    const first=corners.reduce((best,p,i)=>distance(actor,p)<distance(actor,corners[best])?i:best,0);
+    const loop=corners.slice(first).concat(corners.slice(0,first));
+    const held=store.getCarried(actor.id);
+    if(held)store.launch(held,{x:actor.x,y:.6,z:actor.z},{x:0,y:0,z:0});
+    release(actor);actor.pressed=false;actor.posture='stand';actor.y=0;actor.penalty=3;actor.wait=0;
+    actor.lap={waypoints:[...loop,loop[0],home],posture,heading};actor.phase='caught-lap-plan';
+    return true;
+  }
+  function finishSafetyLap(actor) {
+    const previous=actor.lap;delete actor.lap;actor.penalty=0;actor.safeUntil=elapsed+12;
+    release(actor);actor.wait=1;
+    if(actor.role==='resting') {
+      actor.phase='rest';actor.posture=previous.posture;
+      actor.heading=findRestHeading(actor,previous.heading,actor.posture)??previous.heading;
+      actor.wait=35+random()*40;
+    }
   }
   function selectWork(actor) {
     const repairing = actor.role === 'repairer';
@@ -81,7 +111,7 @@ export function createResidentSimulation({ fleet, store, destruction, detachCarg
       if (target && go(actor, target, 'retrieve')) return;
     }
     if (previous && ['flying', 'carried'].includes(previous.mode)) { actor.wait = 2; return; }
-    const candidates = ports.filter(p => !reservedPortIds.has(p.id) && !reserved(p.machineId) && store.atPort(p.id))
+    const candidates = ports.filter(p => !reservedPortIds.has(p.id) && !reserved(p.machineId) && store.atPort(p.id)&&!people.some(other=>other!==actor&&other.recordId===store.atPort(p.id).id))
       .sort((a,b) => distance(actor, a) - distance(actor,b)).slice(0, 12);
     const p = choose(candidates);
     if (!p) { patrol(actor); return; }
@@ -90,7 +120,7 @@ export function createResidentSimulation({ fleet, store, destruction, detachCarg
     }
   }
   function returnFoup(actor) {
-    const empty = ports.filter(p => !reservedPortIds.has(p.id) && !reserved(p.machineId) && !destruction.isDestroyed(p.machineId) && !store.occupied(p.id))
+    const empty = ports.filter(p => !reservedPortIds.has(p.id) && !reserved(p.machineId) && !destruction.isDestroyed(p.machineId) && !store.occupied(p.id)&&!people.some(other=>other!==actor&&other.phase==='return-walk'&&other.homePortId===p.id))
       .sort((a,b) => distance(actor,a) - distance(actor,b));
     const p = empty[0];
     if (p && go(actor, { x: p.x, z: p.z + p.sign * .96 }, 'return-walk')) actor.homePortId = p.id;
@@ -98,7 +128,9 @@ export function createResidentSimulation({ fleet, store, destruction, detachCarg
   }
   function arrived(actor) {
     actor.time = 0; actor.speed = 0;
-    if (actor.phase === 'work-walk') { actor.phase = 'align'; actor.heading = actor.plan.heading; }
+    if (actor.phase === 'caught-lap') {
+      if(actor.lap.waypoints.length)actor.phase='caught-lap-plan';else finishSafetyLap(actor);
+    } else if (actor.phase === 'work-walk') { actor.phase = 'align'; actor.heading = actor.plan.heading; }
     else if (['pickup-walk', 'retrieve'].includes(actor.phase)) {
       const record = store.records.get(actor.recordId), retrieving = actor.phase === 'retrieve';
       if (record && store.pickup(record.id, actor.id)) {
@@ -111,6 +143,11 @@ export function createResidentSimulation({ fleet, store, destruction, detachCarg
     } else if (actor.phase === 'patrol') { actor.phase = 'idle'; actor.wait = 1; }
   }
   function think(actor) {
+    if(actor.phase==='caught-lap-plan') {
+      if(actor.wait>0)return;
+      if(go(actor,actor.lap.waypoints[0],'caught-lap'))actor.lap.waypoints.shift();else actor.wait=1;
+      return;
+    }
     if (actor.wait > 0 || actor.role === 'rider' || actor.role === 'resting') return;
     if (actor.phase === 'return-plan') { returnFoup(actor); return; }
     if (actor.phase === 'patrol' && actor.role === 'repairer' && destruction.state.destroyedIds.length && actor.time > 3) release(actor);
@@ -120,13 +157,14 @@ export function createResidentSimulation({ fleet, store, destruction, detachCarg
   function update(dt) {
     if (!Number.isFinite(dt) || dt <= 0) return;
     dt = Math.min(dt, .1); elapsed += dt;
+    const neighbors=[...people,...getNeighbors()];
     for (const actor of people) {
       actor.time += dt; actor.wait = Math.max(0, actor.wait - dt); actor.speed = 0;
       if (actor.role === 'rider') {
         const car = fleet.vehicles.find(v => v.id === actor.vehicleId).state.car;
         Object.assign(actor, { x: car.x, z: car.z, heading: car.yaw }); continue;
       }
-      if (actor.role === 'resting') {
+      if (actor.role === 'resting' && !actor.lap) {
         if (!actor.wait) { const next = actor.posture === 'sit' ? 'lie' : 'sit', heading = findRestHeading(actor, actor.heading, next);
           if (heading !== null) { actor.posture = next; actor.heading = heading; cue(actor, next); }
           actor.wait = 35 + random() * 40; }
@@ -134,16 +172,20 @@ export function createResidentSimulation({ fleet, store, destruction, detachCarg
       }
       if (actor.targetId !== null && (reserved(actor.targetId) || (actor.role === 'repairer') !== destruction.isDestroyed(actor.targetId))) { release(actor); actor.wait = 1; }
       if (actor.path.length) {
-        const target = actor.path[0], length = distance(actor, target), step = Math.min(length, dt * (actor.role === 'repairer' ? 1.65 : 1.4));
+        const target = actor.path[0], length = distance(actor, target);
         if (length > .0001) {
-          const next = stepWalker(actor, (target.x - actor.x) / length * step, (target.z - actor.z) / length * step);
-          const moved = distance(actor,next); actor.heading = Math.atan2(target.x - actor.x, target.z - actor.z);
+          const next = stepNpc(actor,target,dt,actor.role==='repairer'?1.65:1.4,neighbors);
+          const moved = distance(actor,next); if(moved>.0001)actor.heading = Math.atan2(next.x-actor.x,next.z-actor.z);
           Object.assign(actor,next); actor.speed = moved / dt; actor.stepDistance += moved;
           if (actor.stepDistance > .86) { actor.stepDistance = 0; cue(actor,'step'); }
         }
         if (distance(actor,target) < .015) actor.path.shift();
         if (!actor.path.length) arrived(actor);
-        else if (actor.time > 180) { release(actor); actor.wait = 1; }
+        else if (actor.time > 180) {
+          if(actor.lap){actor.lap.waypoints.unshift(actor.path.at(-1));actor.path=[];actor.phase='caught-lap-plan';actor.time=0;}
+          else release(actor);
+          actor.wait = 1;
+        }
       } else if (actor.phase === 'align' && actor.time >= .65) {
         actor.time = 0;
         if (actor.role === 'repairer') {
@@ -154,10 +196,10 @@ export function createResidentSimulation({ fleet, store, destruction, detachCarg
         destruction.setRepairProgress(actor.targetId, actor.time / 7);
         const hammer = Math.floor(actor.time * 15 / (Math.PI * 2));
         if (hammer !== actor.lastHammer) { actor.lastHammer = hammer; cue(actor,'repair'); }
-        if (actor.time >= 7) { destruction.reset(actor.targetId); totals.repairs++; actor.actions++; cue(actor,'complete'); release(actor); actor.wait = 2; }
+        if (actor.time >= 7) { destruction.reset(actor.targetId); totals.repairs++; actor.repairedCount++; actor.actions++; cue(actor,'complete'); release(actor); actor.wait = 2; }
       } else if (actor.phase === 'press') {
         if (actor.time >= .5 && !actor.pressed) { actor.pressed = true; cue(actor,'press'); }
-        if (actor.time >= 1.35) { if (destruction.trigger(actor.targetId)) { totals.breaks++; actor.actions++; } actor.pressed = false; release(actor); actor.wait = 12 + random() * 10; }
+        if (actor.time >= 1.35) { if (destruction.trigger(actor.targetId)) { totals.breaks++; actor.brokenCount++; actor.actions++; } actor.pressed = false; release(actor); actor.wait = 12 + random() * 10; }
       } else if (actor.phase === 'carry' && actor.time >= .8) {
         const record = store.getCarried(actor.id), p = portMap.get(actor.homePortId);
         if (record) {
@@ -174,11 +216,12 @@ export function createResidentSimulation({ fleet, store, destruction, detachCarg
       if (held) Object.assign(held, { x: actor.x + Math.sin(actor.heading) * .34, y: .82, z: actor.z + Math.cos(actor.heading) * .34, yaw: actor.heading + Math.PI });
     }
     // At most one path search per rendered frame, regardless of population.
-    think(people[planner++ % people.length]);
+    const next=people[planner++ % people.length];
+    if(!rerouteNpc(next,neighbors,elapsed))think(next);
   }
-  return { people, update, yieldMachine,
+  return { people, update, yieldMachine, beginSafetyLap,
     get state() { return { total: people.length, simulated: true, roles: { ...RESIDENT_ROLES }, actions: { ...totals },
-      people: people.map(p => ({ id:p.id, name:p.name, role:p.role, phase:p.phase, posture:p.posture, x:p.x,y:p.y,z:p.z,targetId:p.targetId,vehicleId:p.vehicleId,actions:p.actions })) }; }
+      people: people.map(p => ({ id:p.id, name:p.name, role:p.role, phase:p.phase, posture:p.posture, x:p.x,y:p.y,z:p.z,targetId:p.targetId,vehicleId:p.vehicleId,actions:p.actions,penalty:p.penalty||0 })) }; }
   };
 }
 
@@ -231,7 +274,7 @@ export function createResidents({ THREE, scene, ...options }) {
       group.instance.instanceMatrix.needsUpdate = true;
     }
   }
-  return { update, yieldMachine: simulation.yieldMachine, get state() { return simulation.state; },
+  return { update, people:simulation.people, beginSafetyLap:simulation.beginSafetyLap, yieldMachine: simulation.yieldMachine, get state() { return simulation.state; },
     dispose() { for (const group of groups.values()) { group.instance.removeFromParent(); group.instance.dispose(); } for (const v of visuals) { v.badge.dispose(); v.avatar.dispose(); } }
   };
 }

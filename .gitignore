@@ -3,3 +3,8 @@ outputs/
 .wrangler/
 .dev.vars
 .env
+.dev.vars.*
+.env.*
+!.dev.vars.example
+!.env.example
+*.log

@@ -7,7 +7,7 @@ export function boardingMachine(car) {
   return machines.find(m => Math.abs(car.x - m.x) <= TOOL_WIDTH / 2 && Math.abs(car.z - (m.z + m.sign * PORT_Z)) < .65) ?? null;
 }
 
-export function createPlayActions({ THREE, scene, materials, fleet, explorer, avatar, initialPortIds, hideOriginal, showOriginal, isDestroyed, toast, onCue = () => {}, network = null }) {
+export function createPlayActions({ THREE, scene, materials, fleet, explorer, avatar, initialPortIds, hideOriginal, showOriginal, isDestroyed, toast, onCue = () => {}, network = null, isRestricted = () => false }) {
   const store = createFoupStore({ ports, initialPortIds, hideOriginal, showOriginal, isDestroyed, onImpact: record => onCue('bounce', record) });
   const renderer = createFoupRenderer(THREE, scene, materials);
   const byPort = new Map(ports.map(port => [port.id, port]));
@@ -15,7 +15,7 @@ export function createPlayActions({ THREE, scene, materials, fleet, explorer, av
   let action = null, pending = null, passengerId = null, awaiting = false, requestGeneration = 0;
   const pose = () => ({ x: explorer.state.position.x, y: explorer.state.position.y, z: explorer.state.position.z, heading: explorer.state.heading });
   const vehicle = id => fleet.vehicles.find(v => v.id === id);
-  function onFoot() { return !awaiting && !action && passengerId === null && (!network || network.connected) && ['walk', 'tour'].includes(explorer.state.mode) && !explorer.state.locked; }
+  function onFoot() { return !isRestricted() && !awaiting && !action && passengerId === null && (!network || network.connected) && ['walk', 'tour'].includes(explorer.state.mode) && !explorer.state.locked; }
   function remote(kind,data,success) {
     if(!network)return false;awaiting=true;const generation=++requestGeneration;
     network.command(kind,data).then(result=>{if(generation!==requestGeneration)return;awaiting=false;if(result.ok)success?.(result);else {if(['climb','ride'].includes(kind)){network.command('cancel');resetOnline();}toast(result.message??'다시 시도해 주세요');}});return true;

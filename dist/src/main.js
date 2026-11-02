@@ -25,12 +25,23 @@ import { createResidents } from './residents.js';
 import { multiplayerConfiguration, createMultiplayer } from './multiplayer.js';
 import { createSharedWorldView } from './shared-world-view.js';
 import { createRemotePeople } from './remote-people.js';
+import { createSafetyPatrols, canCatch, isSafety, safetyColor, PENALTY_MESSAGE, SAFETY_CATCH_GOAL, SAFETY_NO_EMO_MESSAGE } from './safety-team.js';
+import { ROOM_CAPACITY, MAX_VISITORS, AUTOMATED_COUNT } from './room-population.js';
+import {REST_AREAS,isRestArea,canSafetyTraverse,restAreaExit,SAFETY_CLEARANCE} from './rest-area.js';
+import {createRestAreaView} from './rest-area-view.js';
+import {createLeaderboard} from './leaderboard.js';
+import {EMOTES,HEART_PATH,HEART_COLOR} from './emotes.js';
+import {createEmoteView} from './emote-view.js';
+import {safetyProximity} from './safety-proximity.js';
 
 const connectionConfig = await multiplayerConfiguration();
-let multiplayer = null, sharedWorld = null, remotePeople = null, realVisitorCount = 0;
+let multiplayer = null, sharedWorld = null, remotePeople = null, realVisitorCount = 0, totalCharacterCount = 0;
+const personalStats = { brokenCount: 0, repairedCount: 0 };
+let safetyPatrols = null, safetyPeople = null, safetyState = {role:'visitor',penalty:0}, safetyGrace = 12;
 const onlineLink = connectionConfig ? { get connected(){return Boolean(multiplayer?.connected);}, command:(...args)=>multiplayer?.command(...args)??Promise.resolve({ok:false,message:'팹에 연결 중이에요'}) } : null;
 
 const $ = (id) => document.getElementById(id);
+const leaderboard=createLeaderboard($('leaderboard'));leaderboard.setOnline(Boolean(connectionConfig));
 const mobile = matchMedia('(pointer: coarse)').matches || innerWidth < 700;
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const WIDTH = 120, LENGTH = 180, HEIGHT = 5, EYE = 1.68;
@@ -385,14 +396,39 @@ orbit.enabled = false; orbit.enableDamping = true; orbit.dampingFactor = .06;
 orbit.minDistance = 16; orbit.maxDistance = 700; orbit.maxPolarAngle = Math.PI * .46; orbit.target.set(0, 0, 0);
 const avatar = createAvatar(THREE); scene.add(avatar.root);
 const airShower = createAirShower(THREE); scene.add(airShower.root);
+const restAreaView=createRestAreaView(THREE,scene);
 const bayWhiteMask = applyBayWhiteLightMask(THREE, scene, bays, { yellowBayIds: bayLighting.bayIds });
 colliders.push(...AIR_SHOWER.bounds.map(b => ({ ...b, maxY: 3.15 })));
 colliders.push({ minX: -2.02, maxX: 2.02, minZ: 82.2, maxZ: 88.92, minY: 3.07, maxY: 3.23 },
   { minX: -2.58, maxX: 2.58, minZ: 82.02, maxZ: 82.38, minY: 2.65, maxY: 3.23 });
 const entry = createEntrySequence({ reducedMotion });
 let mode = 'walk', elapsed = 0, lastTime = 0, currentZone = '', toastTimer, selectedEquipment = null, playActions = null;
+let nextRefreshReminder=performance.now()+15*60*1000;
 const visitorBadge = createVisitorBadge(THREE, scene, createVisitorName());
-function toast(text) { $('zone-toast').textContent = text; $('zone-toast').classList.add('visible'); clearTimeout(toastTimer); toastTimer = setTimeout(() => $('zone-toast').classList.remove('visible'), 3200); }
+const visitorEmote=createEmoteView(THREE,scene,{self:true});
+let localEmoteSeq=0,lastEmoteClick=-Infinity,nearSafety=false,nextSafetyCheck=0;
+for(const emote of EMOTES){
+  const button=document.createElement('button');button.type='button';button.textContent=emote.emoji;
+  if(emote.id==='heart'){
+    const icon=document.createElementNS('http://www.w3.org/2000/svg','svg'),path=document.createElementNS('http://www.w3.org/2000/svg','path');
+    icon.setAttribute('viewBox','0 0 128 128');icon.setAttribute('width','29');icon.setAttribute('height','29');icon.setAttribute('aria-hidden','true');
+    path.setAttribute('d',HEART_PATH);path.setAttribute('fill',HEART_COLOR);icon.append(path);button.replaceChildren(icon);
+  }
+  button.setAttribute('aria-label',emote.label);button.title=emote.label;button.dataset.emote=emote.id;
+  button.addEventListener('click',async()=>{
+    if(entry.active||performance.now()-lastEmoteClick<650)return;lastEmoteClick=performance.now();
+    if(onlineLink){const result=await onlineLink.command('emote',{id:emote.id});if(!result.ok)toast(result.message);}
+    else visitorEmote.set(emote.id,++localEmoteSeq);
+  });$('emote-controls').append(button);
+}
+function toast(text,duration=3200) { $('zone-toast').textContent = text; $('zone-toast').classList.add('visible'); clearTimeout(toastTimer); toastTimer = setTimeout(() => $('zone-toast').classList.remove('visible'), duration); }
+function updatePersonalStats(next) {
+  const broken=next.brokenCount||0,repaired=next.repairedCount||0;
+  if(broken===personalStats.brokenCount&&repaired===personalStats.repairedCount)return;
+  personalStats.brokenCount=broken;personalStats.repairedCount=repaired;
+  $('personal-broken').textContent=String(broken);$('personal-repaired').textContent=String(repaired);
+  $('personal-stats').setAttribute('aria-label',`내 기록: 부순 장비 ${broken}대, 고친 장비 ${repaired}대`);
+}
 function showMachine(item) {
   selectedEquipment = item;
   $('tool-family').textContent = `${item.processCode} · ${item.familyName}`;
@@ -406,7 +442,9 @@ function showMachine(item) {
   $('tool-card').classList.remove('hidden');
 }
 const explorer = createExplorer({ THREE, camera, scene, canvas: renderer.domElement, avatar, orbit, colliders, vehicles,
+  canTraverse:(a,b)=>!isSafety(safetyState.role)||canSafetyTraverse(a,b),
   isEquipmentVisible: id => equipmentVisibility.isVisible(id),
+  pickRepairTarget: (ray, options) => destruction?.pick(ray, options),
   onToast: toast, onInspect: showMachine,
   onActionTap: ray => playActions?.tap(ray) || emoControls.press(ray),
   onMode(next) {
@@ -416,6 +454,7 @@ const explorer = createExplorer({ THREE, camera, scene, canvas: renderer.domElem
     for (const id of ['tour', 'walk', 'ride', 'overview']) { $(id).classList.toggle('active', id === next); $(id).setAttribute('aria-pressed', String(id === next)); }
     roof.visible = walls.visible = next !== 'overview';
     bayLighting.setOverview(next === 'overview');
+    restAreaView.setOverview(next === 'overview');
     bayWhiteMask.setOverview(next === 'overview');
     railOverview.visible = next === 'overview';
     airShower.root.visible = next !== 'overview';
@@ -429,6 +468,7 @@ const explorer = createExplorer({ THREE, camera, scene, canvas: renderer.domElem
   }
 });
 const directory = createEquipmentDirectory({ equipment, families,
+  getPosition: () => explorer.state.position,
   onToggle(open) { explorer.lock(open); if (open) { $('help').classList.add('hidden'); $('tool-card').classList.add('hidden'); } },
   onSelect(item, { repair = false } = {}) {
     if (repair) { triggerRepair(item.id); return; }
@@ -437,7 +477,12 @@ const directory = createEquipmentDirectory({ equipment, families,
 });
 $('equipment-list').addEventListener('click', () => { if (!entry.active) directory.open(); });
 for (const id of ['tour', 'walk', 'ride', 'overview']) $(id).addEventListener('click', () => explorer.setMode(id));
-$('reset').addEventListener('click', startEntry);
+$('reset').addEventListener('click',async()=>{
+  if(!confirm('이름과 부순 장비·고친 장비 기록을 지우고 완전히 새로 시작할까요?'))return;
+  $('reset').disabled=true;
+  try{if(multiplayer)await multiplayer.resetProfile();location.reload();}
+  catch(error){toast(error.message);$('reset').disabled=false;}
+});
 $('transfer-view').addEventListener('click', () => explorer.focusTransfer());
 $('rear-view').addEventListener('click', () => explorer.focusRear());
 $('next-oht').addEventListener('click', () => explorer.nextVehicle());
@@ -482,7 +527,7 @@ function finishEntry() {
   camera.fov = 64; camera.updateProjectionMatrix();
   explorer.lock(false); document.body.classList.remove('entering'); $('entry-overlay').classList.add('hidden');
   for (const element of entryUi) element.inert = false;
-  $('reset').title = '에어샤워부터 다시 입장'; $('reset').setAttribute('aria-label', '에어샤워부터 다시 입장');
+  $('reset').title = '이름과 기록을 초기화하고 새로 시작'; $('reset').setAttribute('aria-label', '완전히 새로 시작하기');
   toast('바닥을 눌러 걷기 · 드래그로 둘러보기');
 }
 function updateEntry(dt) {
@@ -534,22 +579,63 @@ destruction = createEquipmentDestruction({ THREE, scene, machines: layoutMachine
 playActions = createPlayActions({ THREE, scene, materials: M, fleet, explorer, avatar, initialPortIds,
   hideOriginal(portId) { removedOriginalFoups.add(portId); for (const hide of originalFoupParts.get(portId) ?? []) hide(); },
   showOriginal(portId) { removedOriginalFoups.delete(portId);for(const show of originalFoupParts.get(portId)??[])show(true); },
-  isDestroyed: id => destruction.isDestroyed(id), toast, onCue: motionCue, network:onlineLink });
+  isDestroyed: id => destruction.isDestroyed(id), toast, onCue: motionCue, network:onlineLink, isRestricted: () => safetyState.penalty > 0 });
 if(!connectionConfig)residents = createResidents({ THREE, scene, fleet, store: playActions.store, destruction, detachCargo: v => playActions.detachVehicleCargo(v),
+  getNeighbors:()=>safetyPatrols?.people??[],
   excludedNames: [visitorBadge.name], onCue: motionCue,
   protectedIds: () => [explorer.state.emoInteraction?.id, explorer.state.repairInteraction?.id, playActions.protectedMachineId].filter(Number.isFinite) });
 else {
-  remotePeople=createRemotePeople({THREE,scene,store:playActions.store,maxDetailed:mobile?32:48});
-  sharedWorld=createSharedWorldView({fleet,store:playActions.store,destruction,onPeople:rows=>remotePeople.synchronize(rows),onCue:motionCue,onCount:n=>{realVisitorCount=n;updateConnectionLabel();}});
+  remotePeople=createRemotePeople({THREE,scene,store:playActions.store,fleet,maxDetailed:mobile?32:48});
+  sharedWorld=createSharedWorldView({fleet,store:playActions.store,destruction,onPeople:rows=>remotePeople.synchronize(rows),onCue:motionCue,onCount:(n,total)=>{realVisitorCount=n;totalCharacterCount=total;updateConnectionLabel();},onSelf:updateSafetyState});
   multiplayer=createMultiplayer({config:connectionConfig,getPose:()=>({x:+explorer.state.position.x.toFixed(3),y:+explorer.state.position.y.toFixed(3),z:+explorer.state.position.z.toFixed(3),heading:+explorer.state.heading.toFixed(3),speed:+(explorer.state.speed||0).toFixed(2),posture:explorer.state.posture,hidden:entry.active}),
-    onWelcome:data=>{sharedWorld.welcome(data.id);visitorBadge.rename(data.name);},onRoster:rows=>remotePeople.setRoster(rows),onFrame:(frame,initial)=>sharedWorld.apply(frame,initial),onError:toast,
+    onWelcome:data=>{sharedWorld.welcome(data.id);leaderboard.setSelf(data.id);visitorBadge.rename(data.name);if(data.resume){finishEntry();airShower.update(entry.state);explorer.state.path=[];explorer.state.position.set(data.resume.x,0,data.resume.z);explorer.state.heading=data.resume.heading;toast('이름과 기록을 이어서 접속했어요.');}},onRoster:rows=>{remotePeople.setRoster(rows);leaderboard.setRoster(rows);const self=rows.find(row=>row[0]===multiplayer?.id);if(self)visitorBadge.rename(self[1]);},onFrame:(frame,initial)=>{sharedWorld.apply(frame,initial);leaderboard.setPeople(frame.people);leaderboard.setRanking(frame.leaderboard);},onError:toast,
+    onCatch:data=>toast(`${data.targetName}님을 잡았어요! 장비 3대를 고쳐야 합니다. (${data.caught??0} / ${SAFETY_CATCH_GOAL})${data.completed?` ${SAFETY_CATCH_GOAL}명 잡기 완료! 원래 방진복으로 돌아왔어요.`:''}`,5000),
     onStatus:status=>{updateConnectionLabel(status);if(status==='reconnecting'){playActions.resetOnline();explorer.cancelEmo('disconnect');toast('연결이 끊겨 다시 접속하고 있어요');}}
   });
 }
+if(!connectionConfig) {
+  safetyPatrols=createSafetyPatrols({excludedNames:[visitorBadge.name,...residents.state.people.map(p=>p.name)]});
+  safetyPeople=createRemotePeople({THREE,scene,store:playActions.store,maxDetailed:4});
+  safetyPeople.setRoster(safetyPatrols.people.map(p=>[p.id,p.name,p.role]));
+  realVisitorCount=1;totalCharacterCount=1+residents.state.people.length+safetyPatrols.people.length;
+  updateConnectionLabel('offline');
+}
+function updateSafetyState(next) {
+  if(!next)return;const previous=safetyState;
+  if(connectionConfig)visitorEmote.set(next.emote,next.emoteSeq,next.emoteLeft);
+  if(connectionConfig)updatePersonalStats(next);
+  safetyState={role:next.role||'visitor',penalty:next.penalty||0,caught:next.safetyCatchCount||0};explorer.state.penalty=safetyState.penalty;
+  if(isSafety(safetyState.role)&&explorer.state.emoInteraction)explorer.cancelEmo('safety-duty');
+  if(isSafety(safetyState.role)&&explorer.state.position.y<.5&&isRestArea(explorer.state.position,SAFETY_CLEARANCE)){
+    const outside=Number.isFinite(next.x)&&!isRestArea(next,SAFETY_CLEARANCE)?next:restAreaExit(explorer.state.position);
+    explorer.state.position.set(outside.x,0,outside.z);explorer.state.path=[];
+  }
+  if(previous.role!==safetyState.role){avatar.setSuitColor(safetyColor(safetyState.role));if(isSafety(safetyState.role))toast(`이번에는 내 안전팀 차례! 서로 다른 ${SAFETY_CATCH_GOAL}명을 잡으면 원래 방진복으로 돌아와요.`,5000);}
+  if(safetyState.penalty>previous.penalty){
+    explorer.cancelEmo('safety');playActions.clearPending();explorer.state.posture='stand';
+    if(directory.isOpen)directory.close();explorer.setMode('walk');$('tool-card').classList.add('hidden');
+    toast(PENALTY_MESSAGE);
+  } else if(previous.penalty && !safetyState.penalty) { safetyGrace=elapsed+12;toast('장비 3대 수리 완료! 다시 팹뿌를 즐겨주세요.'); }
+  const guard=isSafety(safetyState.role),penalty=safetyState.penalty;
+  $('safety-panel').classList.toggle('hidden',!guard&&(!penalty||isRestArea(explorer.state.position)));
+  $('safety-title').textContent=penalty?`안전팀 패널티 · 수리 ${3-penalty} / 3`:`${safetyState.role==='safety-red'?'빨간':'주황'} 안전팀 · 잡기 ${safetyState.caught} / ${SAFETY_CATCH_GOAL}`;
+  $('safety-description').textContent=penalty?`장비를 ${penalty}대 더 고쳐야 다시 팹뿌를 하실 수 있습니다.`:`서로 다른 ${SAFETY_CATCH_GOAL}명을 잡으면 복귀 · 수리 중 / OHT 탑승 중 제외`;
+  $('safety-repairs').classList.toggle('hidden',!penalty);$('safety-restart').classList.toggle('hidden',!guard);
+  updateEmoCard();
+}
+$('safety-repairs').addEventListener('click',()=>directory.open({ids:destruction.state.destroyedIds}));
+$('safety-restart').addEventListener('click',async()=>{
+  $('safety-restart').disabled=true;
+  try{const result=await onlineLink?.command('civilian');if(result?.ok){toast('안전팀을 그만뒀어요. 이름과 기록은 그대로예요.');}}
+  finally{$('safety-restart').disabled=false;}
+});
 function updateConnectionLabel(status=multiplayer?.status) {
-  if(!connectionConfig)return;
-  const label=document.querySelector('.brand-sub');label.classList.add('online-count');label.textContent=status==='connected'?`함께 ${realVisitorCount}명`:status==='full'?'100명 · 입장 대기':status==='version'?'새로고침 필요':'팹 연결 중';
-  label.setAttribute('aria-label',status==='connected'?`실제 접속자 ${realVisitorCount}명`:'연결 상태');
+  const ready=status==='connected'||status==='offline',capacity=connectionConfig?.capacity??ROOM_CAPACITY;
+  const text=ready?`함께 ${totalCharacterCount} / ${capacity}명`:status==='full'?'정원 초과 · 입장 대기':status==='version'?'새로고침 필요':status==='replaced'?'다른 탭에서 접속 중':status==='resetting'?'새로 시작하는 중':'팹 연결 중';
+  const description=ready?`전체 ${totalCharacterCount}명 · 방문자 ${realVisitorCount}명 + 자동 캐릭터 ${totalCharacterCount-realVisitorCount}명`:text;
+  const label=document.querySelector('.brand-sub');label.classList.add('online-count');
+  if(label.textContent!==text){label.textContent=text;label.setAttribute('aria-label',description);label.title=description;}
+  if($('population-summary').textContent!==description)$('population-summary').textContent=description;
 }
 $('oht-dismount').addEventListener('click', () => playActions.dismount());
 $('foup-drop').addEventListener('click', () => playActions.throwFoup(true));
@@ -558,9 +644,11 @@ function updateEmoCard() {
   if (!destruction) return;
   const id = selectedEquipment?.id, damaged = id !== undefined && destruction.isDestroyed(id);
   const busy = Boolean(explorer.state.emoInteraction || explorer.state.repairInteraction);
-  $('tool-emo').disabled = id === undefined || damaged || busy;
+  const guard=isSafety(safetyState.role);
+  $('tool-emo').disabled = id === undefined || damaged || busy || safetyState.penalty > 0 || guard;
   $('tool-emo').setAttribute('aria-label', id === undefined ? 'EMO 누르기' : `${selectedEquipment.code} EMO 누르기`);
-  $('tool-emo').querySelector('strong').textContent = damaged ? '파손된 장비' : busy ? '캐릭터가 누르러 가는 중' : 'EMO 누르기';
+  $('tool-emo').querySelector('strong').textContent = guard ? '안전팀은 EMO 사용 불가' : damaged ? '파손된 장비' : busy ? '캐릭터가 누르러 가는 중' : 'EMO 누르기';
+  $('tool-emo').querySelector('small').textContent = guard ? `${SAFETY_CATCH_GOAL}명을 잡고 복귀하면 다시 사용할 수 있어요` : '걸어가서 꾹 누르면 작동';
   $('tool-repair').classList.toggle('hidden', !damaged);
   $('tool-repair').disabled = busy;
   $('tool-repair').textContent = explorer.state.repairInteraction?.id === id ? '열심히 수리하는 중…' : '이 장비 수리하기 🔧';
@@ -569,6 +657,8 @@ function updateEmoCard() {
   $('destroyed-count').textContent = `${count}대`;
 }
 function triggerEmo(id, claimed = false) {
+  if(isSafety(safetyState.role)){toast(SAFETY_NO_EMO_MESSAGE);return false;}
+  if(safetyState.penalty){toast(`장비를 ${safetyState.penalty}대 더 수리해 주세요`);return false;}
   if (entry.active || directory.isOpen || explorer.state.locked) return false;
   if (playActions?.state.carriedId) { toast('FOUP을 먼저 내려놓아 주세요'); return false; }
   const item = equipmentById.get(id); if (!item) return false;
@@ -583,6 +673,7 @@ function triggerEmo(id, claimed = false) {
       emoControls.setPress(null);
       if(onlineLink){onlineLink.command('explode',{id}).then(r=>{if(r.ok){explorer.focusDestruction(machine);updateEmoCard();toast(`${item.code} · EMO 작동`);}});return;}
       if (!destruction.trigger(id)) return;
+      updatePersonalStats({...personalStats,brokenCount:personalStats.brokenCount+1});
       explorer.focusDestruction(machine);
       updateEmoCard(); toast(`${item.code} · EMO 작동`);
     },
@@ -611,7 +702,7 @@ function triggerRepair(id, claimed = false) {
     isValid: () => !entry.active && !directory.isOpen && destruction.isDestroyed(id),
     onStart() { destruction.beginRepair(id); if(onlineLink)onlineLink.command('repair',{id}).then(r=>{if(!r.ok)explorer.cancelEmo('server');});toast(`${item.code} · 뚝딱뚝딱 수리 중`); },
     onProgress(progress) { if(!onlineLink)destruction.setRepairProgress(id, progress); },
-    onComplete() { if(onlineLink)onlineLink.command('finish',{id}).then(r=>{if(r.ok){updateEmoCard();toast(`${item.code} · 수리 완료!`);}});else{destruction.reset(id); motionCue('complete'); updateEmoCard(); toast(`${item.code} · 수리 완료!`);} },
+    onComplete() { if(onlineLink)onlineLink.command('finish',{id}).then(r=>{if(r.ok){updateEmoCard();toast(`${item.code} · 수리 완료!`);}});else{if(!destruction.reset(id))return;updatePersonalStats({...personalStats,repairedCount:personalStats.repairedCount+1});motionCue('complete'); if(safetyState.penalty)updateSafetyState({...safetyState,penalty:safetyState.penalty-1}); updateEmoCard(); toast(`${item.code} · 수리 완료!`);} },
     onCancel() { if(onlineLink)onlineLink.command('cancel');destruction.cancelRepair(id); updateEmoCard(); toast(`${item.code} · 수리를 멈췄어요`); }
   });
   if (accepted) { $('tool-card').classList.add('hidden'); updateEmoCard(); }
@@ -666,6 +757,7 @@ function drawMap() {
   for (const m of machinePositions) { ctx.fillStyle = m.family.color + 'aa'; ctx.fillRect(mx(m.x - TOOL_WIDTH / 2), mz(m.z - 2.4), sx * TOOL_WIDTH, sz * 4.8); }
   ctx.strokeStyle = '#397e8c88'; ctx.lineWidth = .8;
   for (const path of railPaths) { if (path.kind === 'switch') continue; ctx.beginPath(); path.points.forEach((p, i) => i ? ctx.lineTo(mx(p.x), mz(p.z)) : ctx.moveTo(mx(p.x), mz(p.z))); ctx.stroke(); }
+  ctx.fillStyle='#35b36f';for(const area of REST_AREAS)ctx.fillRect(mx(area.minX),mz(area.minZ),Math.max(3,sx*(area.maxX-area.minX)),Math.max(3,sz*(area.maxZ-area.minZ)));
   mapBaseReady = true;
   }
   ctx = mapCtx; ctx.clearRect(0, 0, w, h); ctx.drawImage(mapBase, 0, 0);
@@ -678,18 +770,20 @@ function drawMap() {
   }
 }
 function updateZone() {
+  const restingHere=!entry.active&&isRestArea(explorer.state.position)&&!isSafety(safetyState.role);
+  $('safety-panel').classList.toggle('hidden',!isSafety(safetyState.role)&&(!safetyState.penalty||restingHere));
   const repair = explorer.state.repairInteraction;
   const play = playActions.state;
   $('oht-dismount').classList.toggle('hidden', !playActions.busy);
   $('oht-dismount').disabled = !play.canDismount;
   $('oht-dismount').textContent = play.phase === 'riding' ? '내리기 ↓' : play.phase === 'climb' ? '올라가는 중…' : '내려오는 중…';
   $('foup-actions').classList.toggle('hidden', !play.carriedId || entry.active);
-  for (const id of ['walk', 'tour', 'ride', 'overview', 'equipment-list', 'restore-equipment', 'reset', 'rear-view', 'transfer-view']) $(id).disabled = playActions.busy;
+  for (const id of ['walk', 'tour', 'ride', 'overview', 'equipment-list', 'restore-equipment', 'reset', 'rear-view', 'transfer-view']) $(id).disabled = playActions.busy || Boolean(safetyState.penalty && !['walk','equipment-list','restore-equipment'].includes(id));
   for (const posture of ['sit', 'lie']) {
     const active = explorer.state.posture === posture, button = $(`posture-${posture}`);
     button.setAttribute('aria-pressed', String(active)); button.textContent = active ? '일어나기' : posture === 'sit' ? '앉기' : '눕기';
   }
-  $('posture-controls').classList.toggle('hidden', entry.active || !['walk', 'tour'].includes(mode));
+  $('posture-controls').classList.toggle('hidden', entry.active || safetyState.penalty > 0&&!restingHere || !['walk', 'tour'].includes(mode));
   if (playActions.busy) { $('view-title').textContent = play.phase === 'riding' ? 'OHT · 만세 산책' : 'OHT 타기'; $('view-subtitle').textContent = play.phase === 'riding' ? '드래그로 둘러보기 · 내리기 ↓' : play.phase === 'climb' ? '장비를 딛고 점프!' : '바닥으로 착지하는 중'; currentZone = ''; return; }
   if (repair) {
     $('view-title').textContent = `${equipmentById.get(repair.id)?.code ?? '장비'} · 수리`;
@@ -705,6 +799,7 @@ function updateZone() {
     if (offsetZ > 8.2 && Math.abs(focus.x) < 54.8) { text = '장비 뒤쪽 통로'; sub = 'REAR SERVICE AISLE · 1.4m'; }
     else if (offsetZ > 2.6 && offsetZ < 8.2 && Math.abs(focus.x) < 54.8) { text = '옆 장비 사이 통로'; sub = 'TOOL SIDE CLEARANCE · 0.65m'; }
   }
+  if(isRestArea(focus)){text='초록 휴식 구역';sub='안전팀 출입 금지 · 편하게 쉬세요';}
   if (mode === 'ride') { const v = vehicles[explorer.state.followId]; text = 'OHT ' + String(explorer.state.followId + 1).padStart(2, '0') + ' · ' + v.state.label; sub = 'BAY ' + (v.state.origin.bayId + 1) + ' → BAY ' + (v.state.destination.bayId + 1); }
   if (mode === 'transfer') { const v = observedVehicle(); text = 'FOUP 반송 · OHT ' + String(explorer.state.transferVehicleId + 1).padStart(2, '0'); sub = 'BAY ' + String(focus.bayId + 1).padStart(2, '0') + ' · ' + (explorer.state.transferLabel || v.state.label); }
   if (text !== currentZone) { currentZone = text; $('view-title').textContent = text; $('map-location').textContent = mode === 'ride' ? 'OHT ' + String(explorer.state.followId + 1).padStart(2, '0') : text.split(' · ')[0]; }
@@ -751,10 +846,29 @@ function animate(now) {
     const upper = .32, bottom = v.gripper.position.y + .0275;
     for (const belt of v.belts) { belt.position.y = (upper + bottom) / 2; belt.scale.y = Math.max(.02, upper - bottom); }
   }
-  updateEntry(dt); playActions.update(dt); explorer.update(dt);
+  updateEntry(dt); playActions.update(dt); explorer.update(dt);restAreaView.update(viewFocus());
+  if(now>=nextRefreshReminder&&!nearSafety&&!entry.active&&!explorer.state.emoInteraction&&!explorer.state.repairInteraction&&!playActions.busy&&!directory.isOpen&&!$('zone-toast').classList.contains('visible')&&$('help').classList.contains('hidden')){
+    toast('가끔 새로고침해 최신 업데이트를 받아보세요. 이름과 기록은 이어져요.',4500);nextRefreshReminder=now+15*60*1000;
+  }
   if(connectionConfig){remotePeople.update(dt,camera,mode==='overview');explorer.state.carrying=Boolean(playActions.store.carried);multiplayer.update();}
-  else if (!entry.active) residents.update(dt, camera, mode === 'overview');
+  else if (!entry.active) {
+    residents.update(dt, camera, mode === 'overview');
+    const p={...explorer.state.position,role:safetyState.role,penalty:safetyState.penalty,safeUntil:safetyGrace,
+      phase:explorer.state.repairInteraction?.phase==='repair'?'repair':playActions.state.phase};
+    safetyPatrols.update(dt,[p,...residents.people],elapsed);
+    if(safetyPatrols.people.some(g=>canCatch(g,p,elapsed))){if(playActions.store.carried)playActions.throwFoup(true);updateSafetyState({...safetyState,penalty:3});}
+    for(const g of safetyPatrols.people)for(const actor of residents.people)if(canCatch(g,actor,elapsed))residents.beginSafetyLap(actor);
+    safetyPeople.synchronize(safetyPatrols.people);safetyPeople.update(dt,camera,mode==='overview');
+  }
   playActions.render(); visitorBadge.update(avatar, explorer.state.posture);
+  visitorEmote.update(avatar,explorer.state.posture,dt,!entry.active&&mode!=='overview');
+  if(now>=nextSafetyCheck){
+    const person={...explorer.state.position,id:multiplayer?.id??'self',...safetyState,hidden:entry.active||mode==='overview',phase:explorer.state.repairInteraction?.phase==='repair'?'repair':playActions.state.phase};
+    const warning=safetyProximity(person,remotePeople?.safetyActors??safetyPatrols?.people??[],nearSafety);
+    nearSafety=warning.near;nextSafetyCheck=now+200;
+    $('safety-proximity').classList.toggle('hidden',!nearSafety);$('safety-warning').classList.toggle('hidden',!nearSafety);
+    $('safety-proximity').style.setProperty('--danger-strength',warning.strength.toFixed(2));
+  }
   const walked = lastStepPosition.distanceTo(explorer.state.position);
   if (mode === 'walk' || mode === 'tour') { if (walked < 1) stepDistance += walked; if (stepDistance > .86) { motionCue('step'); stepDistance = 0; } }
   lastStepPosition.copy(explorer.state.position);
@@ -776,8 +890,10 @@ function animate(now) {
   destruction.update(dt);
   if (burstShake > 0) {
     burstShake = Math.max(0, burstShake - dt);
-    camera.position.x += Math.sin(elapsed * 83) * burstShake * .07;
-    camera.position.y += Math.cos(elapsed * 71) * burstShake * .05;
+    if(!['passenger','ride','transfer'].includes(mode)) {
+      camera.position.x += Math.sin(elapsed * 83) * burstShake * .07;
+      camera.position.y += Math.cos(elapsed * 71) * burstShake * .05;
+    }
   }
   audio.update({ jet: entry.active ? entry.state.jet : 0, hidden: false });
   if (now >= nextMapAt) { if (viewControls.mapVisible) drawMap(); updateZone(); nextMapAt = now + 125; }
@@ -794,7 +910,7 @@ function animate(now) {
     nextDiagnosticAt = now + 500;
     const demo = observedVehicle();
     updateSoundButton();
-    $('world').dataset.diagnostics = JSON.stringify({ ready: true, revision: 'fab-online-18', mode, audio: audio.state, multiplayer: multiplayer ? {status:multiplayer.status,id:multiplayer.id,count:realVisitorCount,capacity:100} : null, residents: residents?.state ?? {total:30,simulated:true,actions:sharedWorld.totals,people:remotePeople.state.people.filter(p=>p.role!=='visitor')}, remotePlayers:remotePeople?.state.people.filter(p=>p.role==='visitor'), destruction: destruction.state, equipmentVisibility: equipmentVisibility.state, emoInteraction: explorer.state.emoInteraction, repairInteraction: explorer.state.repairInteraction, posture: explorer.state.posture, play: playActions.state, actionTargets: new URLSearchParams(location.search).has('qa') ? playActions.targets(camera, { width: innerWidth, height: innerHeight }) : undefined, visitorName: visitorBadge.name, controlsOpen: viewControls.isOpen, mapVisible: viewControls.mapVisible, emoButtons: layoutMachines.length, amberBays: bayLighting.bayIds.map(id => id + 1), amberLights: bayLighting.lights.length, amberLightsVisible: bayLighting.root.visible, entry: { active: entry.active, ...entry.state }, width: WIDTH, length: LENGTH, ceiling: HEIGHT,
+    $('world').dataset.diagnostics = JSON.stringify({ ready: true, revision: 'fab-safety-19', safety: safetyState, safetyPatrols: safetyPeople?.state.people, mode, audio: audio.state, multiplayer: multiplayer ? {status:multiplayer.status,id:multiplayer.id,count:realVisitorCount,total:totalCharacterCount,capacity:ROOM_CAPACITY,visitorCapacity:MAX_VISITORS} : null, residents: residents?.state ?? {total:AUTOMATED_COUNT,simulated:true,actions:sharedWorld.totals,people:remotePeople.state.people.filter(p=>p.id.startsWith('resident:')||p.id.startsWith('safety:'))}, remotePlayers:remotePeople?.state.people.filter(p=>!p.id.startsWith('resident:')&&!p.id.startsWith('safety:')), destruction: destruction.state, equipmentVisibility: equipmentVisibility.state, emoInteraction: explorer.state.emoInteraction, repairInteraction: explorer.state.repairInteraction, posture: explorer.state.posture, play: playActions.state, actionTargets: new URLSearchParams(location.search).has('qa') ? playActions.targets(camera, { width: innerWidth, height: innerHeight }) : undefined, visitorName: visitorBadge.name, controlsOpen: viewControls.isOpen, mapVisible: viewControls.mapVisible, emoButtons: layoutMachines.length, amberBays: bayLighting.bayIds.map(id => id + 1), amberLights: bayLighting.lights.length, amberLightsVisible: bayLighting.root.visible, entry: { active: entry.active, ...entry.state }, width: WIDTH, length: LENGTH, ceiling: HEIGHT,
       equipmentCount: equipment.length, equipmentFamilies: families.length, uniqueEquipmentCodes: new Set(equipment.map(e => e.code)).size, selectedEquipment: selectedEquipment?.code ?? null,
       machines: machinePositions.length, bays: bays.length, toolsPerRow: 10, loadports: layoutMachines.length * 3,
       frontAisle: AISLE, rearAisle: SERVICE_AISLE, sideGap: SIDE_GAP, vehicles: vehicles.length, junctions: network.junctions.length,

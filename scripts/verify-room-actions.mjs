@@ -1,3 +1,4 @@
+import {PROTOCOL} from '../src/shared-protocol.js';
 import WebSocket from 'ws';
 const lookup=process.env.FAB_TEST_IP ? (_host,options,cb)=>options?.all?cb(null,[{address:process.env.FAB_TEST_IP,family:4}]):cb(null,process.env.FAB_TEST_IP,4):undefined;
 import assert from 'node:assert/strict';
@@ -5,8 +6,8 @@ import {writeFile} from 'node:fs/promises';
 import {machines,ports,TOOL_FRONT} from '../src/layout.js';
 import {getEmoApproach} from '../src/emo-interaction.js';
 import {boardingMachine} from '../src/play-actions.js';
-import {initialSharedPorts} from '../src/shared-protocol.js';
-const origin=process.argv[2]??'http://127.0.0.1:4173';const endpoint=new URL('/api/room?v=18',origin);endpoint.protocol=origin.startsWith('https')?'wss:':'ws:';
+import {initialSharedPorts,actorFromPacket} from '../src/shared-protocol.js';
+const origin=process.argv[2]??'http://127.0.0.1:4173';const endpoint=new URL('/api/room?v='+PROTOCOL,origin);endpoint.protocol=origin.startsWith('https')?'wss:':'ws:';
 const sleep=ms=>new Promise(r=>setTimeout(r,ms)),clients=[];
 async function connect(){return new Promise((resolve,reject)=>{const ws=new WebSocket(endpoint,{origin,lookup}),pending=new Map(),c={ws,pose:{x:0,y:0,z:70,heading:0,speed:0,posture:'stand',hidden:false}};let seq=0;
   const timer=setTimeout(()=>reject(new Error('welcome timeout')),12000);ws.on('error',reject);
@@ -17,14 +18,17 @@ async function connect(){return new Promise((resolve,reject)=>{const ws=new WebS
 });}
 async function until(fn){const end=Date.now()+5000;while(Date.now()<end){if(fn())return;await sleep(100);}assert.fail('peer state not synchronized');}
 const report={origin,checks:[]};
+const ownScore=c=>{const p=c.frame.people.map(actorFromPacket).find(p=>p.id===c.id);return [p.brokenCount,p.repairedCount];};
 try{
   const a=await connect(),b=await connect();a.move({x:0,z:70,posture:'sit'});await until(()=>b.frame.people.some(r=>r[0]===a.id&&r[6]==='sit'));report.checks.push('peer position and posture');
   const m=machines.find(m=>!a.frame.broken.some(r=>r[0]===m.id));a.move({...getEmoApproach(m).destination,posture:'stand'});
   assert.equal((await a.command('claim',{id:m.id,kind:'emo'})).ok,true);assert.equal((await b.command('claim',{id:m.id,kind:'emo'})).ok,false);
   assert.equal((await a.command('press',{id:m.id})).ok,true);assert.equal((await a.command('explode',{id:m.id})).ok,false);await sleep(850);assert.equal((await a.command('explode',{id:m.id})).ok,true);
   await until(()=>b.frame.broken.some(r=>r[0]===m.id));report.checks.push('exclusive EMO contact and shared damage');
+  assert.deepEqual(ownScore(a),[1,0]);assert.deepEqual(ownScore(b),[0,0]);
   assert.equal((await a.command('claim',{id:m.id,kind:'repair'})).ok,true);assert.equal((await a.command('repair',{id:m.id})).ok,true);await sleep(5250);assert.equal((await a.command('finish',{id:m.id})).ok,true);
   await until(()=>!b.frame.broken.some(r=>r[0]===m.id));report.checks.push('timed repair shared with peer');
+  assert.deepEqual(ownScore(a),[1,1]);assert.deepEqual(ownScore(b),[0,0]);report.checks.push('personal destruction and repair totals exclude peer activity');
   const p=ports.find(p=>initialSharedPorts.includes(p.id)&&!a.frame.broken.some(r=>r[0]===p.machineId)&&!a.frame.foups.some(r=>r[0]===`port:${p.id}`));const foupId=`port:${p.id}`;
   a.move({x:p.x,z:p.z+p.sign*.96});b.move({x:p.x,z:p.z+p.sign*.96});assert.equal((await a.command('pickup',{id:foupId})).ok,true);assert.equal((await b.command('pickup',{id:foupId})).ok,false);
   assert.equal((await a.command('throw')).ok,true);await until(()=>b.frame.foups.some(r=>r[0]===foupId&&r[1]==='flying'));report.checks.push('exclusive FOUP pickup and shared throw');

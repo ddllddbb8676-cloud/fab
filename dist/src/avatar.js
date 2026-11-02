@@ -179,13 +179,16 @@ export function createAvatar(THREE) {
     const head = new THREE.Mesh(new THREE.BoxGeometry(.16, .06, .065), new THREE.MeshStandardMaterial({ color: '#5d8991', metalness: .5, roughness: .32 }));
     head.position.y = -.21; group.add(handle, head); rightArm.glove.add(group); return group;
   }
-  function update(dt, { speed = 0, heading = facing, pressTarget = null, pressProgress = 0, posture = 'stand', repairTime = null, hanging = false, carrying = false, crouch = 0 } = {}) {
+  function update(dt, { speed = 0, heading = facing, pressTarget = null, pressProgress = 0, posture = 'stand', repairTime = null, hanging = false, carrying = false, crouch = 0, snap = false } = {}) {
     if (disposed) return;
     const step = Number.isFinite(dt) ? Math.max(0, Math.min(dt, .1)) : 0;
     speed = Number.isFinite(speed) ? Math.max(0, speed) : 0; heading = Number.isFinite(heading) ? heading : facing;
     const pressing = pressTarget && [pressTarget.x, pressTarget.y, pressTarget.z].every(Number.isFinite)
       ? Math.max(0, Math.min(1, Number.isFinite(pressProgress) ? pressProgress : 0)) : 0;
     const working = Number.isFinite(repairTime);
+    // A pooled body can represent a different visitor next frame. Its first
+    // visible pose must belong entirely to that visitor, not the prior owner.
+    if(snap){facing=heading;seated=posture==='sit'?1:0;reclining=posture==='lie'?1:0;phase=0;currentSpeed=speed;activity=speed>.02?1:0;}
     if (posture !== 'stand' || seated + reclining > .01 || working) speed = 0;
     currentSpeed += (speed - currentSpeed) * (1 - Math.exp(-step * 12)); activity += ((speed > .02 ? 1 : 0) - activity) * (1 - Math.exp(-step * 10));
     const turn = Math.atan2(Math.sin(heading - facing), Math.cos(heading - facing));
@@ -256,9 +259,15 @@ export function createAvatar(THREE) {
     root.userData.walking = activity > .05; root.userData.heading = facing;
   }
   update(0);
-  return { root, body, update, height: 1.44, radius: .295,
+  let suitMaterial = null;
+  function setSuitColor(color) {
+    if (!suitMaterial) { suitMaterial = resources.material.clone(); root.traverse(m => { if (m.isMesh && ['hood','torso','pants','upperArm','forearm'].includes(m.name)) m.material = suitMaterial; }); }
+    suitMaterial.color.set(color);
+  }
+  return { root, body, update, setSuitColor, height: 1.44, radius: .295,
     dispose() {
       if (disposed) return; disposed = true; root.removeFromParent();
+      suitMaterial?.dispose();
       if (hammer) hammer.traverse(node => { if (node.isMesh) { node.geometry.dispose(); node.material.dispose(); } });
       if (--resources.references !== 0) return;
       for (const name of ['hood', 'face', 'torso', 'upperArm', 'forearm', 'glove', 'pants', 'boot', 'shadow']) resources[name].dispose();

@@ -143,3 +143,23 @@ test('a tap route consumes corners without an idle frame and retains the narrow 
     assert.ok(sawCorner);
   } finally { h.dispose(); }
 });
+
+test('OHT rider camera keeps a steady relative view through uneven motion and eases turns',()=>{
+  for(const hz of [30,60,120]) {
+    const h=setup();
+    try {
+      h.explorer.setMode('passenger');
+      const pose={x:0,y:2.16,z:70,heading:0,hanging:true};
+      for(let i=0;i<hz*4;i++){h.explorer.setScriptedPose(pose);h.explorer.update(1/hz);}
+      const offset=h.camera.position.clone().sub(new THREE.Vector3(pose.x,pose.y,pose.z));
+      for(let i=0;i<hz;i++) {
+        pose.x+=(i%6===0?.16:.018);h.explorer.setScriptedPose(pose);h.explorer.update(1/hz);
+        assert.ok(h.camera.position.clone().sub(new THREE.Vector3(pose.x,pose.y,pose.z)).distanceTo(offset)<.001,'camera transports with rider instead of repeatedly lagging behind');
+      }
+      const before=h.camera.position.clone();pose.heading=Math.PI/2;h.explorer.setScriptedPose(pose);h.explorer.update(1/hz);
+      assert.ok(h.camera.position.distanceTo(before)<.15,'a junction turn does not whip the camera');
+      for(let i=0;i<hz*3;i++)h.explorer.update(1/hz);
+      assert.ok(Math.abs(h.camera.position.y-4.55)<.001);
+    }finally{h.dispose();}
+  }
+});

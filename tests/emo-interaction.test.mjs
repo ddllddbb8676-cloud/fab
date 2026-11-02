@@ -12,6 +12,19 @@ import { setRuntimeObstacles } from '../src/runtime-obstacles.js';
 const distance = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const example = sign => machines.find(m => m.bayId === 4 && m.sign === sign && m.column === 4);
 
+test('side-gap EMO routes approach directly from the front rather than doubling back through the central aisle',()=>{
+  for(const bay of bays)for(const sign of [-1,1]){
+    const machine=bay.machines.find(m=>m.sign===sign&&m.column===(bay.x<0?9:0));
+    const neighbor=bay.machines.find(m=>m.sign===sign&&Math.abs(m.column-machine.column)===1);
+    const start={x:(machine.x+neighbor.x)/2,z:machine.z};const plan=planEmoApproach(machine,start);
+    assert.ok(plan);let previous=start,length=0;
+    for(const point of plan.path){assert.ok(canWalkSegment(previous,point));length+=distance(previous,point);previous=point;}
+    assert.ok(length<10,`unnecessary detour for ${machine.id}: ${length}`);
+    assert.deepEqual(plan.path.at(-1),plan.destination,'hand-contact stance is unchanged');
+    assert.ok(plan.path.length>3,'the turn uses a collision-checked curve');
+  }
+});
+
 function setup({ sign = 1, aspect = 16 / 9, onActionTap } = {}) {
   const priorDocument = globalThis.document, priorWindow = globalThis.window;
   const canvasEvents = new Map(), windowEvents = new Map(), documentEvents = new Map();

@@ -7,6 +7,39 @@ import { machines, ports, isBlocked } from '../src/layout.js';
 import { restPoseFits } from '../src/posture.js';
 import * as THREE from 'three';
 import { createEquipmentDestruction } from '../src/equipment-destruction.js';
+import {createRoom} from '../server/room-engine.js';
+
+test('caught residents stand, walk an unobstructed loop, return home and resume their role without multiplying FOUPs',()=>{
+  const r=createRoom({random:()=>.42}),sim=r.residents;
+  for(const p of sim.people)p.wait=1e9;
+  const targets=sim.people.filter(p=>p.role==='resting');
+  for(const role of ['thrower','breaker','repairer'])targets.push(sim.people.find(p=>p.role===role));
+  const totalCargo=r.store.records.size;
+  for(const actor of targets) {
+    const origin={x:actor.x,z:actor.z},role=actor.role,posture=actor.posture;
+    if(role==='thrower') {
+      const cargo=[...r.store.records.values()].find(p=>p.mode==='port');actor.recordId=cargo.id;
+      assert.equal(r.store.pickup(cargo.id,actor.id),true);
+    }
+    assert.equal(sim.beginSafetyLap(actor),true);assert.equal(actor.posture,'stand');
+    assert.equal(r.store.getCarried(actor.id),null);assert.equal(sim.beginSafetyLap(actor),false);
+    let travelled=0;
+    for(let n=0;n<6000&&actor.penalty;n++) {
+      const before={x:actor.x,z:actor.z};sim.update(.05);r.store.step(.05);
+      travelled+=Math.hypot(actor.x-before.x,actor.z-before.z);
+      assert.equal(isBlocked(actor.x,actor.z,.295),false,`${role} walks around equipment`);
+    }
+    assert.equal(actor.penalty,0,`${role} finishes the lap`);assert.ok(travelled>30,`${role} actually walks a loop`);
+    assert.ok(Math.hypot(actor.x-origin.x,actor.z-origin.z)<.04);assert.equal(actor.role,role);
+    assert.equal(actor.phase,role==='resting'?'rest':'idle');
+    if(role==='resting')assert.equal(actor.posture,posture);
+    assert.equal(sim.beginSafetyLap(actor),false,'completion grants a short grace period');
+    actor.wait=1e9;
+  }
+  assert.equal(r.store.records.size,totalCargo);
+  const riding=sim.people.find(p=>p.role==='rider');assert.equal(sim.beginSafetyLap(riding),false);
+  const repairing=sim.people.find(p=>p.role==='repairer');repairing.phase='repair';assert.equal(sim.beginSafetyLap(repairing),false);
+});
 
 test('thirty distinct named residents keep their roles and share a finite FOUP inventory over repeated work cycles', () => {
   let seed = 15879;
@@ -52,16 +85,16 @@ test('thirty distinct named residents keep their roles and share a finite FOUP i
   if(working){const id=working.targetId;sim.yieldMachine(id);assert.equal(working.targetId,null);assert.ok(!repairs.has(id));}
 });
 
-test('five resident repairers may each rebuild one tool while the player keeps a separate single-tool repair',()=>{
+test('two resident repairers may each rebuild one tool while the player keeps a separate single-tool repair',()=>{
   const scene=new THREE.Scene(), effect=createEquipmentDestruction({THREE,scene,machines:machines.slice(0,8)});
   try {
     for(let id=0;id<8;id++)effect.trigger(id);
-    for(let id=0;id<5;id++)assert.equal(effect.beginRepair(id,`resident:${id}`),true);
+    for(let id=0;id<2;id++)assert.equal(effect.beginRepair(id,`resident:${id}`),true);
     assert.equal(effect.beginRepair(5,'resident:0'),false);
     assert.equal(effect.beginRepair(0,'player'),false);
     assert.equal(effect.beginRepair(5),true); assert.equal(effect.beginRepair(6),false);
     for(let id=0;id<6;id++)effect.setRepairProgress(id,.5);
-    assert.equal(effect.state.repairing.length,6);
+    assert.equal(effect.state.repairing.length,3);
     effect.cancelRepair(0); assert.equal(effect.beginRepair(6,'resident:0'),true);
     effect.reset(5); assert.ok(!effect.isDestroyed(5));assert.ok(effect.isDestroyed(7));
   }finally{effect.dispose();}

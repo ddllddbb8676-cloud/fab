@@ -5,8 +5,8 @@ export async function multiplayerConfiguration() {
   catch{}
   return location.hostname==='fab.semitoon.com'?{multiplayer:true,protocol:PROTOCOL,ws:'/api/room'}:null;
 }
-export function createMultiplayer({config,getPose,onWelcome,onFrame,onRoster,onStatus,onError}) {
-  let socket=null,status='connecting',id=null,seq=0,retry=0,closed=false,lastPose='',lastSent=0,connection=0;
+export function createMultiplayer({config,getPose,onWelcome,onFrame,onRoster,onStatus,onError,onCatch}) {
+  let socket=null,status='connecting',id=null,seq=0,retry=0,closed=false,lastPose='',lastSent=0,connection=0,retryTimer=null;
   const pending=new Map();
   function setStatus(s){status=s;onStatus?.(s);}
   function send(data){if(socket?.readyState!==1)return false;socket.send(JSON.stringify(data));return true;}
@@ -22,6 +22,9 @@ export function createMultiplayer({config,getPose,onWelcome,onFrame,onRoster,onS
         if(data.v!==PROTOCOL){setStatus('version');socket.close();return;}
         id=data.id;retry=0;onWelcome?.(data);onRoster?.(data.roster);onFrame?.(data.frame,true);setStatus('connected');sendPose(true);
       } else if(data.type==='frame')onFrame?.(data,false);
+      else if(data.type==='replaced'){setStatus('replaced');onError?.('다른 탭에서 이어서 접속했어요. 이 탭은 쉬고 있어요.');socket.close();}
+      else if(data.type==='resetting'){setStatus('resetting');socket.close();}
+      else if(data.type==='safety-catch'&&data.guardId===id)onCatch?.(data);
       else if(data.type==='roster')onRoster?.(data.roster);
       else if(data.type==='ack') {
         if(data.frame)onFrame?.(data.frame,false);
@@ -29,10 +32,13 @@ export function createMultiplayer({config,getPose,onWelcome,onFrame,onRoster,onS
         if(!data.ok)onError?.(data.message??'잠시 후 다시 시도해 주세요');
       } else if(data.type==='full'){setStatus('full');onError?.(data.message);}
     });
-    socket.addEventListener('close',()=>{
+    socket.addEventListener('close',event=>{
       if(generation!==connection||closed)return;clearPending();
+      if(status==='replaced'||status==='resetting')return;
+      if(event.code===4001){setStatus('replaced');onError?.('다른 탭에서 이어서 접속했어요. 이 탭은 쉬고 있어요.');return;}
+      if(event.code===4002){setStatus('resetting');return;}
       const wasFull=status==='full';if(status!=='version'&&!wasFull)setStatus('reconnecting');
-      if(status!=='version')setTimeout(connect,wasFull?15000:Math.min(12000,1000*2**retry++)+Math.random()*500);
+      if(status!=='version')retryTimer=setTimeout(connect,wasFull?15000:Math.min(12000,1000*2**retry++)+Math.random()*500);
     });
     socket.addEventListener('error',()=>{});
   }
@@ -49,7 +55,8 @@ export function createMultiplayer({config,getPose,onWelcome,onFrame,onRoster,onS
   }
   connect();
   const heartbeat=setInterval(()=>sendPose(),150);
-  document.addEventListener('visibilitychange',()=>sendPose(true));
+  const visible=()=>sendPose(true);document.addEventListener('visibilitychange',visible);
   return {command,sendPose,update:sendPose,get id(){return id;},get connected(){return status==='connected';},get status(){return status;},
-    dispose(){closed=true;clearInterval(heartbeat);clearPending();socket?.close();}};
+    async resetProfile(){const r=await fetch('/api/session/reset',{method:'POST',credentials:'same-origin'});if(!r.ok)throw new Error('초기화하지 못했어요. 잠시 후 다시 눌러주세요.');this.dispose();},
+    dispose(){closed=true;clearInterval(heartbeat);clearTimeout(retryTimer);document.removeEventListener('visibilitychange',visible);clearPending();socket?.close();}};
 }

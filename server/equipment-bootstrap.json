@@ -1,0 +1,84 @@
+{
+  "version": 1,
+  "capturedAt": 1793535736220,
+  "source": "https://fab.semitoon.com",
+  "roomTime": 503.4,
+  "broken": [
+    {
+      "id": 196,
+      "destroyedAt": 1793535433470
+    },
+    {
+      "id": 10,
+      "destroyedAt": 1793535486170
+    },
+    {
+      "id": 194,
+      "destroyedAt": 1793535488970
+    },
+    {
+      "id": 199,
+      "destroyedAt": 1793535542470
+    },
+    {
+      "id": 16,
+      "destroyedAt": 1793535560770
+    },
+    {
+      "id": 17,
+      "destroyedAt": 1793535569970
+    },
+    {
+      "id": 6,
+      "destroyedAt": 1793535584820
+    },
+    {
+      "id": 7,
+      "destroyedAt": 1793535593920
+    },
+    {
+      "id": 18,
+      "destroyedAt": 1793535604270
+    },
+    {
+      "id": 8,
+      "destroyedAt": 1793535625670
+    },
+    {
+      "id": 5,
+      "destroyedAt": 1793535654220
+    },
+    {
+      "id": 4,
+      "destroyedAt": 1793535663770
+    },
+    {
+      "id": 14,
+      "destroyedAt": 1793535675470
+    },
+    {
+      "id": 12,
+      "destroyedAt": 1793535695620
+    },
+    {
+      "id": 11,
+      "destroyedAt": 1793535708220
+    },
+    {
+      "id": 146,
+      "destroyedAt": 1793535711820
+    },
+    {
+      "id": 1,
+      "destroyedAt": 1793535719070
+    },
+    {
+      "id": 156,
+      "destroyedAt": 1793535724220
+    },
+    {
+      "id": 2,
+      "destroyedAt": 1793535727820
+    }
+  ]
+}

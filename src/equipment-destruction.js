@@ -79,6 +79,20 @@ export function createEquipmentDestruction({ THREE, scene, machines, reducedMoti
   const half = new THREE.Vector3(), matrix = new THREE.Matrix4(), rotation = new THREE.Quaternion();
   const position = new THREE.Vector3(), color = new THREE.Color(), effectSize = new THREE.Vector3();
   let disposed = false, serial = 0;
+  const picker = new THREE.Raycaster();
+
+  // Pick the rendered fragments, never the now-empty cabinet's old hit box.
+  function pick(ray, { near = 0, maxDistance = 20 } = {}) {
+    if (disposed || !root.visible || !destroyed.size) return null;
+    picker.ray.copy(ray); picker.near = near; picker.far = maxDistance;
+    root.updateWorldMatrix(true, true);
+    for (const mesh of debris) mesh.computeBoundingSphere();
+    for (const hit of picker.intersectObjects(debris, false)) {
+      const id = slotOwners[Math.floor(hit.instanceId / hit.object.userData.partsPerMachine)];
+      if (id !== null && destroyed.has(id)) return { id, distance: hit.distance };
+    }
+    return null;
+  }
 
   function state() {
     return { destroyedIds: [...destroyed.keys()], destroyedCount: destroyed.size, activeCount: active.size,
@@ -283,5 +297,5 @@ export function createEquipmentDestruction({ THREE, scene, machines, reducedMoti
     for (const effect of effects) for (const mesh of [effect.fire, effect.smoke, effect.sparks]) mesh.material.dispose();
     root.clear(); changed();
   }
-  return { root, trigger, update, reset, resetAll, beginRepair, setRepairProgress, cancelRepair, dispose, isDestroyed: id => destroyed.has(id), get state() { return state(); } };
+  return { root, pick, trigger, update, reset, resetAll, beginRepair, setRepairProgress, cancelRepair, dispose, isDestroyed: id => destroyed.has(id), get state() { return state(); } };
 }

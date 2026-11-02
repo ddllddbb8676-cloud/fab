@@ -1,11 +1,12 @@
 import { ports } from './layout.js';
 import { actorFromPacket,foupFromPacket } from './shared-protocol.js';
 
-export function createSharedWorldView({fleet,store,destruction,onPeople,onCue,onCount}) {
-  const portMap=new Map(ports.map(p=>[p.id,p])), targets=new Map();let selfId=null,lastTime=-1,totals={};
-  function welcome(id){selfId=id;lastTime=-1;store.reset();destruction.resetAll();targets.clear();}
+export function createSharedWorldView({fleet,store,destruction,onPeople,onCue,onCount,onSelf=()=>{}}) {
+  const portMap=new Map(ports.map(p=>[p.id,p])), targets=new Map();let selfId=null,lastTime=-1,renderTime=null,totals={};
+  function welcome(id){selfId=id;lastTime=-1;renderTime=null;store.reset();targets.clear();}
   function apply(frame,initial=false) {
     if(!frame||frame.t<lastTime)return;lastTime=frame.t;
+    if(renderTime===null)renderTime=frame.t-.3;
     const wanted=new Set(frame.broken.map(r=>r[0]));
     for(const id of destruction.state.destroyedIds)if(!wanted.has(id))destruction.reset(id);
     for(const [id,age,progress,owner] of frame.broken) {
@@ -21,15 +22,27 @@ export function createSharedWorldView({fleet,store,destruction,onPeople,onCue,on
       v.residentId=r[17]?.startsWith('resident:')?r[17]:null;v.playerId=r[17]&&!v.residentId?r[17]:null;
       const state={car:{x:r[1],z:r[2],yaw:r[3]},foup:{x:r[4],y:r[5],z:r[6],yaw:r[7]},gripperY:r[8],phase:r[9],parked:r[10],lowered:r[11],
         target:v.currentPort,origin:v.currentPort,destination:v.destinationPort,hasCargo:!v.cargoDetached,passenger:v.passenger,travelling:r[9]===4||r[9]===8,waiting:r[18],delivered:r[19],label:v.passenger?'함께 FAB 산책':'FOUP 반송'};
-      targets.set(v.id,state);v.state=initial?state:{...state,car:{...previous.car},foup:{...previous.foup},gripperY:previous.gripperY};
+      const samples=initial?[]:targets.get(v.id)??[];
+      if(samples.at(-1)?.t===frame.t)samples.pop();
+      samples.push({t:frame.t,state});if(samples.length>12)samples.shift();targets.set(v.id,samples);
+      v.state={...state,car:{...(initial?state:previous).car},foup:{...(initial?state:previous).foup},gripperY:(initial?state:previous).gripperY};
     }
-    onPeople(frame.people.map(actorFromPacket).filter(p=>p.id!==selfId));onCount(frame.count);totals=frame.totals;
+    const people=frame.people.map(actorFromPacket);onPeople(people.filter(p=>p.id!==selfId));onSelf(people.find(p=>p.id===selfId));onCount(frame.count,people.length);totals=frame.totals;
     if(!initial)for(const [kind,x,z] of frame.events)onCue(kind,{x,z});
   }
   function update(dt) {
-    const f=1-Math.exp(-dt*16),angle=(a,b)=>a+Math.atan2(Math.sin(b-a),Math.cos(b-a))*f;
-    for(const v of fleet.vehicles){const goal=targets.get(v.id);if(!goal)continue;for(const k of ['x','z'])v.state.car[k]+=(goal.car[k]-v.state.car[k])*f;
-      v.state.car.yaw=angle(v.state.car.yaw,goal.car.yaw);for(const k of ['x','y','z'])v.state.foup[k]+=(goal.foup[k]-v.state.foup[k])*f;v.state.foup.yaw=angle(v.state.foup.yaw,goal.foup.yaw);v.state.gripperY+=(goal.gripperY-v.state.gripperY)*f;}
+    // Render between timestamped samples, 300 ms behind the server. Chasing each
+    // 5 Hz packet with damping made constant-speed cars accelerate then brake.
+    if(renderTime!==null)renderTime=Math.min(lastTime,renderTime+Math.max(0,dt));
+    for(const v of fleet.vehicles){const samples=targets.get(v.id);if(!samples?.length)continue;
+      while(samples.length>2&&samples[1].t<=renderTime)samples.shift();
+      const a=samples[0],b=samples[1]??a,f=b.t>a.t?Math.max(0,Math.min(1,(renderTime-a.t)/(b.t-a.t))):0;
+      const mix=(x,y)=>x+(y-x)*f,angle=(x,y)=>x+Math.atan2(Math.sin(y-x),Math.cos(y-x))*f;
+      for(const k of ['x','z'])v.state.car[k]=mix(a.state.car[k],b.state.car[k]);
+      v.state.car.yaw=angle(a.state.car.yaw,b.state.car.yaw);
+      for(const k of ['x','y','z'])v.state.foup[k]=mix(a.state.foup[k],b.state.foup[k]);
+      v.state.foup.yaw=angle(a.state.foup.yaw,b.state.foup.yaw);v.state.gripperY=mix(a.state.gripperY,b.state.gripperY);
+    }
     store.interpolate(dt);
   }
   return {welcome,apply,update,get totals(){return totals;}};

@@ -11,26 +11,41 @@ function fixture(){const room=createRoom({random:()=>.42});for(const p of room.r
 function move(room,id,p){assert.equal(room.pose(id,{x:p.x,y:p.y??0,z:p.z,heading:0,speed:0,posture:'stand',hidden:false}),true);}
 function step(room,seconds){for(let i=0;i<Math.ceil(seconds/.05);i++)room.step(.05);}
 
-test('one room admits 100 real people plus 30 named residents; leaving frees a slot',()=>{
-  const room=createRoom();for(let i=0;i<100;i++)assert.equal(room.join(`p${i}`).ok,true);
-  assert.equal(room.join('overflow').error,'full');const names=room.roster().map(r=>r[1]);
-  assert.equal(names.length,130);assert.equal(new Set(names).size,130);assert.ok(names.every(n=>[...n].length<=7));
-  room.remove('p0');assert.equal(room.join('next').ok,true);assert.equal(room.snapshot().count,100);
+test('34 automated characters reserve capacity: 66 visitors enter, the 67th waits, and leaving frees one slot',()=>{
+  const room=createRoom();assert.equal(room.roster().length,34);
+  assert.equal(room.residents.people.filter(p=>p.role==='repairer').length,2);
+  assert.equal(room.residents.people.filter(p=>p.role==='breaker').length,13);
+  for(let i=0;i<66;i++)assert.equal(room.join(`p${i}`).ok,true);
+  const rejected=room.join('overflow');assert.equal(rejected.error,'full');assert.match(rejected.message,/100명/);
+  const names=room.roster().map(r=>r[1]);
+  assert.equal(names.length,100);assert.equal(new Set(names).size,100);assert.ok(names.every(n=>[...n].length<=7));
+  assert.equal(room.players.has('overflow'),false);
+  room.remove('p0');assert.equal(room.snapshot().people.length,99);
+  assert.equal(room.join('next').ok,true);assert.equal(room.snapshot().count,66);
+  assert.equal(room.snapshot().people.length,100);assert.equal(room.join('overflow-again').error,'full');
 });
 
 test('positions and posture become the same shared snapshot for every reader',()=>{
   const room=fixture();move(room,'a',{x:0,z:70});room.pose('a',{x:0,y:0,z:70,heading:1,speed:0,posture:'lie',hidden:false});
   const state=room.snapshot(true);const a=state.people.map(actorFromPacket).find(p=>p.id==='a');assert.equal(a.z,70);assert.equal(a.posture,'lie');assert.equal(a.hidden,false);
-  assert.deepEqual(state,room.snapshot(true));assert.equal(state.people.length,32);
+  assert.deepEqual(state,room.snapshot(true));assert.equal(state.people.length,36);
 });
 
 test('exclusive equipment claim requires contact and a hold before damage; repairs take time',()=>{
   const r=fixture(),id=350,destination=getEmoApproach(machines[id]).destination;
+  const score=who=>{const p=r.snapshot(true).people.map(actorFromPacket).find(p=>p.id===who);return [p.brokenCount,p.repairedCount];};
+  assert.deepEqual(score('a'),[0,0]);assert.deepEqual(score('b'),[0,0]);
   assert.equal(r.command('a','claim',{id,kind:'emo'}).ok,true);assert.equal(r.command('b','claim',{id,kind:'emo'}).ok,false);
   assert.equal(r.command('a','press',{id}).ok,false);move(r,'a',destination);assert.equal(r.command('a','press',{id}).ok,true);
-  assert.equal(r.command('a','explode',{id}).ok,false);step(r,.8);assert.equal(r.command('a','explode',{id}).ok,true);assert.ok(r.destruction.isDestroyed(id));
+  assert.equal(r.command('a','explode',{id}).ok,false);assert.deepEqual(score('a'),[0,0]);step(r,.8);assert.equal(r.command('a','explode',{id}).ok,true);assert.ok(r.destruction.isDestroyed(id));
+  assert.deepEqual(score('a'),[1,0]);assert.deepEqual(score('b'),[0,0]);
+  assert.equal(r.command('a','explode',{id}).ok,false);assert.deepEqual(score('a'),[1,0]);
   step(r,1);assert.equal(r.command('b','claim',{id,kind:'repair'}).ok,true);move(r,'b',destination);assert.equal(r.command('b','repair',{id}).ok,true);
-  assert.equal(r.command('b','finish',{id}).ok,false);step(r,5);assert.equal(r.command('b','finish',{id}).ok,true);assert.equal(r.destruction.isDestroyed(id),false);
+  assert.equal(r.command('b','finish',{id}).ok,false);assert.deepEqual(score('b'),[0,0]);step(r,5);assert.equal(r.command('b','finish',{id}).ok,true);assert.equal(r.destruction.isDestroyed(id),false);
+  assert.deepEqual(score('b'),[0,1]);assert.deepEqual(score('a'),[1,0]);
+  assert.equal(r.command('b','finish',{id}).ok,false);assert.deepEqual(score('b'),[0,1]);
+  r.destruction.trigger(351);r.destruction.reset(351);
+  assert.deepEqual(score('a'),[1,0]);assert.deepEqual(score('b'),[0,1],'shared world changes do not increase personal totals');
 });
 
 test('FOUP ownership and throws are authoritative, and disconnect drops the same object',()=>{

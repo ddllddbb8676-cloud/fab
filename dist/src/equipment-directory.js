@@ -1,3 +1,19 @@
+import { machines } from './layout.js';
+import { planEmoApproach } from './emo-interaction.js';
+
+const machineById = new Map(machines.map(m => [m.id, m]));
+// Use the same walking route as repair, including detours around equipment.
+export function rankRepairEquipment(equipment, position) {
+  return equipment.map(item => {
+    const plan = planEmoApproach(machineById.get(item.id), position);
+    let distance = plan ? 0 : Infinity, previous = position;
+    for (const point of plan?.path ?? []) {
+      distance += Math.hypot(point.x - previous.x, point.z - previous.z); previous = point;
+    }
+    return { item, distance };
+  }).sort((a, b) => a.distance - b.distance || a.item.id - b.item.id);
+}
+
 const normalize = value => String(value ?? '').normalize('NFKC').toLocaleLowerCase('ko-KR').replace(/[^\p{L}\p{N}]/gu, '');
 
 export function filterEquipment(equipment, query = '', familyKey = '') {
@@ -17,9 +33,10 @@ export function filterEquipment(equipment, query = '', familyKey = '') {
   });
 }
 
-export function createEquipmentDirectory({ equipment, families, onSelect = () => {}, onToggle = () => {} }) {
+export function createEquipmentDirectory({ equipment, families, getPosition = () => null, onSelect = () => {}, onToggle = () => {} }) {
   const items = [...equipment].sort((a, b) => a.id - b.id);
   let allowedIds = null;
+  let repairRanking = null;
   const byId = new Map(items.map(item => [String(item.id), item]));
   const familyCounts = new Map();
   for (const item of items) familyCounts.set(item.familyKey, (familyCounts.get(item.familyKey) ?? 0) + 1);
@@ -53,18 +70,22 @@ export function createEquipmentDirectory({ equipment, families, onSelect = () =>
     const node = document.createElement('span'); node.className = className; node.textContent = text; return node;
   }
   function render() {
-    const available = allowedIds ? items.filter(item => allowedIds.has(item.id)) : items;
-    const result = filterEquipment(available, search.value, select.value);
+    const available = repairRanking ? repairRanking.map(row => row.item) : allowedIds ? items.filter(item => allowedIds.has(item.id)) : items;
+    const distances = new Map((repairRanking ?? []).map(row => [row.item.id, row.distance]));
+    const result = filterEquipment(available, allowedIds ? '' : search.value, select.value);
     const fragment = document.createDocumentFragment();
     for (const item of result) {
       const li = document.createElement('li'), button = document.createElement('button');
       button.type = 'button'; button.className = 'equipment-directory-row'; button.dataset.equipmentId = item.id;
+      const distance = distances.get(item.id);
+      const distanceLabel = distance === undefined ? '' : Number.isFinite(distance) ? `도보 약 ${Math.ceil(distance)}m` : '이동 경로 없음';
+      button.disabled = distance === Infinity;
       const location = `${item.fabName} · ${item.bayLabel} · ${item.rowLabel}열 ${String(item.column + 1).padStart(2, '0')}번`;
-      button.setAttribute('aria-label', allowedIds ? `${item.code} 수리하기` : `${item.code}, ${item.name}, ${location}으로 이동`);
+      button.setAttribute('aria-label', allowedIds ? `${item.code} 수리하기${distanceLabel ? ', ' + distanceLabel : ''}` : `${item.code}, ${item.name}, ${location}으로 이동`);
       const identity = span('equipment-directory-identity', '');
       identity.append(span('equipment-directory-code', item.code), span('equipment-directory-name', item.typeName));
       const detail = span('equipment-directory-detail', '');
-      detail.append(span('equipment-directory-kind', item.bayPurpose ?? item.familyName), span('equipment-directory-location', location));
+      detail.append(span('equipment-directory-kind', [distanceLabel, item.bayPurpose ?? item.familyName].filter(Boolean).join(' · ')), span('equipment-directory-location', location));
       const arrow = span('equipment-directory-arrow', allowedIds ? '🔧' : '↗'); arrow.setAttribute('aria-hidden', 'true');
       button.append(identity, detail, arrow); li.appendChild(button); fragment.appendChild(li);
     }
@@ -82,12 +103,21 @@ export function createEquipmentDirectory({ equipment, families, onSelect = () =>
   function open({ ids = null } = {}) {
     if (dialog.open) return;
     allowedIds = ids ? new Set(ids) : null;
+    const position = getPosition();
+    repairRanking = allowedIds && position ? rankRepairEquipment(items.filter(item => allowedIds.has(item.id)), {x:position.x,z:position.z}) : null;
     dialog.querySelector('#equipment-directory-title').textContent = allowedIds ? '수리할 장비 선택' : '장비 목록';
-    dialog.querySelector('.equipment-directory-summary').textContent = allowedIds ? `고장 난 장비 ${allowedIds.size}대 · 한 대씩 수리해요` : `${items.length.toLocaleString('ko-KR')}대 · ${familyCounts.size}개 장비군`;
+    dialog.querySelector('.equipment-directory-summary').textContent = allowedIds ? `고장 난 장비 ${allowedIds.size}대 · ${repairRanking ? '가까운 순 · 실제 도보 거리' : '한 대씩 수리해요'}` : `${items.length.toLocaleString('ko-KR')}대 · ${familyCounts.size}개 장비군`;
     dialog.querySelector('.equipment-directory-results > span:last-child').textContent = allowedIds ? '장비를 고르면 걸어가서 수리해요 🔧' : '장비를 선택하면 앞으로 이동해요 ↗';
+    dialog.querySelector('.equipment-directory-search').hidden=Boolean(allowedIds);
+    search.disabled=Boolean(allowedIds);
+    list.setAttribute('aria-label',allowedIds?'가까운 순 수리 장비':'장비 검색 결과');
+    empty.querySelector('strong').textContent=allowedIds?'수리할 장비가 없어요.':'일치하는 장비가 없어요.';
+    empty.querySelector('p').textContent=allowedIds?'다른 장비군을 선택하거나 잠시 후 다시 열어주세요.':'이름이나 코드의 일부로 다시 찾아보세요.';
+    empty.querySelector('button').hidden=Boolean(allowedIds);
     if (allowedIds) { search.value = ''; select.value = ''; }
     previousFocus = document.activeElement; render();
-    announcedOpen = true; onToggle(true); dialog.showModal(); search.focus({ preventScroll: true });
+    announcedOpen = true; onToggle(true); dialog.showModal();
+    (allowedIds?dialog.querySelector('.equipment-directory-close'):search).focus({preventScroll:true});
   }
   search.addEventListener('input', render); select.addEventListener('change', render);
   dialog.querySelector('.equipment-directory-close').addEventListener('click', close);

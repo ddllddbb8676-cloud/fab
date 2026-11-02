@@ -2,10 +2,23 @@ export const VISITOR_ADJECTIVES = ['느긋한', '반짝이는', '씩씩한', '�
 export const VISITOR_NOUNS = ['웨이퍼', '트랜지스터', '포토팀', '식각팀', '증착팀', '세정팀', 'CMP팀', '소터', 'FOUP', 'OHT', '마스크', '포토레지스트', '실리콘', '칩', '게이트', '비트라인', '워드라인', '캐패시터', '공정팀', '계측팀', '확산팀', '이온주입팀', '메탈팀', '클린룸', '엔지니어', '다이', 'DRAM', 'NAND'];
 
 export const VISITOR_NAMES = VISITOR_ADJECTIVES.flatMap(adjective => VISITOR_NOUNS.map(noun => `${adjective} ${noun}`)).filter(name => [...name].length <= 7);
-export function createVisitorName(random = Math.random, excluded = []) {
-  const available = VISITOR_NAMES.filter(name => !excluded.includes(name));
-  const pool = available.length ? available : VISITOR_NAMES;
-  const n = random(); return pool[Math.floor(Math.max(0, Math.min(.999999, Number.isFinite(n) ? n : 0)) * pool.length)];
+export const nicknameKey = name => String(name ?? '').normalize('NFKC').replace(/\s/gu, '').toLowerCase();
+export const validNickname = name => typeof name === 'string' && name.trim() === name && name.length > 0 && [...name].length <= 7;
+export function createUniqueNickname(pool, random = Math.random, excluded = [], preferred = '') {
+  const used = new Set([...excluded].map(nicknameKey));
+  const free = name => validNickname(name) && !used.has(nicknameKey(name));
+  const n = random(), offset = Math.floor(Math.max(0, Math.min(.999999, Number.isFinite(n) ? n : 0)) * pool.length);
+  const ordered = [...pool.slice(offset), ...pool.slice(0, offset)];
+  if (preferred && free(preferred)) return preferred;
+  if (!preferred) { const name = ordered.find(free); if (name) return name; }
+  const stems = [...new Set([preferred, ...ordered].filter(Boolean).map(name => name.replace(/\s/gu, '')))];
+  for (let suffix = 1; suffix < 1000000; suffix++) {
+    for (const stem of stems) { const name = stem + suffix; if (free(name)) return name; }
+  }
+  throw new Error('No unique nickname available');
+}
+export function createVisitorName(random = Math.random, excluded = [], preferred = '') {
+  return createUniqueNickname(VISITOR_NAMES, random, excluded, preferred);
 }
 
 export function createVisitorBadge(THREE, scene, name, { resident = false } = {}) {

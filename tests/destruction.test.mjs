@@ -29,6 +29,33 @@ function assertDebrisBounds(effect, list) {
   });
 }
 
+test('repair picking follows visible fragments, refreshes bounds and releases restored slots', () => {
+  const list = [machines[0], machines[180]], { effect } = create(list);
+  const ray = new THREE.Ray(new THREE.Vector3(), new THREE.Vector3(0,-1,0));
+  function pickPiece(machine) {
+    for(let x=machine.bounds.minX+.3;x<machine.bounds.maxX;x+=.25) {
+      for(let z=machine.bounds.minZ+.3;z<machine.bounds.maxZ;z+=.25) {
+        ray.origin.set(x,8,z);const hit=effect.pick(ray);
+        if(hit) return hit;
+      }
+    }
+    return null;
+  }
+  try {
+    assert.equal(pickPiece(list[0]),null);
+    effect.trigger(list[0].id);effect.update(6);
+    assert.equal(pickPiece(list[0])?.id,list[0].id);
+    effect.trigger(list[1].id);effect.update(6);
+    assert.equal(pickPiece(list[1])?.id,list[1].id,'new distant debris must not use stale bounding spheres');
+    effect.beginRepair(list[1].id);effect.setRepairProgress(list[1].id,.8);
+    assert.equal(pickPiece(list[1])?.id,list[1].id);
+    ray.origin.set(0,8,0);assert.equal(effect.pick(ray),null,'empty aisle must not select debris');
+    effect.reset(list[0].id);assert.equal(pickPiece(list[0]),null);
+    assert.equal(pickPiece(list[1])?.id,list[1].id);
+    effect.trigger(list[0].id);effect.update(6);assert.equal(pickPiece(list[0])?.id,list[0].id,'reused slots retain correct equipment identity');
+  } finally { effect.dispose(); }
+});
+
 test('single-machine repair reassembles bounded pieces and leaves other damaged tools alone', () => {
   const list = machines.slice(0, 3), { effect, visibility } = create(list);
   try {
