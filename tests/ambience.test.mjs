@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createAmbience, createFanNoise, createExplosionSound, createEmoPressSound, EMO_PRESS_DURATION, EXPLOSION_DURATION, MAX_EXPLOSION_VOICES } from '../src/ambience.js';
-import { MOTION_CUES, createMotionSound } from '../src/ambience.js';
+import { MOTION_CUES, createMotionSound, createChipRewardSound, CHIP_REWARD_DURATION } from '../src/ambience.js';
 
 class Parameter {
   constructor() { this.value = 0; }
@@ -54,6 +54,26 @@ test('all motion cues are short, bounded and have silent ends at phone sample ra
     assert.ok(data.length<=rate*.6);assert.equal(Math.abs(data[0]),0);assert.ok(Math.abs(data.at(-1))<.001);
     assert.ok(data.every(v=>Number.isFinite(v)&&Math.abs(v)<=.65));assert.ok(data.some(v=>Math.abs(v)>.1),kind);
   }
+});
+
+test('coin jingle is short, deterministic and bounded at phone sample rates',()=>{
+  for(const sampleRate of [8000,44100,48000]){
+    const data=createChipRewardSound({sampleRate});assert.equal(data.length,Math.floor(sampleRate*CHIP_REWARD_DURATION));
+    assert.equal(Math.abs(data[0]),0);assert.equal(Math.abs(data.at(-1)),0);
+    assert.ok(data.every(v=>Number.isFinite(v)&&Math.abs(v)<=.62));assert.ok(data.some(v=>Math.abs(v)>.3));
+    for(const start of [.035,.115,.205,.295])assert.ok(data.slice(Math.floor(start*sampleRate),Math.floor((start+.035)*sampleRate)).some(v=>Math.abs(v)>.15));
+    assert.deepEqual(data,createChipRewardSound({sampleRate}));
+  }
+});
+
+test('coin jingle uses the effects switch and can be heard at the existing voice limit without increasing it',async()=>{
+  const Context=fakeContextClass(),audio=createAmbience({AudioContext:Context});
+  assert.equal(audio.playChipReward(),false);assert.equal(Context.instances.length,0);
+  await audio.activate();for(let i=0;i<MAX_EXPLOSION_VOICES;i++)assert.equal(audio.playExplosion(),true);
+  assert.equal(audio.playChipReward(),true);assert.equal(audio.state.cueCounts.chip,1);assert.equal(audio.state.activeEffects,MAX_EXPLOSION_VOICES);
+  await audio.toggleEffects();assert.equal(audio.playChipReward(),false);await audio.activate();assert.equal(audio.playChipReward(),false);
+  await audio.toggleEffects();audio.update({hidden:true});assert.equal(audio.playChipReward(),false);
+  audio.update({hidden:false});assert.equal(audio.playChipReward(),true);await audio.dispose();assert.equal(audio.playChipReward(),false);
 });
 
 test('generated wash has bounded energy and a smooth loop boundary at mobile sample rates', () => {

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {createRoom,SAFETY_DUTY} from '../server/room-engine.js';
 import {isSafety} from '../src/safety-team.js';
 import {sessionToken,sessionId,sessionCookie,newSessionToken,createProfileStore} from '../server/player-profiles.js';
+import {createNicknameRegistry} from '../server/nickname-registry.js';
 
 function quiet(room){for(const p of room.residents.people){p.hidden=true;p.wait=1e9;}for(const g of room.safety.people)g.hidden=true;}
 function wait(room,seconds){for(let i=0;i<Math.ceil(seconds/.05);i++){if(i%100===0)for(const p of room.players.values())room.pose(p.id,{...p});room.step(.05);}}
@@ -44,9 +45,12 @@ test('saved identity, counters, penalty and position restore across room reconst
 });
 
 test('refresh resumes an existing safety duty and progress without creating a second user guard',()=>{
-  const r=createRoom();quiet(r);const p=enter(r,'visitor:a',40);wait(r,61);
+  // The Worker reserves saved aliases before NPCs on restart. Independent random
+  // rooms can otherwise assign a returning visitor's name to a new NPC first.
+  const names=createNicknameRegistry(),makeRoom=()=>{const room=createRoom({claimName:(...args)=>names.claim(...args)});for(const npc of [...room.residents.people,...room.safety.people])npc.name=names.claim(npc.id,isSafety(npc.role)?'safety':'visitor',npc.name);return room;};
+  const r=makeRoom();quiet(r);const p=enter(r,'visitor:a',40);wait(r,61);
   assert.equal(isSafety(p.role),true);p.safetyCaughtIds.add('resident:1');p.safetyCaughtIds.add('resident:2');
-  const saved=r.profile(p.id),next=createRoom();next.join(p.id,saved);
+  const saved=r.profile(p.id),next=makeRoom();next.join(p.id,saved);
   assert.equal(next.players.get(p.id).name,p.name);assert.equal(next.players.get(p.id).safetyCaughtIds.size,2);
   next.join('visitor:b',{...saved,id:'visitor:b'});
   assert.equal([...next.players.values()].filter(p=>isSafety(p.role)).length,1);

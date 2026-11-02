@@ -5,16 +5,19 @@ export const EXPLOSION_DURATION = 2.8;
 export const MAX_EXPLOSION_VOICES = 4;
 const EXPLOSION_GAIN = 1.2;
 export const EMO_PRESS_DURATION = .16;
+export const CHIP_REWARD_DURATION = .58;
 export const MOTION_CUES = {
   step: [.13, 120, .28], sit: [.26, 220, .36], lie: [.4, 160, .38], stand: [.26, 300, .32],
   repair: [.19, 740, .62], complete: [.6, 690, .45], climb: [.2, 175, .48],
   jump: [.32, 420, .46], grab: [.2, 1050, .58], land: [.3, 110, .7],
-  pickup: [.22, 380, .48], place: [.28, 260, .6], throw: [.34, 650, .5], bounce: [.3, 430, .6]
+  pickup: [.22, 380, .48], place: [.28, 260, .6], throw: [.34, 650, .5], bounce: [.3, 430, .6],
+  chip: [CHIP_REWARD_DURATION, 1600, .92]
 };
 /** Small cloth, shoe, metal and air gestures; buffers are cached by the mixer. */
 export function createMotionSound(kind, { sampleRate = 48000 } = {}) {
   const spec = MOTION_CUES[kind];
   if (!spec) throw new RangeError('Unknown motion cue');
+  if (kind === 'chip') return createChipRewardSound({sampleRate});
   if (!Number.isFinite(sampleRate) || sampleRate < 8000 || sampleRate > 192000) throw new RangeError('Unsupported motion sample rate');
   const [duration, frequency] = spec, data = new Float32Array(Math.floor(sampleRate * duration));
   const cloth = ['sit', 'lie', 'stand', 'throw', 'jump'].includes(kind);
@@ -28,6 +31,25 @@ export function createMotionSound(kind, { sampleRate = 48000 } = {}) {
     const tone = Math.sin(2 * Math.PI * f * t) + .3 * Math.sin(2 * Math.PI * f * 1.46 * t);
     const envelope = cloth ? Math.sin(Math.PI * p) ** 2 : Math.min(1, t / .003) * Math.exp(-p * 5) * Math.min(1, (1 - p) * 12);
     data[i] = .65 * Math.tanh(cloth ? filtered * 3 : tone * .7 + noise * .45) * envelope;
+  }
+  return data;
+}
+
+/** Four tiny metal coin impacts, with a short bright ring for phone speakers. */
+export function createChipRewardSound({sampleRate=48000}={}) {
+  if(!Number.isFinite(sampleRate)||sampleRate<8000||sampleRate>192000)throw new RangeError('Unsupported chip sample rate');
+  const data=new Float32Array(Math.floor(sampleRate*CHIP_REWARD_DURATION));
+  const hits=[[.035,1530,1],[.115,2070,.8],[.205,1780,.65],[.295,2390,.5]];
+  let seed=0x6c01;
+  for(let i=0;i<data.length;i++){
+    const t=i/sampleRate;seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;
+    const noise=(seed>>>0)/0x100000000*2-1;let value=0;
+    for(const [start,hz,strength]of hits){
+      const age=t-start;if(age<0)continue;
+      const f=Math.min(hz,sampleRate*.2),ring=Math.sin(2*Math.PI*f*age)+.42*Math.sin(2*Math.PI*f*1.47*age)+.22*Math.sin(2*Math.PI*f*2.13*age);
+      value+=strength*Math.min(1,age/.0015)*(ring*Math.exp(-age/.075)+noise*.2*Math.exp(-age/.007));
+    }
+    data[i]=.62*Math.tanh(value)*Math.min(1,(data.length-1-i)/(sampleRate*.035));
   }
   return data;
 }
@@ -309,15 +331,15 @@ export function createAmbience(options = {}) {
   function playEffect(kind, volume = 1) {
     if (disposed || !desired || !effectsDesired || hidden || !ready || error || context?.state !== 'running' || volume <= 0) return false;
     pruneEffects();
-    const motion = MOTION_CUES[kind];
+    const motion = MOTION_CUES[kind], reward = kind === 'chip';
     if (effects.size >= MAX_EXPLOSION_VOICES) {
-      if (motion) return false;
-      const quiet = [...effects].find(e => e.motion);
+      if (motion && !reward) return false;
+      const quiet = [...effects].find(e => e.motion && !e.reward) || (reward ? [...effects].find(e => !e.reward) || effects.values().next().value : null);
       if (!quiet) return false;
       finishEffect(quiet, true);
     }
     const press = kind === 'press';
-    const effect = { source: null, gain: null, motion: Boolean(motion), endsAt: context.currentTime + (motion?.[0] ?? (press ? EMO_PRESS_DURATION : EXPLOSION_DURATION)), finished: false, stopping: false };
+    const effect = { source: null, gain: null, motion: Boolean(motion), reward, endsAt: context.currentTime + (motion?.[0] ?? (press ? EMO_PRESS_DURATION : EXPLOSION_DURATION)), finished: false, stopping: false };
     try {
       if (motion && !cueBuffers.has(kind)) {
         const data = createMotionSound(kind, { sampleRate: context.sampleRate }), buffer = context.createBuffer(1, data.length, context.sampleRate);
@@ -353,5 +375,5 @@ export function createAmbience(options = {}) {
   async function toggleAmbience() { ambienceDesired = !ambienceDesired; updateDucking(); if (ambienceDesired) await activate(); return snapshot(); }
   async function toggleEffects() { effectsDesired = !effectsDesired; if (!effectsDesired) stopEffects(); else await activate(); return snapshot(); }
   return { activate, toggle, toggleAmbience, toggleEffects, update, playCue: (kind, volume) => MOTION_CUES[kind] ? playEffect(kind, volume) : false,
-    playExplosion: volume => playEffect('explosion', volume), playEmoPress: volume => playEffect('press', volume), dispose, get state() { return snapshot(); } };
+    playChipReward: volume => playEffect('chip', volume), playExplosion: volume => playEffect('explosion', volume), playEmoPress: volume => playEffect('press', volume), dispose, get state() { return snapshot(); } };
 }
