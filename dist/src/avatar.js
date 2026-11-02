@@ -1,3 +1,4 @@
+import { createFacePixels, EYE_STYLES } from "./face-styles.js";
 // A round, small cleanroom visitor with shared clothing and an inset face.
 // Feet are the local origin; +Z is forward. The caller owns root.position/visibility.
 const resourcePools = new WeakMap();
@@ -97,29 +98,7 @@ function acquireResources(THREE) {
     normal.set(-(faceDepth(x + epsilon, y) - faceDepth(x - epsilon, y)) / (2 * epsilon), -(faceDepth(x, y + epsilon) - faceDepth(x, y - epsilon)) / (2 * epsilon), 1).normalize();
     faceNormals.setXYZ(i, normal.x, normal.y, normal.z);
   }
-  const textureSize = 256, facePixels = new Uint8Array(textureSize * textureSize * 4);
-  const blend = (base, color, amount) => base.map((c, i) => c * (1 - amount) + color[i] * amount);
-  for (let py = 0; py < textureSize; py++) for (let px = 0; px < textureSize; px++) {
-    const x = (px + .5) / textureSize * 2 - 1, y = (py + .5) / textureSize * 2 - 1;
-    let color = [238, 198, 174];
-    const warmCheek = Math.exp(-((Math.abs(x) - .54) ** 2 / .027 + (y + .10) ** 2 / .035)) * .36;
-    color = blend(color, [222, 132, 123], warmCheek);
-    const eyeX = Math.abs(x) - .32;
-    if ((eyeX / .074) ** 2 + ((y - .16) / .102) ** 2 < 1) color = [49, 45, 43];
-    if (((eyeX + .021) / .016) ** 2 + ((y - .194) / .022) ** 2 < 1) color = [236, 231, 219];
-    const top = -.23 + .055 * Math.exp(-x * x / .08), bottom = -.69 + .12 * x * x;
-    const maskWidth = .64 - .08 * ((y + .3) / .55) ** 2;
-    const masked = y < top && y > bottom && Math.abs(x) < maskWidth;
-    const strap = Math.abs(x) > .60 && (Math.abs(y + .26 + (Math.abs(x) - .64) * .12) < .010 || Math.abs(y + .52 - (Math.abs(x) - .64) * .12) < .010);
-    if (strap) color = [219, 230, 230];
-    if (masked) {
-      color = [237, 244, 241];
-      if (top - y < .015 || y - bottom < .015 || maskWidth - Math.abs(x) < .012) color = [183, 203, 207];
-      for (const pleat of [-.38, -.51]) if (Math.abs(y - (pleat + .035 * x * x)) < .006) color = [215, 228, 225];
-    }
-    const index = (py * textureSize + px) * 4;
-    facePixels[index] = color[0]; facePixels[index + 1] = color[1]; facePixels[index + 2] = color[2]; facePixels[index + 3] = 255;
-  }
+  const textureSize = 256, facePixels = createFacePixels('eyes-default', textureSize);
   const faceTexture = new THREE.DataTexture(facePixels, textureSize, textureSize);
   faceTexture.colorSpace = THREE.SRGBColorSpace; faceTexture.magFilter = THREE.LinearFilter; faceTexture.minFilter = THREE.LinearFilter; faceTexture.needsUpdate = true;
   // Compact chest/hips leave the trouser legs visible instead of forming a long pouch.
@@ -136,6 +115,9 @@ function acquireResources(THREE) {
     [profile([[-.57, .061, .064], [-.50, .063, .066]], 12), cuff]]);
   const boot = merge([[profile([[.012, .071, .098, .027], [.025, .078, .108, .029], [.066, .076, .105, .027], [.105, .061, .073, .007], [.127, .055, .059, -.004]], 16, .75), shoe],
     [profile([[0, .067, .1, .031], [.013, .073, .106, .031], [.026, .076, .108, .031]], 16, .75), '#b2c0c3']]);
+  torso.scale(.88, 1, .90);
+  upperArm.scale(.90, 1, .90); forearm.scale(.90, 1, .90);
+  pants.scale(.88, 1, .92); glove.scale(.94, 1, .94); boot.scale(.94, 1, .95);
   const shadow = new THREE.PlaneGeometry(.56, .52); shadow.rotateX(-Math.PI / 2);
   const size = 32, pixels = new Uint8Array(size * size * 4);
   for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
@@ -225,9 +207,9 @@ export function createAvatar(THREE) {
     for (const arm of arms) {
       // Relaxed, downward arms. The same-side foot moving forward sends the hand back.
       const swing = -legs.find(leg => leg.side === arm.side).footZ * 1.15;
-      arm.shoulder.set(arm.side * .167, .89, 0);
-      arm.elbow.set(arm.side * .206, .69 + Math.abs(swing) * .04, -.010 + swing * .45);
-      arm.wrist.set(arm.side * .212, .49 + Math.abs(swing) * .06, .012 + swing);
+      arm.shoulder.set(arm.side * .155, .89, 0);
+      arm.elbow.set(arm.side * .194, .69 + Math.abs(swing) * .04, -.010 + swing * .45);
+      arm.wrist.set(arm.side * .200, .49 + Math.abs(swing) * .06, .012 + swing);
       if (sit > 0) { arm.elbow.lerp(reachElbow.set(arm.side * .20, .71, .10), sit); arm.wrist.lerp(reachWrist.set(arm.side * .17, .63, .24), sit); }
       if (working && arm !== rightArm) { arm.elbow.set(-.21, .72, .13); arm.wrist.set(-.17, .74, .24); }
       if (carrying) { arm.elbow.set(arm.side * .22, .69, .16); arm.wrist.set(arm.side * .23, .83, .34); }
@@ -259,15 +241,27 @@ export function createAvatar(THREE) {
     root.userData.walking = activity > .05; root.userData.heading = facing;
   }
   update(0);
-  let suitMaterial = null;
+  let suitMaterial = null, customFaceMaterial = null, customFaceTexture = null, eyeStyle = 'eyes-default';
+  function setEyeStyle(style) {
+    if (!EYE_STYLES.includes(style)) style = 'eyes-default';
+    if (eyeStyle === style) return;
+    eyeStyle = style;
+    if (!customFaceMaterial) {
+      customFaceTexture = new THREE.DataTexture(createFacePixels(style), 256, 256);
+      customFaceTexture.colorSpace = THREE.SRGBColorSpace; customFaceTexture.magFilter = THREE.LinearFilter; customFaceTexture.minFilter = THREE.LinearFilter;
+      customFaceMaterial = resources.faceMaterial.clone(); customFaceMaterial.map = customFaceTexture;
+      root.getObjectByName('face').material = customFaceMaterial;
+    } else customFaceTexture.image.data.set(createFacePixels(style));
+    customFaceTexture.needsUpdate = true;
+  }
   function setSuitColor(color) {
     if (!suitMaterial) { suitMaterial = resources.material.clone(); root.traverse(m => { if (m.isMesh && ['hood','torso','pants','upperArm','forearm'].includes(m.name)) m.material = suitMaterial; }); }
     suitMaterial.color.set(color);
   }
-  return { root, body, update, setSuitColor, height: 1.44, radius: .295,
+  return { root, body, update, setSuitColor, setEyeStyle, height: 1.44, radius: .295,
     dispose() {
       if (disposed) return; disposed = true; root.removeFromParent();
-      suitMaterial?.dispose();
+      suitMaterial?.dispose(); customFaceMaterial?.dispose(); customFaceTexture?.dispose();
       if (hammer) hammer.traverse(node => { if (node.isMesh) { node.geometry.dispose(); node.material.dispose(); } });
       if (--resources.references !== 0) return;
       for (const name of ['hood', 'face', 'torso', 'upperArm', 'forearm', 'glove', 'pants', 'boot', 'shadow']) resources[name].dispose();

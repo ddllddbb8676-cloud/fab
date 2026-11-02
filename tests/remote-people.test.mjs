@@ -6,7 +6,7 @@ import {createAvatar} from '../src/avatar.js';
 
 function harness(maxDetailed=32){
   const oldDocument=globalThis.document;
-  globalThis.document={createElement:()=>({getContext:()=>({clearRect(){},beginPath(){},roundRect(){},fill(){},fillText(){}})})};
+  globalThis.document={createElement:()=>({getContext:()=>({clearRect(){},beginPath(){},roundRect(){},fill(){},fillText(){},strokeText(){}})})};
   const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(),reference=createAvatar(THREE),geometry=reference.root.getObjectByName('hood').geometry;
   const view=createRemotePeople({THREE,scene,store:{getCarried:()=>null},maxDetailed});
   const actor=(id,x,posture)=>({id,name:id,role:'visitor',x,y:0,z:0,heading:0,speed:0,posture,phase:'idle',time:0,targetId:null,vehicleId:null,carrying:false,hidden:false});

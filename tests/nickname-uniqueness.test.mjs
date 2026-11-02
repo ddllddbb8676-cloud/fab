@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {VISITOR_NAMES,createVisitorName,nicknameKey,validNickname} from '../src/visitor-name.js';
+import {VISITOR_NAMES,createVisitorName,createUniqueNickname,nicknameKey,validNickname} from '../src/visitor-name.js';
 import {createSafetyName,isSafety} from '../src/safety-team.js';
 import {createProfileStore} from '../server/player-profiles.js';
 import {createRoom} from '../server/room-engine.js';
@@ -20,8 +20,8 @@ function roomWith(store){
 const unique=names=>assert.equal(new Set(names.map(nicknameKey)).size,names.length);
 
 test('exhausted visitor and safety pools add numbers without repeating names or exceeding seven characters',()=>{
-  const names=[...VISITOR_NAMES];
-  for(let i=0;i<1200;i++){const name=createVisitorName(()=>0,names);assert.match(name,/\d$/);assert.ok(validNickname(name));names.push(name);}
+  const smallPool=['작은 칩','밝은 소터','흰 게이트'],names=[...smallPool];
+  for(let i=0;i<1200;i++){const name=createUniqueNickname(smallPool,()=>0,names);assert.match(name,/\d$/);assert.ok(validNickname(name));names.push(name);}
   unique(names);
   const guards=[];for(let i=0;i<150;i++){const name=createSafetyName(()=>0,guards);assert.match(name,/안전팀\d*$/);assert.ok(validNickname(name));guards.push(name);}unique(guards);
   assert.notEqual(nicknameKey(createVisitorName(()=>0,['큰칩'],'큰 칩')),nicknameKey('큰 칩'));
@@ -39,7 +39,7 @@ test('legacy duplicates including offline zero-score people are renamed without 
   const storage=disk(original),store=createProfileStore(storage);await store.loadRanking();await store.flush();
   const rows=await Promise.all(original.map(p=>store.get(p.id)));
   unique(rows.flatMap(p=>[p.civilianName,...(p.safetyName?[p.safetyName]:[])]));
-  assert.equal(rows[0].civilianName,'졸린 칩');assert.equal(rows[2].civilianName,'졸린칩1');assert.match(rows[1].civilianName,/\d$/);
+  assert.equal(rows[0].civilianName,'졸린 칩');assert.equal(rows[2].civilianName,'졸린칩1');assert.doesNotMatch(rows[1].civilianName,/\d$/);
   for(const [i,p]of rows.entries())for(const field of ['id','brokenCount','repairedCount','penalty','groundPosition','role'])assert.deepEqual(p[field],original[i][field],field);
   const next=createProfileStore(storage);await next.loadRanking();assert.equal(next.hasPending,false,'migration is stable on restart');
   for(const p of rows)assert.deepEqual(await next.get(p.id),p);

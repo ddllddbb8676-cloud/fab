@@ -1,6 +1,8 @@
+import {restoreWallet} from './chip-wallet.js';
 import {rankScores} from '../src/leaderboard.js';
 import {createNicknameRegistry} from './nickname-registry.js';
 import {isSafety} from '../src/safety-team.js';
+import {configuredOwnerId,hasUnlimitedChips,OWNER_DISPLAY_NAME} from './owner-privileges.js';
 const COOKIE='fab-session-v1';
 const EQUIPMENT_KEY='world:equipment:v1';
 export function sessionToken(request) {
@@ -14,14 +16,18 @@ export async function sessionId(token) {
   const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('fab-profile-v1:'+token));
   return 'visitor:'+Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
 }
-export function createProfileStore(storage) {
+export function createProfileStore(storage,{ownerId=''}={}) {
+  ownerId=configuredOwnerId(ownerId);
   const pending=new Map(),scores=new Map(),nicknames=createNicknameRegistry();let writes=Promise.resolve(),ranking=[],rankingDirty=true;
+  if(ownerId)nicknames.reserve(ownerId,'visitor',OWNER_DISPLAY_NAME);
   function named(profile) {
     if(!profile.name&&!profile.civilianName)return profile;
     const civilianName=nicknames.claim(profile.id,'visitor',profile.civilianName||(!isSafety(profile.role)?profile.name:''));
     const preferredSafety=profile.safetyName||(isSafety(profile.role)?profile.name:'');
     const safetyName=preferredSafety?nicknames.claim(profile.id,'safety',preferredSafety):undefined;
-    return {...profile,civilianName,...(safetyName?{safetyName}:{}),name:isSafety(profile.role)?safetyName:civilianName};
+    const next={...profile,wallet:restoreWallet(profile),civilianName,...(safetyName?{safetyName}:{}),name:isSafety(profile.role)?safetyName:civilianName};
+    if(hasUnlimitedChips(profile.id,ownerId))next.chipUnlimited=true;else delete next.chipUnlimited;
+    return next;
   }
   function remember(profile){
     if(!profile.id?.startsWith('visitor:'))return;

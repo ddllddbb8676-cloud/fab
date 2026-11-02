@@ -1,3 +1,5 @@
+import {createAvatarAppearance} from './avatar-appearance.js';
+import {createWardrobe} from './wardrobe-ui.js';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
@@ -397,6 +399,7 @@ const orbit = new OrbitControls(camera, renderer.domElement);
 orbit.enabled = false; orbit.enableDamping = true; orbit.dampingFactor = .06;
 orbit.minDistance = 16; orbit.maxDistance = 700; orbit.maxPolarAngle = Math.PI * .46; orbit.target.set(0, 0, 0);
 const avatar = createAvatar(THREE); scene.add(avatar.root);
+const appearance=createAvatarAppearance(THREE,avatar);let currentWallet=null;
 const airShower = createAirShower(THREE); scene.add(airShower.root);
 const restAreaView=createRestAreaView(THREE,scene);
 const bayWhiteMask = applyBayWhiteLightMask(THREE, scene, bays, { yellowBayIds: bayLighting.bayIds });
@@ -481,7 +484,7 @@ const directory = createEquipmentDirectory({ equipment, families,
 $('equipment-list').addEventListener('click', () => { if (!entry.active) directory.open(); });
 for (const id of ['tour', 'walk', 'ride', 'overview']) $(id).addEventListener('click', () => explorer.setMode(id));
 $('reset').addEventListener('click',async()=>{
-  if(!confirm('이름과 부순 장비·고친 장비 기록을 지우고 완전히 새로 시작할까요?'))return;
+  if(!confirm('이름·파괴/수리 기록·칩·구매한 꾸미기 아이템을 모두 지우고 완전히 새로 시작할까요?'))return;
   $('reset').disabled=true;
   try{if(multiplayer)await multiplayer.resetProfile();location.reload();}
   catch(error){toast(error.message);$('reset').disabled=false;}
@@ -601,6 +604,8 @@ playActions = createPlayActions({ THREE, scene, materials: M, fleet, explorer, a
   hideOriginal(portId) { removedOriginalFoups.add(portId); for (const hide of originalFoupParts.get(portId) ?? []) hide(); },
   showOriginal(portId) { removedOriginalFoups.delete(portId);for(const show of originalFoupParts.get(portId)??[])show(true); },
   isDestroyed: id => destruction.isDestroyed(id), toast, onCue: motionCue, network:onlineLink, isRestricted: () => safetyState.penalty > 0 });
+const wardrobe=createWardrobe({THREE,button:$('wardrobe-open'),command:(...args)=>onlineLink?.command(...args)??Promise.resolve({ok:false,message:'온라인 FAB에 연결해 주세요.'}),connected:()=>Boolean(onlineLink?.connected),getName:()=>visitorBadge.name,onOpen:()=>{if(entry.active)return false;viewControls.closeAll();directory.close();$('help').classList.add('hidden');$('tool-card').classList.add('hidden');explorer.lock(true);},onClose:()=>explorer.lock(false)});
+function applyWallet(wallet){currentWallet=wallet;appearance.setOutfit(wallet.equipped,safetyState.role);wardrobe.setWallet(wallet);}
 if(!connectionConfig)residents = createResidents({ THREE, scene, fleet, store: playActions.store, destruction, detachCargo: v => playActions.detachVehicleCargo(v),
   getNeighbors:()=>safetyPatrols?.people??[],
   excludedNames: [visitorBadge.name], onCue: motionCue,
@@ -609,9 +614,9 @@ else {
   remotePeople=createRemotePeople({THREE,scene,store:playActions.store,fleet,maxDetailed:mobile?32:48});
   sharedWorld=createSharedWorldView({fleet,store:playActions.store,destruction,onPeople:rows=>remotePeople.synchronize(rows),onCue:motionCue,onCount:(n,total)=>{realVisitorCount=n;totalCharacterCount=total;updateConnectionLabel();},onSelf:updateSafetyState});
   multiplayer=createMultiplayer({config:connectionConfig,getPose:()=>({x:+explorer.state.position.x.toFixed(3),y:+explorer.state.position.y.toFixed(3),z:+explorer.state.position.z.toFixed(3),heading:+explorer.state.heading.toFixed(3),speed:+(explorer.state.speed||0).toFixed(2),posture:explorer.state.posture,hidden:entry.active}),
-    onWelcome:data=>{sharedWorld.welcome(data.id);leaderboard.setSelf(data.id);visitorBadge.rename(data.name);if(data.resume){finishEntry();airShower.update(entry.state);explorer.state.path=[];explorer.state.position.set(data.resume.x,0,data.resume.z);explorer.state.heading=data.resume.heading;toast('이름과 기록을 이어서 접속했어요.');}},onRoster:rows=>{remotePeople.setRoster(rows);leaderboard.setRoster(rows);const self=rows.find(row=>row[0]===multiplayer?.id);if(self)visitorBadge.rename(self[1]);},onFrame:(frame,initial)=>{sharedWorld.apply(frame,initial);leaderboard.setPeople(frame.people);leaderboard.setRanking(frame.leaderboard);},onError:toast,
+    onWallet:applyWallet,onWelcome:data=>{sharedWorld.welcome(data.id);leaderboard.setSelf(data.id);visitorBadge.rename(data.name);if(data.resume){finishEntry();airShower.update(entry.state);explorer.state.path=[];explorer.state.position.set(data.resume.x,0,data.resume.z);explorer.state.heading=data.resume.heading;toast('이름과 기록을 이어서 접속했어요.');}},onRoster:rows=>{remotePeople.setRoster(rows);leaderboard.setRoster(rows);const self=rows.find(row=>row[0]===multiplayer?.id);if(self)visitorBadge.rename(self[1]);},onFrame:(frame,initial)=>{sharedWorld.apply(frame,initial);leaderboard.setPeople(frame.people);leaderboard.setRanking(frame.leaderboard);},onError:toast,
     onCatch:data=>toast(`${data.targetName}님을 잡았어요! 장비 3대를 고쳐야 합니다. (${data.caught??0} / ${SAFETY_CATCH_GOAL})${data.completed?` ${SAFETY_CATCH_GOAL}명 잡기 완료! 원래 방진복으로 돌아왔어요.`:''}`,5000),
-    onStatus:status=>{updateConnectionLabel(status);if(status==='reconnecting'){playActions.resetOnline();explorer.cancelEmo('disconnect');toast('연결이 끊겨 다시 접속하고 있어요');}}
+    onStatus:status=>{updateConnectionLabel(status);wardrobe.refresh();if(status==='reconnecting'){playActions.resetOnline();explorer.cancelEmo('disconnect');toast('연결이 끊겨 다시 접속하고 있어요');}}
   });
 }
 if(!connectionConfig) {
@@ -631,7 +636,7 @@ function updateSafetyState(next) {
     const outside=Number.isFinite(next.x)&&!isRestArea(next,SAFETY_CLEARANCE)?next:restAreaExit(explorer.state.position);
     explorer.state.position.set(outside.x,0,outside.z);explorer.state.path=[];
   }
-  if(previous.role!==safetyState.role){avatar.setSuitColor(safetyColor(safetyState.role));if(isSafety(safetyState.role))toast(`이번에는 내 안전팀 차례! 서로 다른 ${SAFETY_CATCH_GOAL}명을 잡으면 원래 방진복으로 돌아와요.`,5000);}
+  if(previous.role!==safetyState.role){appearance.setOutfit(currentWallet?.equipped,safetyState.role);if(isSafety(safetyState.role))toast(`이번에는 내 안전팀 차례! 서로 다른 ${SAFETY_CATCH_GOAL}명을 잡으면 원래 방진복으로 돌아와요.`,5000);}
   if(safetyState.penalty>previous.penalty){
     explorer.cancelEmo('safety');playActions.clearPending();explorer.state.posture='stand';
     if(directory.isOpen)directory.close();explorer.setMode('walk');$('tool-card').classList.add('hidden');
@@ -883,7 +888,7 @@ function animate(now) {
     for(const g of safetyPatrols.people)for(const actor of residents.people)if(canCatch(g,actor,elapsed))residents.beginSafetyLap(actor);
     safetyPeople.synchronize(safetyPatrols.people);safetyPeople.update(dt,camera,mode==='overview');
   }
-  playActions.render(); visitorBadge.update(avatar, explorer.state.posture);
+  playActions.render();appearance.update(avatar.root.visible); visitorBadge.update(avatar, explorer.state.posture,{headwear:appearance.headwear});
   visitorEmote.update(avatar,explorer.state.posture,dt,!entry.active&&mode!=='overview');
   if(now>=nextSafetyCheck){
     const person={...explorer.state.position,id:multiplayer?.id??'self',...safetyState,hidden:entry.active||mode==='overview',phase:explorer.state.repairInteraction?.phase==='repair'?'repair':playActions.state.phase};
@@ -933,7 +938,7 @@ function animate(now) {
     nextDiagnosticAt = now + 500;
     const demo = observedVehicle();
     updateSoundButton();
-    $('world').dataset.diagnostics = JSON.stringify({ ready: true, revision: 'fab-joystick-1', movementStyle, joystickActive: explorer.state.joystickActive, cameraFov: camera.fov, safety: safetyState, safetyPatrols: safetyPeople?.state.people, mode, audio: audio.state, multiplayer: multiplayer ? {status:multiplayer.status,id:multiplayer.id,count:realVisitorCount,total:totalCharacterCount,capacity:ROOM_CAPACITY,visitorCapacity:MAX_VISITORS} : null, residents: residents?.state ?? {total:AUTOMATED_COUNT,simulated:true,actions:sharedWorld.totals,people:remotePeople.state.people.filter(p=>p.id.startsWith('resident:')||p.id.startsWith('safety:'))}, remotePlayers:remotePeople?.state.people.filter(p=>!p.id.startsWith('resident:')&&!p.id.startsWith('safety:')), destruction: destruction.state, equipmentVisibility: equipmentVisibility.state, emoInteraction: explorer.state.emoInteraction, repairInteraction: explorer.state.repairInteraction, posture: explorer.state.posture, play: playActions.state, actionTargets: new URLSearchParams(location.search).has('qa') ? playActions.targets(camera, { width: innerWidth, height: innerHeight }) : undefined, visitorName: visitorBadge.name, controlsOpen: viewControls.isOpen, mapVisible: viewControls.mapVisible, emoButtons: layoutMachines.length, amberBays: bayLighting.bayIds.map(id => id + 1), amberLights: bayLighting.lights.length, amberLightsVisible: bayLighting.root.visible, entry: { active: entry.active, ...entry.state }, width: WIDTH, length: LENGTH, ceiling: HEIGHT,
+    $('world').dataset.diagnostics = JSON.stringify({ ready: true, revision: 'fab-wardrobe-1', movementStyle, joystickActive: explorer.state.joystickActive, cameraFov: camera.fov, safety: safetyState, safetyPatrols: safetyPeople?.state.people, mode, audio: audio.state, multiplayer: multiplayer ? {status:multiplayer.status,id:multiplayer.id,count:realVisitorCount,total:totalCharacterCount,capacity:ROOM_CAPACITY,visitorCapacity:MAX_VISITORS} : null, residents: residents?.state ?? {total:AUTOMATED_COUNT,simulated:true,actions:sharedWorld.totals,people:remotePeople.state.people.filter(p=>p.id.startsWith('resident:')||p.id.startsWith('safety:'))}, remotePlayers:remotePeople?.state.people.filter(p=>!p.id.startsWith('resident:')&&!p.id.startsWith('safety:')), destruction: destruction.state, equipmentVisibility: equipmentVisibility.state, emoInteraction: explorer.state.emoInteraction, repairInteraction: explorer.state.repairInteraction, posture: explorer.state.posture, play: playActions.state, actionTargets: new URLSearchParams(location.search).has('qa') ? playActions.targets(camera, { width: innerWidth, height: innerHeight }) : undefined, visitorName: visitorBadge.name, controlsOpen: viewControls.isOpen, mapVisible: viewControls.mapVisible, emoButtons: layoutMachines.length, amberBays: bayLighting.bayIds.map(id => id + 1), amberLights: bayLighting.lights.length, amberLightsVisible: bayLighting.root.visible, entry: { active: entry.active, ...entry.state }, width: WIDTH, length: LENGTH, ceiling: HEIGHT,
       equipmentCount: equipment.length, equipmentFamilies: families.length, uniqueEquipmentCodes: new Set(equipment.map(e => e.code)).size, selectedEquipment: selectedEquipment?.code ?? null,
       machines: machinePositions.length, bays: bays.length, toolsPerRow: 10, loadports: layoutMachines.length * 3,
       frontAisle: AISLE, rearAisle: SERVICE_AISLE, sideGap: SIDE_GAP, vehicles: vehicles.length, junctions: network.junctions.length,

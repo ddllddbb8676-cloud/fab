@@ -36,8 +36,8 @@ export default {
 
 export class FabRoom extends DurableObject {
   constructor(ctx,env) {
-    super(ctx,env);this.sockets=new Map();this.profiles=createProfileStore(ctx.storage);this.rosterDirty=false;
-    this.room=createRoom({claimName:(...args)=>this.profiles.claimName(...args),getHistoricalScores:()=>this.profiles.ranking(),onEquipmentChange:s=>this.profiles.saveEquipment(s),onProfileChange:p=>this.profiles.save(p),onRosterChange:()=>{this.rosterDirty=true;},onCatch:event=>{
+    super(ctx,env);this.sockets=new Map();this.profiles=createProfileStore(ctx.storage,{ownerId:env.FAB_OWNER_VISITOR_ID});this.rosterDirty=false;
+    this.room=createRoom({ownerId:env.FAB_OWNER_VISITOR_ID,claimName:(...args)=>this.profiles.claimName(...args),getHistoricalScores:()=>this.profiles.ranking(),onEquipmentChange:s=>this.profiles.saveEquipment(s),onProfileChange:p=>this.profiles.save(p),onRosterChange:()=>{this.rosterDirty=true;},onCatch:event=>{
       for(const [ws,s] of this.sockets)if(s.id===event.guardId)this.send(ws,{type:'safety-catch',...event});
     }});this.timer=null;this.tickCount=0;this.previous=Date.now();
     ctx.blockConcurrencyWhile(async()=>{
@@ -59,7 +59,8 @@ export class FabRoom extends DurableObject {
   }
   send(ws,data){try{ws.send(typeof data==='string'?data:JSON.stringify(data));return true;}catch{return false;}}
   async checkpoint(){do{await this.profiles.flush();}while(this.profiles.hasPending);}
-  welcome(ws,id){const p=this.room.players.get(id);this.send(ws,{type:'welcome',v:PROTOCOL,id,name:p.name,resume:p.hasEntered?p.groundPosition:null,roster:this.room.roster(),frame:this.room.snapshot(true)});}
+  welcome(ws,id){const p=this.room.players.get(id);this.send(ws,{type:'welcome',v:PROTOCOL,id,name:p.name,privileges:{unlimitedChips:Boolean(p.chipUnlimited)},wallet:this.room.wallet(id),resume:p.hasEntered?p.groundPosition:null,roster:this.room.roster(),frame:this.room.snapshot(true)});}
+  sendWallets(){for(const [ws,s] of this.sockets){const player=this.room.players.get(s.id);if(player&&s.walletRevision!==player.wallet.revision){const wallet=this.room.wallet(s.id);this.send(ws,{type:'wallet',wallet});s.walletRevision=wallet.revision;}}}
   broadcastRoster(){const data=JSON.stringify({type:'roster',roster:this.room.roster(),count:this.room.players.size});for(const ws of this.sockets.keys())this.send(ws,data);}
   async fetch(request) {
     if(new URL(request.url).pathname==='/api/leaderboard')return Response.json({scope:'all-time',rows:this.room.ranking(),recordedVisitors:this.profiles.rankedVisitorCount,highestVisitorScore:this.profiles.ranking()[0]?.brokenCount??0},{headers:{'Cache-Control':'no-store'}});
@@ -99,6 +100,7 @@ export class FabRoom extends DurableObject {
       // Persist damage and matching human scores in the same storage.put batch
       // before telling any client that a tool broke or finished being repaired.
       await this.checkpoint();
+      this.sendWallets();
       if(changed||this.rosterDirty){this.rosterDirty=false;this.broadcastRoster();}
       if(++this.tickCount%4===0){const data=JSON.stringify(this.room.snapshot());for(const [ws,s] of this.sockets)if(!this.send(ws,data)){this.room.remove(s.id);this.sockets.delete(ws);}}
       if(!this.sockets.size){clearInterval(this.timer);this.timer=null;}
@@ -116,7 +118,7 @@ export class FabRoom extends DurableObject {
       const result=this.room.command(session.id,data.kind,data.data);
       if(data.kind==='civilian'&&result.ok)this.broadcastRoster();
       try{await this.checkpoint();}catch{this.send(ws,{type:'ack',seq:data.seq,ok:false,message:'기록 저장이 지연되고 있어요. 잠시 후 다시 확인해 주세요.'});return;}
-      this.send(ws,{type:'ack',seq:data.seq,...result,frame:this.room.snapshot(true)});
+      this.send(ws,{type:'ack',seq:data.seq,...result,wallet:this.room.wallet(session.id),frame:this.room.snapshot(true)});
     }
   }
   close(ws){const s=this.sockets.get(ws);if(s){this.room.remove(s.id);this.sockets.delete(ws);this.broadcastRoster();this.ctx.waitUntil(this.checkpoint());}if(!this.sockets.size&&this.timer){clearInterval(this.timer);this.timer=null;}}
