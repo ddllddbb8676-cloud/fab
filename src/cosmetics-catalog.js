@@ -14,6 +14,17 @@ export const items = [
   { id: 'heart-glasses', name: '핫핑크 하트 안경', slot: 'face', price: null },
   { id: 'baby-chick', name: '머리 위 병아리', slot: 'head', price: null },
   { id: 'bag-star', name: '별 모양 방진가방', slot: 'bag', price: null },
+  { id: 'cat-ears', name: '까만 고양이귀', slot: 'head', price: null },
+  { id: 'puppy-ears', name: '축 처진 강아지귀', slot: 'head', price: null },
+  { id: 'moon-cap', name: '졸린 달 모자', slot: 'head', price: null },
+  { id: 'flower-glasses', name: '꽃테 안경', slot: 'face', price: null },
+  { id: 'spiral-glasses', name: '뱅뱅 안경', slot: 'face', price: null },
+  { id: 'bag-axolotl', name: '우파루파 가방', slot: 'bag', price: null },
+  { id: 'bag-peach', name: '복숭아 가방', slot: 'bag', price: null },
+  { id: 'bag-jellyfish', name: '해파리 가방', slot: 'bag', price: null },
+  { id: 'bag-cloud', name: '몽실 구름 가방', slot: 'bag', price: null },
+  { id: 'bag-gamepad', name: '게임패드 가방', slot: 'bag', price: null },
+  { id: 'bag-whale', name: '아기 고래 가방', slot: 'bag', price: null },
   { id: 'suit-default', name: '기본 방진복', slot: 'suit', price: 0 },
   { id: 'suit-black', name: '검정 방진복', slot: 'suit', price: null, proposedPrice: 10000 },
   { id: 'eyes-default', name: '기본 눈', slot: 'beauty', price: 0 },
@@ -34,7 +45,11 @@ const PRICES = {
   'suit-black': 10000, 'eyes-round': 100, 'eyes-smile': 150,
   'eyes-sparkle': 1500, 'eyes-squeeze': 300, 'eyes-angry': 400,
   'eyes-cry': 800, 'eyes-sideeye': 500, 'eyes-flat': 100, 'eyes-wink': 600,
-  'bunny-ears':300,'heart-glasses':600,'baby-chick':900,'bag-star':2200
+  'bunny-ears':300,'heart-glasses':600,'baby-chick':900,'bag-star':2200,
+  'cat-ears':300,'puppy-ears':400,'moon-cap':800,
+  'flower-glasses':500,'spiral-glasses':700,
+  'bag-axolotl':2800,'bag-peach':1200,'bag-jellyfish':4000,
+  'bag-cloud':1600,'bag-gamepad':2400,'bag-whale':3400
 };
 for (const item of items) if (item.price !== 0) item.price = PRICES[item.id];
 
