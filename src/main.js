@@ -14,6 +14,7 @@ import { createAvatar } from './avatar.js';
 import { createExplorer } from './explorer.js';
 import { createTouchJoystick } from './touch-joystick.js';
 import { CHASE_CAMERA } from './locomotion.js';
+import { WALK_CLIPPING, createSceneDepth, createFloorFoundation } from './scene-depth.js';
 import { createViewControls } from './view-controls.js';
 import { AIR_SHOWER, createAirShower } from './air-shower.js';
 import { createEntrySequence } from './entry-sequence.js';
@@ -56,7 +57,8 @@ const WIDTH = 120, LENGTH = 180, HEIGHT = 5, EYE = 1.68;
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('#dce7eb');
 scene.fog = new THREE.FogExp2('#e0e9eb', .0063);
-const camera = new THREE.PerspectiveCamera(CHASE_CAMERA.fov, innerWidth / innerHeight, .08, 420);
+const camera = new THREE.PerspectiveCamera(CHASE_CAMERA.fov, innerWidth / innerHeight, WALK_CLIPPING.near, WALK_CLIPPING.far);
+const sceneDepth = createSceneDepth(THREE, camera, { width: WIDTH, length: LENGTH, height: HEIGHT });
 camera.rotation.order = 'YXZ';
 let renderer;
 try {
@@ -152,7 +154,7 @@ const floorBase = new THREE.Mesh(new THREE.PlaneGeometry(WIDTH, LENGTH), new THR
 floorBase.rotation.x = -Math.PI / 2; floorBase.position.y = -.02; scene.add(floorBase);
 // The shared room environment supplies a soft floor sheen in one render pass.
 // A second live mirror pass over the entire 21,600 m² hall is unnecessary here.
-box(M.dark, 0, -.19, 0, WIDTH + .3, .3, LENGTH + .3);
+scene.add(createFloorFoundation(THREE, M.dark, WIDTH, LENGTH));
 for (const x of [-60, 60]) box(M.edge, x, .003, 0, .12, .006, LENGTH);
 for (const z of [-90, 90]) box(M.edge, 0, .003, z, WIDTH, .006, .12);
 // One FFU/luminaire tile, repeated over the 5 m ceiling.
@@ -474,7 +476,7 @@ const explorer = createExplorer({ THREE, camera, scene, canvas: renderer.domElem
     railOverview.visible = next === 'overview';
     airShower.root.visible = next !== 'overview';
     scene.fog.density = next === 'overview' ? .0015 : .0063;
-    camera.far = next === 'overview' ? 1000 : 420; camera.updateProjectionMatrix();
+    sceneDepth.update(next === 'overview');
     $('next-oht').classList.toggle('hidden', next !== 'ride'); $('tool-card').classList.add('hidden');
     if (next === 'overview') { $('view-title').textContent = '연결된 팹 전체 보기'; $('view-subtitle').textContent = `${bays.length} BAYS · ${layoutMachines.length} TOOLS · ${network.junctions.length} JUNCTIONS`; }
     if (next === 'blast') { $('view-title').textContent = `${selectedEquipment?.code ?? '장비'} · EMO`; $('view-subtitle').textContent = '파손 · 붕괴 · 폭발'; }
@@ -940,6 +942,7 @@ function animate(now) {
   }
   audio.update({ jet: entry.active ? entry.state.jet : 0, hidden: false });
   if (now >= nextMapAt) { if (viewControls.mapVisible) drawMap(); updateZone(); nextMapAt = now + 125; }
+  sceneDepth.update(mode === 'overview');
   camera.updateMatrixWorld();
   viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); viewFrustum.setFromProjectionMatrix(viewProjection);
   for (const batch of spatialBatches) batch.update(viewFrustum, camera.position);
