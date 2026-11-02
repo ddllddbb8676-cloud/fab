@@ -14,13 +14,14 @@ import { PROTOCOL,MAX_VISITORS,initialSharedPorts,actorPacket,foupPacket,round }
 import { ROOM_CAPACITY } from '../src/room-population.js';
 import {isEmote,EMOTE_SECONDS} from '../src/emotes.js';
 import {rankScores} from '../src/leaderboard.js';
-import {hasUnlimitedChips} from './owner-privileges.js';
+import {configuredOwnerId,hasUnlimitedChips} from './owner-privileges.js';
 import {isRestArea,canSafetyTraverse,restAreaExit,SAFETY_CLEARANCE} from '../src/rest-area.js';
 
 const distance=(a,b)=>Math.hypot(a.x-b.x,a.z-b.z);
 const finite=(n,a,b)=>Number.isFinite(n)&&n>=a&&n<=b;
 export const SAFETY_DUTY={warmup:60,handover:15,cooldown:90,goal:SAFETY_CATCH_GOAL};
 export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()=>{},onRosterChange=()=>{},getHistoricalScores=()=>[],onEquipmentChange=()=>{},claimName=(id,kind,preferred,excluded)=>(kind==='safety'?createSafetyName:createVisitorName)(random,excluded,preferred),now=Date.now,nicknameAvailable=null,replaceNickname=null,ownerId=''}={}) {
+  ownerId=configuredOwnerId(ownerId);
   const players=new Map(), broken=new Map(), leases=new Map(), events=[], foupVersions=new Map();
   const fleet=createFleet(), byPort=new Map(ports.map(p=>[p.id,p]));
   let time=0, revision=0,joinOrder=0,nextSafetyAt=SAFETY_DUTY.handover,dutyColor=0,lastRanking='';
@@ -100,7 +101,10 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
   }
   function join(id,saved=null) {
     if(players.has(id))return {ok:false,error:'duplicate'};
-    if(players.size>=MAX_VISITORS)return {ok:false,error:'full',message:`자동 캐릭터를 포함해 팹 정원 ${ROOM_CAPACITY}명이 찼어요. 자리가 나면 다시 입장할게요.`};
+    // One extra seat belongs only to the configured owner, regardless of join
+    // order, including socket restoration after a restart. No visitor is evicted.
+    const ordinaryVisitors=players.size-(ownerId&&players.has(ownerId)?1:0);
+    if(!(ownerId&&id===ownerId)&&ordinaryVisitors>=MAX_VISITORS)return {ok:false,error:'full',message:`자동 캐릭터를 포함해 팹 정원 ${ROOM_CAPACITY}명이 찼어요. 자리가 나면 다시 입장할게요.`};
     const excluded=[...players.values()].flatMap(p=>[p.name,p.civilianName]).concat(residents.people.map(p=>p.name),safety.people.map(p=>p.name));
     const civilianName=claimName(id,'visitor',saved?.civilianName||(!isSafety(saved?.role)?saved?.name:''),excluded,random);
     const caught=new Set(saved?.safetyCaughtIds??[]);
