@@ -179,7 +179,7 @@ export function createAvatar(THREE) {
     const head = new THREE.Mesh(new THREE.BoxGeometry(.16, .06, .065), new THREE.MeshStandardMaterial({ color: '#5d8991', metalness: .5, roughness: .32 }));
     head.position.y = -.21; group.add(handle, head); rightArm.glove.add(group); return group;
   }
-  function update(dt, { speed = 0, heading = facing, pressTarget = null, pressProgress = 0, posture = 'stand', repairTime = null, hanging = false, carrying = false, crouch = 0, snap = false } = {}) {
+  function update(dt, { speed = 0, heading = facing, turnRate = 12, pressTarget = null, pressProgress = 0, posture = 'stand', repairTime = null, hanging = false, carrying = false, crouch = 0, snap = false } = {}) {
     if (disposed) return;
     const step = Number.isFinite(dt) ? Math.max(0, Math.min(dt, .1)) : 0;
     speed = Number.isFinite(speed) ? Math.max(0, speed) : 0; heading = Number.isFinite(heading) ? heading : facing;
@@ -192,7 +192,7 @@ export function createAvatar(THREE) {
     if (posture !== 'stand' || seated + reclining > .01 || working) speed = 0;
     currentSpeed += (speed - currentSpeed) * (1 - Math.exp(-step * 12)); activity += ((speed > .02 ? 1 : 0) - activity) * (1 - Math.exp(-step * 10));
     const turn = Math.atan2(Math.sin(heading - facing), Math.cos(heading - facing));
-    facing += turn * (1 - Math.exp(-step * 12));
+    facing += turn * (1 - Math.exp(-step * turnRate));
     const restReady = Math.abs(turn) < .07;
     const approach = (value, goal) => { const next = value + Math.sign(goal - value) * Math.min(Math.abs(goal - value), step * 1.7); return Math.abs(goal - next) < 1e-6 ? goal : next; };
     seated = approach(seated, posture === 'sit' && restReady ? 1 : 0);

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
+import { WALK_SPEED } from '../src/locomotion.js';
 import { createExplorer } from '../src/explorer.js';
 import { bays, machines, isBlocked } from '../src/layout.js';
 import { setRuntimeObstacles } from '../src/runtime-obstacles.js';
@@ -46,7 +47,7 @@ test('floor clicks and touch taps accelerate smoothly with equal travel at 30, 6
       h.tapFloor(destination, hz === 60 ? 'touch' : 'mouse');
       assert.ok(h.explorer.state.path.length > 0); assert.ok(h.explorer.state.position.equals(start));
       h.explorer.update(1 / hz);
-      assert.ok(h.explorer.state.speed > 0 && h.explorer.state.speed < .55, 'first movement frame accelerates gradually');
+      assert.ok(h.explorer.state.speed > 0 && h.explorer.state.speed < .65, 'first movement frame accelerates gradually');
       for (let i = 1; i < hz; i++) h.explorer.update(1 / hz);
       results.push({ travel: start.distanceTo(h.explorer.state.position), camera: h.camera.position.clone() });
       for (let i = 0; i < 3 * hz; i++) h.explorer.update(1 / hz);
@@ -75,7 +76,7 @@ test('WASD, arrow keys and Shift do not move, reroute, accelerate or switch the 
     const path = JSON.stringify(h.explorer.state.path);
     for (const key of keys) h.key('keydown', key);
     assert.equal(JSON.stringify(h.explorer.state.path), path, 'keyboard input does not replace a floor route');
-    for (let i = 0; i < 120; i++) { h.explorer.update(1 / 60); assert.ok(h.explorer.state.speed <= 2.6 + 1e-8); }
+    for (let i = 0; i < 120; i++) { h.explorer.update(1 / 60); assert.ok(h.explorer.state.speed <= WALK_SPEED + 1e-8); }
     h.explorer.setMode('tour');
     for (const key of keys) h.key('keydown', key);
     assert.equal(h.explorer.state.mode, 'tour', 'keys do not leave automatic walking');

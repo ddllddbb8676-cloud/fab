@@ -1,4 +1,5 @@
 import { machines, bays, ports, BAY_CENTERS } from './layout.js';
+import { NPC_WALK_SPEED, NPC_REPAIR_SPEED } from './locomotion.js';
 import { findWalkPath } from './walking.js';
 import {stepNpc,rerouteNpc,npcDestination} from './npc-navigation.js';
 import { getEmoApproach } from './emo-interaction.js';
@@ -174,7 +175,7 @@ export function createResidentSimulation({ fleet, store, destruction, detachCarg
       if (actor.path.length) {
         const target = actor.path[0], length = distance(actor, target);
         if (length > .0001) {
-          const next = stepNpc(actor,target,dt,actor.role==='repairer'?1.65:1.4,neighbors);
+          const next = stepNpc(actor,target,dt,actor.role==='repairer'?NPC_REPAIR_SPEED:NPC_WALK_SPEED,neighbors);
           const moved = distance(actor,next); if(moved>.0001)actor.heading = Math.atan2(next.x-actor.x,next.z-actor.z);
           Object.assign(actor,next); actor.speed = moved / dt; actor.stepDistance += moved;
           if (actor.stepDistance > .86) { actor.stepDistance = 0; cue(actor,'step'); }

@@ -6,6 +6,8 @@ import { network, railPaths } from './rail-network.js';
 import { createFleet, reservedPortIds } from './network-transport.js';
 import { createAvatar } from './avatar.js';
 import { createExplorer } from './explorer.js';
+import { createTouchJoystick } from './touch-joystick.js';
+import { CHASE_CAMERA } from './locomotion.js';
 import { createViewControls } from './view-controls.js';
 import { AIR_SHOWER, createAirShower } from './air-shower.js';
 import { createEntrySequence } from './entry-sequence.js';
@@ -48,7 +50,7 @@ const WIDTH = 120, LENGTH = 180, HEIGHT = 5, EYE = 1.68;
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('#dce7eb');
 scene.fog = new THREE.FogExp2('#e0e9eb', .0063);
-const camera = new THREE.PerspectiveCamera(64, innerWidth / innerHeight, .08, 420);
+const camera = new THREE.PerspectiveCamera(CHASE_CAMERA.fov, innerWidth / innerHeight, .08, 420);
 camera.rotation.order = 'YXZ';
 let renderer;
 try {
@@ -446,6 +448,7 @@ const explorer = createExplorer({ THREE, camera, scene, canvas: renderer.domElem
   isEquipmentVisible: id => equipmentVisibility.isVisible(id),
   pickRepairTarget: (ray, options) => destruction?.pick(ray, options),
   onToast: toast, onInspect: showMachine,
+  onManualMove: () => playActions?.clearPending(),
   onActionTap: ray => playActions?.tap(ray) || emoControls.press(ray),
   onMode(next) {
     mode = next; document.body.classList.add('exploring');
@@ -493,6 +496,24 @@ const viewControls = createViewControls({
   onLock: value => explorer.lock(value),
   onOpen() { $('help').classList.add('hidden'); $('tool-card').classList.add('hidden'); }
 });
+let movementStyle = 'joystick';
+try { if (localStorage.getItem('fab-movement-style') === 'tap') movementStyle = 'tap'; } catch {}
+const joystick = createTouchJoystick({ zone: $('joystick-zone'),
+  onStart: () => !playActions?.busy && explorer.beginJoystick(),
+  onMove: (x, y) => explorer.moveJoystick(x, y), onEnd: () => explorer.endJoystick() });
+function syncMovementStyle() {
+  explorer.state.floorTapEnabled = movementStyle === 'tap';
+  document.body.dataset.movement = movementStyle;
+  $('movement-toggle').setAttribute('aria-pressed', String(movementStyle === 'joystick'));
+  $('movement-label').textContent = movementStyle === 'joystick' ? '조이스틱 이동' : '바닥 터치 이동';
+}
+$('movement-toggle').addEventListener('click', () => {
+  movementStyle = movementStyle === 'joystick' ? 'tap' : 'joystick';
+  joystick.setEnabled(false); explorer.endJoystick(); explorer.state.path = [];
+  try { localStorage.setItem('fab-movement-style', movementStyle); } catch {}
+  syncMovementStyle(); toast(movementStyle === 'joystick' ? '왼쪽 조이스틱으로 이동 · 화면 드래그로 둘러보기' : '바닥을 누르면 그곳까지 걸어가요');
+});
+syncMovementStyle();
 document.addEventListener('visibilitychange', () => { lastTime = 0; });
 
 const entryUi = [...document.querySelectorAll('#controls-toggle,#controls-panel,#map-panel,.view-label,#posture-controls')];
@@ -523,12 +544,12 @@ function startEntry() {
 function finishEntry() {
   entry.finish(); explorer.state.position.set(AIR_SHOWER.exit.x, 0, AIR_SHOWER.exit.z);
   setRuntimeObstacles(AIR_SHOWER.closedDoorBounds);
-  explorer.state.speed = 0; explorer.state.distance = 4.4; explorer.state.elevation = .36;
-  camera.fov = 64; camera.updateProjectionMatrix();
+  explorer.state.speed = 0; explorer.state.distance = CHASE_CAMERA.distance; explorer.state.elevation = CHASE_CAMERA.elevation;
+  camera.fov = CHASE_CAMERA.fov; camera.updateProjectionMatrix();
   explorer.lock(false); document.body.classList.remove('entering'); $('entry-overlay').classList.add('hidden');
   for (const element of entryUi) element.inert = false;
   $('reset').title = '이름과 기록을 초기화하고 새로 시작'; $('reset').setAttribute('aria-label', '완전히 새로 시작하기');
-  toast('바닥을 눌러 걷기 · 드래그로 둘러보기');
+  toast(movementStyle === 'joystick' ? '왼쪽 조이스틱으로 이동 · 화면 드래그로 둘러보기' : '바닥을 눌러 걷기 · 드래그로 둘러보기');
 }
 function updateEntry(dt) {
   if (!entry.active) return;
@@ -536,9 +557,9 @@ function updateEntry(dt) {
   airShower.update(s);
   explorer.state.position.set(s.position.x, 0, s.position.z);
   explorer.state.speed = Math.abs(s.position.z - before) / Math.max(dt, .001);
-  explorer.state.distance = 2.65 + 1.75 * s.walk;
-  explorer.state.elevation = .3 + .06 * s.walk;
-  camera.fov = innerWidth < 700 ? 84 - 20 * s.walk : 64; camera.updateProjectionMatrix();
+  explorer.state.distance = 2.65 + (CHASE_CAMERA.distance - 2.65) * s.walk;
+  explorer.state.elevation = .3 + (CHASE_CAMERA.elevation - .3) * s.walk;
+  camera.fov = (innerWidth < 700 ? 84 : 64) * (1 - s.walk) + CHASE_CAMERA.fov * s.walk; camera.updateProjectionMatrix();
   if (s.complete) { finishEntry(); return; }
   if (s.stage !== entryStage) {
     entryStage = s.stage;
@@ -846,7 +867,9 @@ function animate(now) {
     const upper = .32, bottom = v.gripper.position.y + .0275;
     for (const belt of v.belts) { belt.position.y = (upper + bottom) / 2; belt.scale.y = Math.max(.02, upper - bottom); }
   }
-  updateEntry(dt); playActions.update(dt); explorer.update(dt);restAreaView.update(viewFocus());
+  updateEntry(dt); playActions.update(dt);
+  joystick.setEnabled(movementStyle === 'joystick' && !entry.active && !document.hidden && !explorer.state.locked && !playActions.busy && $('help').classList.contains('hidden') && $('tool-card').classList.contains('hidden') && ['walk','tour','blast'].includes(mode));
+  explorer.update(dt);restAreaView.update(viewFocus());
   if(now>=nextRefreshReminder&&!nearSafety&&!entry.active&&!explorer.state.emoInteraction&&!explorer.state.repairInteraction&&!playActions.busy&&!directory.isOpen&&!$('zone-toast').classList.contains('visible')&&$('help').classList.contains('hidden')){
     toast('가끔 새로고침해 최신 업데이트를 받아보세요. 이름과 기록은 이어져요.',4500);nextRefreshReminder=now+15*60*1000;
   }
@@ -910,7 +933,7 @@ function animate(now) {
     nextDiagnosticAt = now + 500;
     const demo = observedVehicle();
     updateSoundButton();
-    $('world').dataset.diagnostics = JSON.stringify({ ready: true, revision: 'fab-safety-19', safety: safetyState, safetyPatrols: safetyPeople?.state.people, mode, audio: audio.state, multiplayer: multiplayer ? {status:multiplayer.status,id:multiplayer.id,count:realVisitorCount,total:totalCharacterCount,capacity:ROOM_CAPACITY,visitorCapacity:MAX_VISITORS} : null, residents: residents?.state ?? {total:AUTOMATED_COUNT,simulated:true,actions:sharedWorld.totals,people:remotePeople.state.people.filter(p=>p.id.startsWith('resident:')||p.id.startsWith('safety:'))}, remotePlayers:remotePeople?.state.people.filter(p=>!p.id.startsWith('resident:')&&!p.id.startsWith('safety:')), destruction: destruction.state, equipmentVisibility: equipmentVisibility.state, emoInteraction: explorer.state.emoInteraction, repairInteraction: explorer.state.repairInteraction, posture: explorer.state.posture, play: playActions.state, actionTargets: new URLSearchParams(location.search).has('qa') ? playActions.targets(camera, { width: innerWidth, height: innerHeight }) : undefined, visitorName: visitorBadge.name, controlsOpen: viewControls.isOpen, mapVisible: viewControls.mapVisible, emoButtons: layoutMachines.length, amberBays: bayLighting.bayIds.map(id => id + 1), amberLights: bayLighting.lights.length, amberLightsVisible: bayLighting.root.visible, entry: { active: entry.active, ...entry.state }, width: WIDTH, length: LENGTH, ceiling: HEIGHT,
+    $('world').dataset.diagnostics = JSON.stringify({ ready: true, revision: 'fab-joystick-1', movementStyle, joystickActive: explorer.state.joystickActive, cameraFov: camera.fov, safety: safetyState, safetyPatrols: safetyPeople?.state.people, mode, audio: audio.state, multiplayer: multiplayer ? {status:multiplayer.status,id:multiplayer.id,count:realVisitorCount,total:totalCharacterCount,capacity:ROOM_CAPACITY,visitorCapacity:MAX_VISITORS} : null, residents: residents?.state ?? {total:AUTOMATED_COUNT,simulated:true,actions:sharedWorld.totals,people:remotePeople.state.people.filter(p=>p.id.startsWith('resident:')||p.id.startsWith('safety:'))}, remotePlayers:remotePeople?.state.people.filter(p=>!p.id.startsWith('resident:')&&!p.id.startsWith('safety:')), destruction: destruction.state, equipmentVisibility: equipmentVisibility.state, emoInteraction: explorer.state.emoInteraction, repairInteraction: explorer.state.repairInteraction, posture: explorer.state.posture, play: playActions.state, actionTargets: new URLSearchParams(location.search).has('qa') ? playActions.targets(camera, { width: innerWidth, height: innerHeight }) : undefined, visitorName: visitorBadge.name, controlsOpen: viewControls.isOpen, mapVisible: viewControls.mapVisible, emoButtons: layoutMachines.length, amberBays: bayLighting.bayIds.map(id => id + 1), amberLights: bayLighting.lights.length, amberLightsVisible: bayLighting.root.visible, entry: { active: entry.active, ...entry.state }, width: WIDTH, length: LENGTH, ceiling: HEIGHT,
       equipmentCount: equipment.length, equipmentFamilies: families.length, uniqueEquipmentCodes: new Set(equipment.map(e => e.code)).size, selectedEquipment: selectedEquipment?.code ?? null,
       machines: machinePositions.length, bays: bays.length, toolsPerRow: 10, loadports: layoutMachines.length * 3,
       frontAisle: AISLE, rearAisle: SERVICE_AISLE, sideGap: SIDE_GAP, vehicles: vehicles.length, junctions: network.junctions.length,

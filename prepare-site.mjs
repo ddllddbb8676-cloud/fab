@@ -2,12 +2,17 @@ import { mkdir, readFile, writeFile, copyFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 const root = new URL('.', import.meta.url);
 const dist = new URL('./dist/', root);
-for (const dir of ['src/', 'docs/', 'vendor/three/', 'vendor/addons/controls/', 'vendor/addons/environments/', 'vendor/addons/objects/', 'vendor/addons/lights/']) await mkdir(new URL(dir, dist), { recursive: true });
+for (const dir of ['src/', 'docs/', 'vendor/nipplejs/', 'vendor/three/', 'vendor/addons/controls/', 'vendor/addons/environments/', 'vendor/addons/objects/', 'vendor/addons/lights/']) await mkdir(new URL(dir, dist), { recursive: true });
 let html = await readFile(new URL('index.html', root), 'utf8');
 html = html.replace('/node_modules/three/build/three.module.js', '/vendor/three/three.module.js').replace('/node_modules/three/examples/jsm/', '/vendor/addons/');
+html = html.replace('/node_modules/nipplejs/dist/index.mjs', '/vendor/nipplejs/index.mjs');
 await writeFile(new URL('index.html', dist), html);
 for (const name of ['main.js', 'layout.js', 'transport.js', 'rail-network.js', 'network-transport.js', 'avatar.js', 'spatial-batch.js', 'walking.js', 'posture.js', 'foup-play.js', 'play-actions.js', 'visitor-name.js', 'explorer.js', 'view-controls.js', 'tour-route.js', 'transfer-view.js', 'runtime-obstacles.js', 'ambience.js', 'equipment-visibility.js', 'emo-controls.js', 'emo-interaction.js', 'equipment-destruction.js', 'air-shower.js', 'entry-sequence.js', 'equipment-catalog.js', 'equipment-labels.js', 'equipment-directory.js', 'equipment-directory.css', 'bay-lighting.js', 'style.css']) await copyFile(new URL('src/' + name, root), new URL('src/' + name, dist));
 await copyFile(new URL('src/residents.js', root), new URL('src/residents.js', dist));
+for (const name of ['locomotion.js', 'touch-joystick.js']) await copyFile(new URL('src/' + name, root), new URL('src/' + name, dist));
+await copyFile(new URL('node_modules/nipplejs/dist/index.mjs', root), new URL('vendor/nipplejs/index.mjs', dist));
+// The npm 1.0.4 tarball omits LICENSE; preserve the notice from its release tag.
+await copyFile(new URL('docs/licenses/nipplejs.txt', root), new URL('vendor/nipplejs/LICENSE.txt', dist));
 for(const name of ['emotes.js','emote-view.js','safety-proximity.js','npc-navigation.js']) await copyFile(new URL('src/'+name,root),new URL('src/'+name,dist));
 for(const name of ['room-population.js','safety-team.js','rest-area.js','rest-area-view.js','leaderboard.js','multiplayer.js','shared-protocol.js','shared-world-view.js','remote-people.js']) await copyFile(new URL('src/'+name,root),new URL('src/'+name,dist));
 for (const name of ['three.module.js', 'three.core.js']) await copyFile(new URL('node_modules/three/build/' + name, root), new URL('vendor/three/' + name, dist));

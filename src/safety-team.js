@@ -1,4 +1,5 @@
 import { bays } from './layout.js';
+import { NPC_SAFETY_SPEED } from './locomotion.js';
 import { canWalkSegment, findWalkPath } from './walking.js';
 import {stepNpc,rerouteNpc} from './npc-navigation.js';
 import { VISITOR_ADJECTIVES, createUniqueNickname } from './visitor-name.js';
@@ -37,7 +38,7 @@ export function createSafetyPatrols({random=Math.random,excludedNames=[]}={}) {
       const goal=p.path[0];if(!goal)continue;
       if(!canSafetyTraverse(p,goal)){p.path=[];p.nextThink=0;continue;}
       const d=distance(p,goal);
-      if(d>.001){const next=stepNpc(p,goal,dt,1.8,neighbors,{canTraverse:canSafetyTraverse});p.speed=distance(p,next)/dt;if(p.speed>.01)p.heading=Math.atan2(next.x-p.x,next.z-p.z);Object.assign(p,next);}
+      if(d>.001){const next=stepNpc(p,goal,dt,NPC_SAFETY_SPEED,neighbors,{canTraverse:canSafetyTraverse});p.speed=distance(p,next)/dt;if(p.speed>.01)p.heading=Math.atan2(next.x-p.x,next.z-p.z);Object.assign(p,next);}
       if(distance(p,goal)<.03)p.path.shift();
     }
     // At most one route calculation each tick; each guard replans at most once a second.

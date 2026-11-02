@@ -62,3 +62,13 @@ test('an intact cabinet occludes debris behind it without opening either card',(
   try{h.camera.position.set(0,2,78);h.tap({x:0,z:70});assert.equal(h.inspections,0);assert.equal(h.explorer.state.path.length,0);}
   finally{h.dispose();}
 });
+
+test('joystick mode still opens repair debris but ignores floor travel taps',()=>{
+  let repair={id:7,distance:5};
+  const h=harness([{minX:-1,maxX:1,minZ:68,maxZ:72,equipment:{id:7}}],()=>false,()=>repair);
+  try{
+    h.explorer.state.floorTapEnabled=false;h.explorer.state.position.set(0,0,78);h.camera.position.set(0,2,78);
+    h.tap({x:0,z:70},{touch:true});assert.equal(h.inspections,1);
+    repair=null;h.tap({x:0,z:70},{touch:true});assert.equal(h.explorer.state.path.length,0);
+  }finally{h.dispose();}
+});

@@ -68,13 +68,18 @@ export function findWalkPath(start, target, {canTraverse=()=>true}={}) {
   }
   return result;
 }
-export function stepWalker(position, dx, dz) {
+export function stepWalker(position, dx, dz, { canTraverse = () => true } = {}) {
   // Substeps prevent tunnelling through a tool on a slow frame.
   const n = Math.max(1, Math.ceil(Math.hypot(dx, dz) / .1));
   const result = { x: position.x, z: position.z };
   for (let i = 0; i < n; i++) {
-    if (!isBlocked(result.x + dx / n, result.z, WALK_RADIUS)) result.x += dx / n;
-    if (!isBlocked(result.x, result.z + dz / n, WALK_RADIUS)) result.z += dz / n;
+    // Slide along a blocked axis, including the protected-zone boundary.
+    // Segment checks also catch a thin closed door between substeps.
+    for (const [axis, delta] of [['x', dx / n], ['z', dz / n]]) {
+      if (!delta) continue;
+      const next = { ...result, [axis]: result[axis] + delta };
+      if (!isBlocked(next.x, next.z, WALK_RADIUS) && canTraverse(result, next) && canTraverseRuntimeObstacles(result, next, WALK_RADIUS)) result[axis] = next[axis];
+    }
   }
   return result;
 }

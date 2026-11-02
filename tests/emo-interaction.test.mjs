@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { WALK_SPEED } from '../src/locomotion.js';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { createAvatar } from '../src/avatar.js';
@@ -122,7 +123,7 @@ test('both real avatar orientations walk, align, reach and hold before one callb
         if (previous) phases.add(previous.phase);
         if (previous?.phase === 'hold') heldFrames++;
         explorer.update(1 / hz);
-        assert.ok(explorer.state.position.distanceTo(before) <= 2.6 / hz + 1e-8, 'approach never teleports');
+        assert.ok(explorer.state.position.distanceTo(before) <= WALK_SPEED / hz + 1e-8, 'approach never teleports');
         assert.ok(!isBlocked(explorer.state.position.x, explorer.state.position.z, WALK_RADIUS));
         if (explorer.state.emoInteraction?.phase === 'hold' && heldFrames === 0) {
           assert.equal(pressed, 0);

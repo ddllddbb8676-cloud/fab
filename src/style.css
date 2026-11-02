@@ -243,3 +243,15 @@ body.entering .brand { pointer-events: none; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; }
 }
+
+/* One thumb-sized input surface, separate from scene gestures and action UI. */
+.joystick-zone { position:fixed; z-index:8; left:var(--safe-left); bottom:calc(var(--safe-bottom) + 52px); width:144px; height:144px; touch-action:none; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
+.joystick-hint { position:absolute; inset:26px; display:grid; place-items:center; border:1px solid #ffffffb0; border-radius:50%; background:#e9f5f333; pointer-events:none; }
+.joystick-hint i { width:38px; height:38px; border-radius:50%; background:#52868c55; border:1px solid #ffffffa0; }
+.joystick-hint small { position:absolute; bottom:-19px; font-size:10px; color:#496f78; text-shadow:0 1px 3px white; }
+.joystick-zone.active .joystick-hint { opacity:0; }
+body[data-movement=joystick] .view-label { top:calc(var(--safe-top) + 48px); bottom:auto; max-width:160px; padding:6px 9px; background:#f7fbfb70; border-color:#ffffff60; box-shadow:none; backdrop-filter:none; }
+body[data-movement=joystick] .view-label div > span { display:none; }
+body[data-movement=joystick] .safety-panel { left:auto; right:var(--safe-right); transform:none; width:min(280px,calc(100vw - 184px)); padding:8px 10px; background:#fff8eec9; }
+body.entering .joystick-zone { display:none; }
+@media (max-height:540px) and (orientation:landscape) { .joystick-zone { bottom:var(--safe-bottom); } }

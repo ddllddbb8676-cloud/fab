@@ -6,6 +6,7 @@ import { getRuntimeObstacles } from './runtime-obstacles.js';
 import { planEmoApproach, emoPressCameraFrame, EMO_REACH_SECONDS, EMO_HOLD_SECONDS, EMO_CONTACT_TOLERANCE } from './emo-interaction.js';
 import { findRestHeading } from './posture.js';
 import {isRestArea,REST_AREA_MESSAGE} from './rest-area.js';
+import { WALK_SPEED, CHASE_CAMERA, stickVector, cameraRelativeMove } from './locomotion.js';
 
 export const REPAIR_SECONDS = 5;
 
@@ -43,12 +44,12 @@ export function destructionCameraFrame(machine, aspect = 1, baseFov = 64) {
   return { position, target, landmarks, fov: Math.atan(tangent) * 360 / Math.PI };
 }
 
-export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, colliders, vehicles, onMode, onInspect, onToast, onActionTap = () => false, pickRepairTarget = () => null, isEquipmentVisible = () => true, canTraverse = () => true }) {
+export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, colliders, vehicles, onMode, onInspect, onToast, onManualMove = () => {}, onActionTap = () => false, pickRepairTarget = () => null, isEquipmentVisible = () => true, canTraverse = () => true }) {
   const $ = id => document.getElementById(id);
   const state = { mode: 'walk', position: new THREE.Vector3(TOUR_POINTS[0][0], 0, TOUR_POINTS[0][1]),
-    yaw: Math.PI / 2, elevation: .36, distance: 4.4, heading: -Math.PI / 2, speed: 0,
+    yaw: Math.PI / 2, elevation: CHASE_CAMERA.elevation, distance: CHASE_CAMERA.distance, heading: -Math.PI / 2, speed: 0,
     path: [], tourTime: 0, followId: 0, rideYaw: 0, manualLook: false, locked: false,
-    transferVehicleId: null, transferTarget: null, transferWaiting: false, transferLabel: '', transferInTransit: false, emoInteraction: null, repairInteraction: null, posture: 'stand' };
+    transferVehicleId: null, transferTarget: null, transferWaiting: false, transferLabel: '', transferInTransit: false, emoInteraction: null, repairInteraction: null, posture: 'stand', joystickActive: false, joystick: { x: 0, y: 0 } };
   const pointers = new Map();
   let dragged = 0, gestureDragged = false, pinchDistance = 0, pinched = false, cameraSnap = true;
   let tourRoute = null, transferSession = null, transferBaseFov = camera.fov, blastSession = null, blastBaseFov = camera.fov;
@@ -66,7 +67,19 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
   let pathSpeed = 0, tourBlend = 0, runtimeSnapshot = null, runtimeCameraBoxes = [];
   const targetRing = new THREE.Mesh(new THREE.RingGeometry(.21, .29, 36), new THREE.MeshBasicMaterial({ color: '#3d9fa7', transparent: true, opacity: .8, side: THREE.DoubleSide, depthWrite: false }));
   targetRing.rotation.x = -Math.PI / 2; targetRing.position.y = .012; targetRing.visible = false; scene.add(targetRing);
-  function clearInput() { pointers.clear(); state.speed = 0; pathSpeed = 0; }
+  let stickSpeed = 0;
+  function endJoystick() { state.joystickActive = false; state.joystick = { x: 0, y: 0 }; stickSpeed = 0; state.speed = 0; }
+  function clearInput() { pointers.clear(); endJoystick(); state.speed = 0; pathSpeed = 0; }
+  function beginJoystick() {
+    if (state.locked || document.hidden || !$('help').classList.contains('hidden') || scriptedPose || !['walk', 'tour', 'blast'].includes(state.mode)) return false;
+    cancelEmo('movement'); onManualMove();
+    if (state.mode !== 'walk') setMode('walk');
+    state.path = []; pathSpeed = 0; targetRing.visible = false; state.posture = 'stand';
+    $('tool-card').classList.add('hidden');
+    for (const pointer of pointers.values()) pointer.suppressTap = true;
+    state.manualLook = true; state.joystickActive = true;
+    return true;
+  }
   function cancelEmo(reason = 'cancelled') {
     if (!emoSession) return false;
     const previous = emoSession; emoSession = null; state.emoInteraction = state.repairInteraction = null;
@@ -188,8 +201,8 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
   function reset() {
     tourRoute = null;
     state.position.set(TOUR_POINTS[0][0], 0, TOUR_POINTS[0][1]); state.yaw = Math.PI / 2; state.heading = -Math.PI / 2;
-    state.distance = 4.4; state.elevation = .36; cameraSnap = true; setMode('walk');
-    onToast('바닥을 눌러 이동 · 드래그로 둘러보기');
+    state.distance = CHASE_CAMERA.distance; state.elevation = CHASE_CAMERA.elevation; cameraSnap = true; setMode('walk');
+    onToast('왼쪽 조이스틱으로 이동 · 화면 드래그로 둘러보기');
   }
   function followCamera(focus, yaw, distance, elevation, dt, obstacles = true) {
     const snap = cameraSnap || previousFocus.distanceToSquared(focus) > 64;
@@ -235,14 +248,27 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
     }
     // Collision shortening never feeds back into the ideal orbit. Move inward
     // immediately for safety, then ease outward when a cabinet/door clears.
-    cameraRig.clearance = snap ? clearDistance : Math.min(clearDistance, damp(cameraRig.clearance, clearDistance, 4.2, dt));
+    cameraRig.clearance = snap ? clearDistance : Math.min(clearDistance, damp(cameraRig.clearance, clearDistance, 3.2, dt));
     camera.position.copy(focus).addScaledVector(direction, cameraRig.clearance);
     cameraSnap = false;
     camera.lookAt(focus);
   }
   function walk(dt) {
+    if (state.joystickActive) {
+      const strength = Math.hypot(state.joystick.x, state.joystick.y);
+      if (strength < 1e-6) { stickSpeed = 0; state.speed = 0; return; }
+      const yaw = Math.atan2(camera.position.x - cameraFocus.x, camera.position.z - cameraFocus.z);
+      const move = cameraRelativeMove(state.joystick.x / strength, state.joystick.y / strength, yaw);
+      const eased = easeVelocity(stickSpeed, WALK_SPEED * strength, 24, dt); stickSpeed = eased.value;
+      const next = stepWalker(state.position, move.x * eased.travel, move.z * eased.travel, { canTraverse });
+      const dx = next.x - state.position.x, dz = next.z - state.position.z;
+      state.speed = Math.hypot(dx, dz) / Math.max(dt, .001);
+      if (state.speed > .02) state.heading = Math.atan2(dx, dz);
+      state.position.set(next.x, 0, next.z);
+      return;
+    }
     if (!state.path.length) { pathSpeed = 0; state.speed = 0; return; }
-    const speed = 2.6;
+    const speed = WALK_SPEED;
     let next = { x: state.position.x, z: state.position.z };
     while (state.path.length && Math.hypot(state.path[0].x - state.position.x, state.path[0].z - state.position.z) < 1e-6) state.path.shift();
     const remaining = state.path.reduce((length, p, i) => {
@@ -307,6 +333,7 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
       return;
     }
     const helpVisible = !$('help').classList.contains('hidden');
+    if (state.joystickActive && (state.locked || helpVisible || document.hidden)) endJoystick();
     if (emoSession && (state.locked || helpVisible || document.hidden)) cancelEmo(state.locked ? 'locked' : helpVisible ? 'help' : 'hidden');
     if (!state.locked) state.speed = 0;
     if (!state.locked && !helpVisible) {
@@ -317,7 +344,7 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
     const repairing = emoSession?.phase === 'repair';
     const repairTarget = repairing ? { ...emoSession.plan.button, y: .96 + .16 * Math.sin(emoSession.elapsed * 15), z: emoSession.plan.button.z + emoSession.plan.button.sign * .09 } : null;
     avatar.root.position.copy(state.position); avatar.update(dt, { speed: state.speed, heading: state.heading, posture: state.posture,
-      repairTime: repairing ? emoSession.elapsed : null, carrying: Boolean(state.carrying),
+      turnRate: state.joystickActive ? 22 : 12, repairTime: repairing ? emoSession.elapsed : null, carrying: Boolean(state.carrying),
       pressTarget: repairTarget ?? (emoSession && emoSession.kind === 'emo' && emoSession.phase !== 'approach' ? emoSession.plan.button : null), pressProgress: repairing ? 1 : emoSession?.progress ?? 0 });
     finishEmoContact(dt);
     if (state.mode === 'blast' && blastSession) {
@@ -380,6 +407,7 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
         onInspect(equipment); return;
       }
     }
+    if (state.floorTapEnabled === false) { $('tool-card').classList.add('hidden'); return; }
     // Only the red EMO area opens equipment actions; broad cabinet boxes never do.
     if (occluderDistance < groundDistance - .02) { onToast('통로 바닥을 누르면 걸어가요'); return; }
     if (!floorHit || Math.abs(floorHit.x) >= 58.8 || Math.abs(floorHit.z) >= 88.5) return;
@@ -394,7 +422,7 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
   canvas.addEventListener('pointerdown', e => {
     if (state.locked || state.mode === 'overview' || state.mode === 'transfer') return;
     if(state.mode==='blast')setMode('walk');
-    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, startX:e.clientX, startY:e.clientY }); canvas.setPointerCapture(e.pointerId);
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, startX:e.clientX, startY:e.clientY, suppressTap: state.joystickActive }); canvas.setPointerCapture(e.pointerId);
     if (pointers.size === 1) { dragged = 0; gestureDragged = false; pinched = false; }
     if (pointers.size === 2) { const p = [...pointers.values()]; pinchDistance = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y); pinched = true; }
   });
@@ -418,8 +446,8 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
   });
   canvas.addEventListener('pointerup', e => {
     if (!pointers.has(e.pointerId)) return;
-    pointers.delete(e.pointerId);
-    if (!pointers.size && !pinched && !gestureDragged && dragged <= (e.pointerType==='touch'?10:4) && state.mode !== 'ride') tap(e);
+    const pointer = pointers.get(e.pointerId); pointers.delete(e.pointerId);
+    if (!pointer.suppressTap && !state.joystickActive && !pointers.size && !pinched && !gestureDragged && dragged <= (e.pointerType==='touch'?10:4) && state.mode !== 'ride') tap(e);
   });
   canvas.addEventListener('pointercancel', e => pointers.delete(e.pointerId));
   canvas.addEventListener('wheel', e => {
@@ -466,7 +494,8 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
     state.heading = heading; state.posture = posture;
     onToast(posture === 'sit' ? '여기 앉아서 잠깐 쉬어요' : posture === 'lie' ? '통로를 따라 편하게 누워요' : '다시 일어났어요'); return true;
   }
-  return { state, setMode, reset, update, focusTransfer, focusDestruction, approachEmo, cancelEmo, setPosture,
+  return { state, setMode, reset, update, focusTransfer, focusDestruction, approachEmo, cancelEmo, setPosture, beginJoystick, endJoystick,
+    moveJoystick(x, y) { if (state.joystickActive) state.joystick = stickVector(x, y); },
     setScriptedPose(pose) { scriptedPose = pose; if (!pose) { scriptedCameraActive=false;state.position.y = 0; cameraSnap = false; } },
     walkTo(point) {
       if (state.locked) return false;
