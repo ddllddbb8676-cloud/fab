@@ -1,6 +1,6 @@
 import {EMOTES,EMOTE_SECONDS,HEART_PATH,HEART_COLOR} from './emotes.js';
 
-// Six small textures are shared by all visitors; no new character geometry.
+// Small textures are created on demand and shared by all visitors.
 const textures=new Map();let users=0;
 function textureFor(THREE,id){
   if(textures.has(id))return textures.get(id);

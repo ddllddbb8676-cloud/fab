@@ -110,10 +110,10 @@ body:has(#controls-panel:not(.hidden)) .leaderboard { display:none; }
 }
 .posture-controls button { min-width: 60px; min-height: 44px; padding: 0 10px; border-radius: 12px; background: transparent; font-size: 12px; }
 .posture-controls button[aria-pressed=true] { color: #fff; background: #397b81; }
-.emote-controls { position:fixed; z-index:7; left:50%; bottom:var(--safe-bottom); transform:translateX(-50%); display:flex; gap:2px; padding:3px; border:1px solid #ffffff66; border-radius:15px; background:#f7fbfb80; }
-.emote-controls button { width:40px; min-height:38px; padding:0; background:transparent; border-radius:11px; font-size:23px; line-height:1; }
+.emote-controls { position:fixed; z-index:7; left:50%; bottom:var(--safe-bottom); transform:translateX(-50%); width:min(426px,calc(100vw - 16px - env(safe-area-inset-left) - env(safe-area-inset-right))); display:grid; grid-auto-flow:column; grid-auto-columns:minmax(0,1fr); gap:2px; padding:3px; border:1px solid #ffffff66; border-radius:15px; background:#f7fbfb80; }
+.emote-controls button { width:100%; min-width:0; min-height:40px; padding:0; background:transparent; border-radius:11px; font-size:clamp(20px,5.8vw,23px); line-height:1; }
 .emote-controls button:active { background:#c7e7df; transform:scale(.92); }
-.emote-controls svg { display:block; margin:auto; pointer-events:none; }
+.emote-controls svg { display:block; width:min(29px,100%); height:auto; margin:auto; pointer-events:none; }
 body.entering .emote-controls,body:has(#tool-card:not(.hidden)) .emote-controls,body:has(#help:not(.hidden)) .emote-controls { display:none; }
 .safety-proximity { position:fixed; inset:0; z-index:4; pointer-events:none; background:radial-gradient(ellipse at center,transparent 48%,#d51c2b80 100%); opacity:.2; animation:safety-pulse 1.7s ease-in-out infinite; }
 .safety-warning { position:fixed; z-index:5; bottom:calc(var(--safe-bottom) + 116px); left:50%; transform:translateX(-50%); padding:7px 13px; border-radius:20px; background:#fff5f0c4; color:#b73936; white-space:nowrap; font-size:12px; pointer-events:none; }
@@ -254,7 +254,10 @@ body[data-movement=joystick] .view-label { top:calc(var(--safe-top) + 48px); bot
 body[data-movement=joystick] .view-label div > span { display:none; }
 body[data-movement=joystick] .safety-panel { left:auto; right:var(--safe-right); transform:none; width:min(280px,calc(100vw - 184px)); padding:8px 10px; background:#fff8eec9; }
 body.entering .joystick-zone { display:none; }
-@media (max-height:540px) and (orientation:landscape) { .joystick-zone { bottom:var(--safe-bottom); } }
+@media (max-height:540px) and (orientation:landscape) {
+  .joystick-zone { bottom:var(--safe-bottom); }
+  body[data-movement=joystick] .emote-controls { left:auto; right:var(--safe-right); transform:none; width:min(426px,calc(100vw - var(--safe-left) - var(--safe-right) - 152px)); }
+}
 .visitor-nickname-label{position:fixed;left:0;top:0;z-index:6;pointer-events:none;user-select:none;white-space:nowrap;color:#204e55;font:700 16px/1.2 "Noto Sans KR",system-ui,sans-serif;text-shadow:-1px -1px 0 #f4fbf8,1px -1px 0 #f4fbf8,-1px 1px 0 #f4fbf8,1px 1px 0 #f4fbf8,0 1px 3px #f4fbf8;will-change:transform}
 .visitor-nickname-label[hidden]{display:none}
 .visitor-nickname-label{text-align:center}
