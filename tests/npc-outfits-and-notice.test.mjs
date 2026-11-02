@@ -45,6 +45,8 @@ test('blocked browser storage never interrupts play or makes the notice repeat i
 test('default items do not count as a purchase, but any purchased item suppresses the notice even when unequipped or after reconnect',()=>{
   const starter={owned:['suit-default','eyes-default'],equipped:{...DEFAULT_OUTFIT}};
   assert.equal(hasPurchasedCosmetics(starter),false);
+  assert.equal(hasPurchasedCosmetics({...starter,nicknameTickets:1,nicknamePurchases:1}),true);
+  assert.equal(hasPurchasedCosmetics({...starter,nicknameTickets:0,nicknamePurchases:1}),true,'used tickets still count as a past purchase');
   let time=1000000;const notice=createWardrobeNotice({now:()=>time});let shown=0;
   for(let i=0;i<60;i++){time+=1000;if(notice.tick(1,{wallet:starter}))shown++;}
   assert.equal(shown,1);

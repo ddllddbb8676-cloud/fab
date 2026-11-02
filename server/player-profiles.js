@@ -37,6 +37,10 @@ export function createProfileStore(storage,{ownerId=''}={}) {
   }
   return {
     claimName:(...args)=>nicknames.claim(...args),
+    nicknameAvailable:(...args)=>nicknames.available(...args),
+    replaceNickname:(...args)=>nicknames.replace(...args),
+    nicknameVisitorId:name=>nicknames.visitorId(name),
+    replacementNickname:(...args)=>nicknames.replacement(...args),
     async getEquipment(){await writes.catch(()=>{});return pending.has(EQUIPMENT_KEY)?structuredClone(pending.get(EQUIPMENT_KEY)):storage.get(EQUIPMENT_KEY);},
     saveEquipment(state){pending.set(EQUIPMENT_KEY,structuredClone(state));},
     get hasPending(){return pending.size>0;},

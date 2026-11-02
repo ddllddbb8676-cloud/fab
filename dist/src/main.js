@@ -1,3 +1,4 @@
+import {createNicknameUI,createNicknameModeration} from './nickname-ui.js';
 import {npcOutfit} from './npc-outfits.js';
 import {createWardrobeNotice,WARDROBE_NOTICE,WARDROBE_NOTICE_DURATION} from './wardrobe-notice.js';
 import {createAvatarAppearance} from './avatar-appearance.js';
@@ -558,7 +559,7 @@ function finishEntry() {
   toast(movementStyle === 'joystick' ? '왼쪽 조이스틱으로 이동 · 화면 드래그로 둘러보기' : '바닥을 눌러 걷기 · 드래그로 둘러보기');
 }
 function updateEntry(dt) {
-  if (!entry.active) return;
+  if (!entry.active||nicknameUI.isOpen) return;
   const before = explorer.state.position.z, s = entry.step(dt);
   airShower.update(s);
   explorer.state.position.set(s.position.x, 0, s.position.z);
@@ -580,7 +581,7 @@ function updateEntry(dt) {
 }
 function skipEntry() { if (!entry.active) return; airShower.update(entry.skip()); finishEntry(); }
 $('entry-skip').addEventListener('click', skipEntry);
-window.addEventListener('keydown', e => { if (entry.active && e.key === 'Escape') skipEntry(); });
+window.addEventListener('keydown', e => { if (entry.active && !nicknameUI.isOpen && e.key === 'Escape') skipEntry(); });
 
 // Browsers require a user gesture; the first touch starts the intended ambience.
 const audio = createAmbience();
@@ -607,7 +608,10 @@ playActions = createPlayActions({ THREE, scene, materials: M, fleet, explorer, a
   hideOriginal(portId) { removedOriginalFoups.add(portId); for (const hide of originalFoupParts.get(portId) ?? []) hide(); },
   showOriginal(portId) { removedOriginalFoups.delete(portId);for(const show of originalFoupParts.get(portId)??[])show(true); },
   isDestroyed: id => destruction.isDestroyed(id), toast, onCue: motionCue, network:onlineLink, isRestricted: () => safetyState.penalty > 0 });
-const wardrobe=createWardrobe({THREE,button:$('wardrobe-open'),command:(...args)=>onlineLink?.command(...args)??Promise.resolve({ok:false,message:'온라인 FAB에 연결해 주세요.'}),connected:()=>Boolean(onlineLink?.connected),getName:()=>visitorBadge.name,onOpen:()=>{if(entry.active)return false;viewControls.closeAll();directory.close();$('help').classList.add('hidden');$('tool-card').classList.add('hidden');explorer.lock(true);},onClose:()=>explorer.lock(false)});
+const nicknameUI=createNicknameUI({command:(...args)=>onlineLink.command(...args),connected:()=>Boolean(onlineLink?.connected),onToggle:open=>{if(open){viewControls.closeAll();directory.close();$('help').classList.add('hidden');$('tool-card').classList.add('hidden');}explorer.lock(open||entry.active);}});
+const nicknameModeration=createNicknameModeration({button:$('nickname-admin'),command:(...args)=>onlineLink.command(...args),onToggle:open=>explorer.lock(open||entry.active)});
+const wardrobe=createWardrobe({THREE,button:$('wardrobe-open'),command:(...args)=>onlineLink?.command(...args)??Promise.resolve({ok:false,message:'온라인 FAB에 연결해 주세요.'}),connected:()=>Boolean(onlineLink?.connected),getName:()=>visitorBadge.name,onChangeName:()=>nicknameUI.open(),onOpen:()=>{if(entry.active)return false;viewControls.closeAll();directory.close();$('help').classList.add('hidden');$('tool-card').classList.add('hidden');explorer.lock(true);},onClose:()=>explorer.lock(false)});
+function applyNickname(nickname){wardrobe.setNickname(nickname);nicknameUI.sync(nickname);}
 function applyWallet(wallet){currentWallet=wallet;appearance.setOutfit(wallet.equipped,safetyState.role);wardrobe.setWallet(wallet);}
 if(!connectionConfig)residents = createResidents({ THREE, scene, fleet, store: playActions.store, destruction, detachCargo: v => playActions.detachVehicleCargo(v),
   getNeighbors:()=>safetyPatrols?.people??[],
@@ -616,10 +620,10 @@ if(!connectionConfig)residents = createResidents({ THREE, scene, fleet, store: p
 else {
   remotePeople=createRemotePeople({THREE,scene,store:playActions.store,fleet,maxDetailed:mobile?32:48});
   sharedWorld=createSharedWorldView({fleet,store:playActions.store,destruction,onPeople:rows=>remotePeople.synchronize(rows),onCue:motionCue,onCount:(n,total)=>{realVisitorCount=n;totalCharacterCount=total;updateConnectionLabel();},onSelf:updateSafetyState});
-  multiplayer=createMultiplayer({config:connectionConfig,getPose:()=>({x:+explorer.state.position.x.toFixed(3),y:+explorer.state.position.y.toFixed(3),z:+explorer.state.position.z.toFixed(3),heading:+explorer.state.heading.toFixed(3),speed:+(explorer.state.speed||0).toFixed(2),posture:explorer.state.posture,hidden:entry.active}),
-    onWallet:applyWallet,onWelcome:data=>{sharedWorld.welcome(data.id);leaderboard.setSelf(data.id);visitorBadge.rename(data.name);if(data.resume){finishEntry();airShower.update(entry.state);explorer.state.path=[];explorer.state.position.set(data.resume.x,0,data.resume.z);explorer.state.heading=data.resume.heading;toast('이름과 기록을 이어서 접속했어요.');}},onRoster:rows=>{remotePeople.setRoster(rows);leaderboard.setRoster(rows);const self=rows.find(row=>row[0]===multiplayer?.id);if(self)visitorBadge.rename(self[1]);},onFrame:(frame,initial)=>{sharedWorld.apply(frame,initial);leaderboard.setPeople(frame.people);leaderboard.setRanking(frame.leaderboard);},onError:toast,
+  multiplayer=createMultiplayer({config:connectionConfig,getPose:()=>({x:+explorer.state.position.x.toFixed(3),y:+explorer.state.position.y.toFixed(3),z:+explorer.state.position.z.toFixed(3),heading:+explorer.state.heading.toFixed(3),speed:+(explorer.state.speed||0).toFixed(2),posture:explorer.state.posture,hidden:entry.active||nicknameUI.isOpen}),
+    onNickname:applyNickname,onWallet:applyWallet,onWelcome:data=>{sharedWorld.welcome(data.id);leaderboard.setSelf(data.id);visitorBadge.rename(data.name);if(data.resume){finishEntry();airShower.update(entry.state);explorer.state.path=[];explorer.state.position.set(data.resume.x,0,data.resume.z);explorer.state.heading=data.resume.heading;toast('이름과 기록을 이어서 접속했어요.');}$('nickname-admin').classList.toggle('hidden',!data.privileges?.unlimitedChips);applyNickname(data.nickname);},onRoster:rows=>{remotePeople.setRoster(rows);leaderboard.setRoster(rows);const self=rows.find(row=>row[0]===multiplayer?.id);if(self)visitorBadge.rename(self[1]);},onFrame:(frame,initial)=>{sharedWorld.apply(frame,initial);leaderboard.setPeople(frame.people);leaderboard.setRanking(frame.leaderboard);},onError:toast,
     onCatch:data=>toast(`${data.targetName}님을 잡았어요! 장비 3대를 고쳐야 합니다. (${data.caught??0} / ${SAFETY_CATCH_GOAL})${data.completed?` ${SAFETY_CATCH_GOAL}명 잡기 완료! 원래 방진복으로 돌아왔어요.`:''}`,5000),
-    onStatus:status=>{updateConnectionLabel(status);wardrobe.refresh();if(status==='reconnecting'){playActions.resetOnline();explorer.cancelEmo('disconnect');toast('연결이 끊겨 다시 접속하고 있어요');}}
+    onStatus:status=>{updateConnectionLabel(status);wardrobe.refresh();nicknameUI.refresh();if(status==='reconnecting'){playActions.resetOnline();explorer.cancelEmo('disconnect');toast('연결이 끊겨 다시 접속하고 있어요');}}
   });
 }
 if(!connectionConfig) {
@@ -894,7 +898,7 @@ function animate(now) {
   playActions.render();appearance.update(avatar.root.visible); visitorBadge.update(avatar, explorer.state.posture,{headwear:appearance.headwear});
   visitorEmote.update(avatar,explorer.state.posture,dt,!entry.active&&mode!=='overview');
   if(now>=nextSafetyCheck){
-    const person={...explorer.state.position,id:multiplayer?.id??'self',...safetyState,hidden:entry.active||mode==='overview',phase:explorer.state.repairInteraction?.phase==='repair'?'repair':playActions.state.phase};
+    const person={...explorer.state.position,id:multiplayer?.id??'self',...safetyState,hidden:entry.active||nicknameUI.isOpen||mode==='overview',phase:explorer.state.repairInteraction?.phase==='repair'?'repair':playActions.state.phase};
     const warning=safetyProximity(person,remotePeople?.safetyActors??safetyPatrols?.people??[],nearSafety);
     nearSafety=warning.near;nextSafetyCheck=now+200;
     $('safety-proximity').classList.toggle('hidden',!nearSafety);$('safety-warning').classList.toggle('hidden',!nearSafety);
@@ -944,7 +948,7 @@ function animate(now) {
     nextDiagnosticAt = now + 500;
     const demo = observedVehicle();
     updateSoundButton();
-    $('world').dataset.diagnostics = JSON.stringify({ ready: true, revision: 'fab-npc-outfits-1', movementStyle, joystickActive: explorer.state.joystickActive, cameraFov: camera.fov, safety: safetyState, safetyPatrols: safetyPeople?.state.people, mode, audio: audio.state, multiplayer: multiplayer ? {status:multiplayer.status,id:multiplayer.id,count:realVisitorCount,total:totalCharacterCount,capacity:ROOM_CAPACITY,visitorCapacity:MAX_VISITORS} : null, residents: residents?.state ?? {total:AUTOMATED_COUNT,simulated:true,actions:sharedWorld.totals,people:remotePeople.state.people.filter(p=>p.id.startsWith('resident:')||p.id.startsWith('safety:'))}, remotePlayers:remotePeople?.state.people.filter(p=>!p.id.startsWith('resident:')&&!p.id.startsWith('safety:')), destruction: destruction.state, equipmentVisibility: equipmentVisibility.state, emoInteraction: explorer.state.emoInteraction, repairInteraction: explorer.state.repairInteraction, posture: explorer.state.posture, play: playActions.state, actionTargets: new URLSearchParams(location.search).has('qa') ? playActions.targets(camera, { width: innerWidth, height: innerHeight }) : undefined, visitorName: visitorBadge.name, controlsOpen: viewControls.isOpen, mapVisible: viewControls.mapVisible, emoButtons: layoutMachines.length, amberBays: bayLighting.bayIds.map(id => id + 1), amberLights: bayLighting.lights.length, amberLightsVisible: bayLighting.root.visible, entry: { active: entry.active, ...entry.state }, width: WIDTH, length: LENGTH, ceiling: HEIGHT,
+    $('world').dataset.diagnostics = JSON.stringify({ ready: true, revision: 'fab-nickname-ticket-1', movementStyle, joystickActive: explorer.state.joystickActive, cameraFov: camera.fov, safety: safetyState, safetyPatrols: safetyPeople?.state.people, mode, audio: audio.state, multiplayer: multiplayer ? {status:multiplayer.status,id:multiplayer.id,count:realVisitorCount,total:totalCharacterCount,capacity:ROOM_CAPACITY,visitorCapacity:MAX_VISITORS} : null, residents: residents?.state ?? {total:AUTOMATED_COUNT,simulated:true,actions:sharedWorld.totals,people:remotePeople.state.people.filter(p=>p.id.startsWith('resident:')||p.id.startsWith('safety:'))}, remotePlayers:remotePeople?.state.people.filter(p=>!p.id.startsWith('resident:')&&!p.id.startsWith('safety:')), destruction: destruction.state, equipmentVisibility: equipmentVisibility.state, emoInteraction: explorer.state.emoInteraction, repairInteraction: explorer.state.repairInteraction, posture: explorer.state.posture, play: playActions.state, actionTargets: new URLSearchParams(location.search).has('qa') ? playActions.targets(camera, { width: innerWidth, height: innerHeight }) : undefined, visitorName: visitorBadge.name, controlsOpen: viewControls.isOpen, mapVisible: viewControls.mapVisible, emoButtons: layoutMachines.length, amberBays: bayLighting.bayIds.map(id => id + 1), amberLights: bayLighting.lights.length, amberLightsVisible: bayLighting.root.visible, entry: { active: entry.active, ...entry.state }, width: WIDTH, length: LENGTH, ceiling: HEIGHT,
       equipmentCount: equipment.length, equipmentFamilies: families.length, uniqueEquipmentCodes: new Set(equipment.map(e => e.code)).size, selectedEquipment: selectedEquipment?.code ?? null,
       machines: machinePositions.length, bays: bays.length, toolsPerRow: 10, loadports: layoutMachines.length * 3,
       frontAisle: AISLE, rearAisle: SERVICE_AISLE, sideGap: SIDE_GAP, vehicles: vehicles.length, junctions: network.junctions.length,

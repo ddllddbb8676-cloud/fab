@@ -15,6 +15,15 @@ export function createNicknameRegistry() {
   }
   return {
     reserve,
+    available(id,name) {const owner=owners.get(nicknameKey(name));return validNickname(name)&&(!owner||owner===ownerKey(id,'visitor'));},
+    replace(id,name) {
+      const owner=ownerKey(id,'visitor'),key=nicknameKey(name),current=owners.get(key);
+      if(!validNickname(name)||(current&&current!==owner))return false;
+      const old=names.get(owner);if(old)owners.delete(nicknameKey(old));
+      owners.set(key,owner);names.set(owner,name);return true;
+    },
+    visitorId(name) {const owner=owners.get(nicknameKey(name));return owner?.endsWith('/visitor')?owner.slice(0,-8):null;},
+    replacement(id,random=Math.random) {return createVisitorName(random,[...owners.keys()]);},
     claim(id,kind='visitor',preferred='',excluded=[],random=Math.random) {
       const owner=ownerKey(id,kind);
       if(names.has(owner))return names.get(owner);

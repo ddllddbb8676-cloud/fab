@@ -1,16 +1,23 @@
 import {items,DEFAULT_OUTFIT} from './cosmetics-catalog.js';
 import {itemIcon} from './icons.js';
 import {createWardrobeView} from './wardrobe-view.js';
-export function createWardrobe({THREE,button,command,connected,getName,onOpen,onClose}) {
+import {NICKNAME_TICKET_PRICE} from './nickname-policy.js';
+export function createWardrobe({THREE,button,command,connected,getName,onOpen,onClose,onChangeName}) {
   const dialog=document.createElement('dialog');dialog.className='wardrobe';dialog.setAttribute('aria-labelledby','wardrobe-title');
   dialog.innerHTML=`<header><h2 id="wardrobe-title">꾸미기</h2><strong class="wardrobe-balance">연결 중</strong><button class="wardrobe-close" type="button" aria-label="꾸미기 닫기">×</button></header><div class="wardrobe-preview"><canvas aria-label="내 캐릭터 시착 모습"></canvas><button class="wardrobe-rotate" type="button">돌려보기 ↻</button><span class="wardrobe-trial"></span></div><nav class="wardrobe-modes" aria-label="상점과 내 옷장"><button type="button" data-mode="shop">상점</button><button type="button" data-mode="wardrobe">내 옷장</button></nav><nav class="wardrobe-slots" aria-label="꾸미기 부위">${Object.entries({head:'머리',face:'안경',bag:'가방',suit:'방진복',beauty:'눈'}).map(([id,name])=>`<button type="button" data-slot="${id}">${name}</button>`).join('')}</nav><div class="wardrobe-items"></div><footer><p class="wardrobe-message" role="status">시착은 무료예요. 구매 후 착용할 수 있어요.</p><div><button type="button" class="wardrobe-remove">벗기</button><button type="button" class="wardrobe-buy">아이템 선택</button></div><small>파괴 5 · 수리 3 · FOUP 던지기 1 · 실제 OHT 탑승 10초마다 1칩</small></footer>`;
+  const ticketRow=document.createElement('section');ticketRow.className='wardrobe-nickname';ticketRow.innerHTML='<div><b>닉네임 변경권</b><small class="wardrobe-nickname-note"></small></div><button type="button" class="wardrobe-nickname-buy"></button>';dialog.querySelector('footer').append(ticketRow);
   document.body.append(dialog);const $=selector=>dialog.querySelector(selector);
-  let wallet=null,outfit={...DEFAULT_OUTFIT},slot='head',mode='shop',selected=null,busy=false,view=null;
+  let wallet=null,nickname=null,outfit={...DEFAULT_OUTFIT},slot='head',mode='shop',selected=null,busy=false,view=null;
   function message(text){$('.wardrobe-message').textContent=text;}
   function refresh(){
     $('.wardrobe-balance').textContent=wallet?(wallet.unlimited?'∞ 칩':`${wallet.chips.toLocaleString('ko-KR')} 칩`):'연결 중';
     button.querySelector('.menu-detail').textContent=wallet?(wallet.unlimited?'∞ 칩':`${wallet.chips.toLocaleString('ko-KR')} 칩`):'';
     if(!dialog.open)return;
+    const hasTicket=(wallet?.nicknameTickets||0)>0,ticketBuy=$('.wardrobe-nickname-buy');
+    ticketRow.hidden=Boolean(wallet?.unlimited)||(mode==='wardrobe'&&!hasTicket);
+    $('.wardrobe-nickname-note').textContent=hasTicket?'보유 1장 · 이름을 확정할 때 사용해요.':'무료 1회 이후 · 구매하면 보관돼요.';
+    ticketBuy.textContent=hasTicket?'이름 바꾸기':`${NICKNAME_TICKET_PRICE.toLocaleString('ko-KR')}칩으로 구매`;
+    ticketBuy.disabled=busy||!wallet||!nickname||!connected()||(!hasTicket&&(nickname.freeChoice||wallet.chips<NICKNAME_TICKET_PRICE));
     for(const b of dialog.querySelectorAll('[data-mode]'))b.setAttribute('aria-pressed',String(b.dataset.mode===mode));
     for(const b of dialog.querySelectorAll('[data-slot]'))b.setAttribute('aria-pressed',String(b.dataset.slot===slot));
     const owned=new Set(wallet?.owned||[]),list=items.filter(i=>i.slot===slot&&(mode==='shop'||owned.has(i.id)));
@@ -33,5 +40,13 @@ export function createWardrobe({THREE,button,command,connected,getName,onOpen,on
   $('.wardrobe-items').addEventListener('click',e=>{const b=e.target.closest('[data-item]');if(!b||busy)return;selected=b.dataset.item;outfit[slot]=selected;message('시착 중이에요. 마음에 들면 아래 버튼을 눌러 주세요.');refresh();});
   $('.wardrobe-buy').addEventListener('click',()=>transact(wallet?.owned.includes(selected)?'equip':'purchase',{itemId:selected}));
   $('.wardrobe-remove').addEventListener('click',()=>transact('unequip',{slot}));
-  return {setWallet(next){wallet=next;refresh();},refresh,close,get isOpen(){return dialog.open;}};
+  $('.wardrobe-nickname-buy').addEventListener('click',async()=>{
+    if(busy||!wallet||!nickname)return;
+    if(wallet.nicknameTickets>0){close();onChangeName();return;}
+    if(!confirm('닉네임 변경권 1장을 1,000칩에 구매할까요? 새 이름을 확정할 때까지 변경권은 보관됩니다.'))return;
+    busy=true;refresh();let purchased=false;
+    try{const r=await command('nickname-ticket-buy',{purchaseCount:nickname.purchaseCount});if(r.wallet)wallet=r.wallet;if(r.nickname)nickname=r.nickname;purchased=r.ok;message(r.ok?'닉네임 변경권을 구매했어요.':'변경권 구매: '+(r.message||'잠시 후 다시 시도해 주세요.'));}finally{busy=false;refresh();}
+    if(purchased&&dialog.open){close();onChangeName();}
+  });
+  return {setWallet(next){wallet=next;refresh();},setNickname(next){nickname=next;refresh();},refresh,close,get isOpen(){return dialog.open;}};
 }

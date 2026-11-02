@@ -2,7 +2,7 @@ import {findItem} from './cosmetics-catalog.js';
 export const WARDROBE_NOTICE='칩을 모아서 캐릭터를 꾸며보세요';
 export const WARDROBE_NOTICE_DURATION=4500;
 const FIRST_SECONDS=60,REPEAT_SECONDS=300,STORAGE_KEY='fab-wardrobe-notice-at-v1';
-export const hasPurchasedCosmetics=wallet=>Array.isArray(wallet?.owned)&&wallet.owned.some(id=>(findItem(id)?.price??0)>0);
+export const hasPurchasedCosmetics=wallet=>(wallet?.nicknamePurchases||0)>0||(Array.isArray(wallet?.owned)&&wallet.owned.some(id=>(findItem(id)?.price??0)>0));
 
 export function createWardrobeNotice({storage,now=Date.now}={}) {
   let elapsed=0,next=FIRST_SECONDS,lastShown=0;

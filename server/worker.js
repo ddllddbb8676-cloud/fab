@@ -1,3 +1,4 @@
+import {resetInappropriateNickname} from './nickname-moderation.js';
 import { DurableObject } from 'cloudflare:workers';
 import { createRoom } from './room-engine.js';
 import { PROTOCOL, MAX_VISITORS } from '../src/shared-protocol.js';
@@ -37,7 +38,7 @@ export default {
 export class FabRoom extends DurableObject {
   constructor(ctx,env) {
     super(ctx,env);this.sockets=new Map();this.profiles=createProfileStore(ctx.storage,{ownerId:env.FAB_OWNER_VISITOR_ID});this.rosterDirty=false;
-    this.room=createRoom({ownerId:env.FAB_OWNER_VISITOR_ID,claimName:(...args)=>this.profiles.claimName(...args),getHistoricalScores:()=>this.profiles.ranking(),onEquipmentChange:s=>this.profiles.saveEquipment(s),onProfileChange:p=>this.profiles.save(p),onRosterChange:()=>{this.rosterDirty=true;},onCatch:event=>{
+    this.room=createRoom({ownerId:env.FAB_OWNER_VISITOR_ID,nicknameAvailable:(...args)=>this.profiles.nicknameAvailable(...args),replaceNickname:(...args)=>this.profiles.replaceNickname(...args),claimName:(...args)=>this.profiles.claimName(...args),getHistoricalScores:()=>this.profiles.ranking(),onEquipmentChange:s=>this.profiles.saveEquipment(s),onProfileChange:p=>this.profiles.save(p),onRosterChange:()=>{this.rosterDirty=true;},onCatch:event=>{
       for(const [ws,s] of this.sockets)if(s.id===event.guardId)this.send(ws,{type:'safety-catch',...event});
     }});this.timer=null;this.tickCount=0;this.previous=Date.now();
     ctx.blockConcurrencyWhile(async()=>{
@@ -59,7 +60,7 @@ export class FabRoom extends DurableObject {
   }
   send(ws,data){try{ws.send(typeof data==='string'?data:JSON.stringify(data));return true;}catch{return false;}}
   async checkpoint(){do{await this.profiles.flush();}while(this.profiles.hasPending);}
-  welcome(ws,id){const p=this.room.players.get(id);this.send(ws,{type:'welcome',v:PROTOCOL,id,name:p.name,privileges:{unlimitedChips:Boolean(p.chipUnlimited)},wallet:this.room.wallet(id),resume:p.hasEntered?p.groundPosition:null,roster:this.room.roster(),frame:this.room.snapshot(true)});}
+  welcome(ws,id){const p=this.room.players.get(id);this.send(ws,{type:'welcome',v:PROTOCOL,id,name:p.name,privileges:{unlimitedChips:Boolean(p.chipUnlimited)},wallet:this.room.wallet(id),nickname:this.room.nicknameState(id),resume:p.hasEntered?p.groundPosition:null,roster:this.room.roster(),frame:this.room.snapshot(true)});}
   sendWallets(){for(const [ws,s] of this.sockets){const player=this.room.players.get(s.id);if(player&&s.walletRevision!==player.wallet.revision){const wallet=this.room.wallet(s.id);this.send(ws,{type:'wallet',wallet});s.walletRevision=wallet.revision;}}}
   broadcastRoster(){const data=JSON.stringify({type:'roster',roster:this.room.roster(),count:this.room.players.size});for(const ws of this.sockets.keys())this.send(ws,data);}
   async fetch(request) {
@@ -115,9 +116,10 @@ export class FabRoom extends DurableObject {
     if(data.type==='pose'){this.room.pose(session.id,data.pose);return;}
     if(data.type==='command'&&Number.isSafeInteger(data.seq)&&typeof data.kind==='string') {
       if(data.pose)this.room.pose(session.id,data.pose);
-      const result=this.room.command(session.id,data.kind,data.data);
+      const result=data.kind==='nickname-reset'?await resetInappropriateNickname({actorId:session.id,targetName:data.data?.name,profiles:this.profiles,room:this.room}):this.room.command(session.id,data.kind,data.data);
       if(data.kind==='civilian'&&result.ok)this.broadcastRoster();
       try{await this.checkpoint();}catch{this.send(ws,{type:'ack',seq:data.seq,ok:false,message:'기록 저장이 지연되고 있어요. 잠시 후 다시 확인해 주세요.'});return;}
+      if(result.ok&&['nickname-confirm','nickname-reset'].includes(data.kind)){this.broadcastRoster();for(const [peer,s] of this.sockets)this.send(peer,{type:'nickname',nickname:this.room.nicknameState(s.id)});}
       this.send(ws,{type:'ack',seq:data.seq,...result,wallet:this.room.wallet(session.id),frame:this.room.snapshot(true)});
     }
   }
