@@ -14,7 +14,7 @@ export function createSharedWorldView({fleet,store,destruction,onPeople,onCue,on
       if(progress!==null){destruction.beginRepair(id,owner??`remote:${id}`);destruction.setRepairProgress(id,progress);}
       else destruction.cancelRepair(id);
     }
-    store.synchronize(frame.foups.map(foupFromPacket),selfId);
+    store.synchronize(frame.foups.map(foupFromPacket),selfId,initial);
     for(const r of frame.fleet) {
       const v=fleet.vehicles[r[0]];if(!v)continue;
       const previous=v.state;

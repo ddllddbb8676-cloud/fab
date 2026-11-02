@@ -25,7 +25,7 @@ function harness({ destroyed = false,networkFactory=null } = {}) {
   play = createPlayActions({ THREE, scene, materials, fleet, explorer, avatar, network, initialPortIds: [initial.id], hideOriginal: id => hidden.push(id), isDestroyed: id => destroyed && id === m.id, toast: t => toasts.push(t) });
   return { scene, camera, listeners, avatar, fleet, explorer, play, v, m, initial, empty, toasts, hidden,
     step(seconds) { for (let t = 0; t < seconds; t += 1 / 60) { if(!network)fleet.step(1 / 60); play.update(1 / 60); explorer.update(1 / 60); play.render(); } },
-    dispose() { avatar.dispose(); for (const material of Object.values(materials)) material.dispose(); globalThis.document = previousDocument; globalThis.window = previousWindow; }
+    dispose() { play.dispose();avatar.dispose(); for (const material of Object.values(materials)) material.dispose(); globalThis.document = previousDocument; globalThis.window = previousWindow; }
   };
 }
 
@@ -127,9 +127,30 @@ test('a clicked port FOUP is carried to another empty port then thrown without d
     const target = h.empty, from = new THREE.Vector3(target.x, 1.7, target.z + target.sign * 2);
     h.play.tap(new THREE.Ray(from, new THREE.Vector3(target.x, SEATED_FOUP_Y, target.z).sub(from).normalize())); h.step(3);
     assert.equal(h.play.throwFoup(), true); h.step(4);
-    assert.equal(h.play.state.moved.length, 1); assert.equal(h.play.state.moved[0].mode, 'ground');
+    assert.equal(h.play.state.moved.length, 1); assert.equal(h.play.state.moved[0].mode, 'broken');
     assert.equal(h.play.state.carriedId, null); assert.deepEqual(h.hidden, [p.id]);
   } finally { h.dispose(); }
+});
+
+test('tapping scattered wafers walks over, shows a broom and removes the debris after sweeping',()=>{
+  const h=harness();try{
+    h.explorer.state.position.set(0,0,30);const record=h.play.store.records.get(`port:${h.initial.id}`);
+    h.play.store.launch(record,{x:0,y:1,z:31,yaw:0},{x:0,y:2,z:1},{shatter:true});h.step(4);
+    assert.equal(record.mode,'broken');h.camera.position.set(record.x,3,record.z-5);h.camera.lookAt(record.x,.15,record.z);h.camera.updateMatrixWorld();
+    const event={pointerId:1,clientX:195,clientY:422};h.listeners.get('pointerdown')(event);h.listeners.get('pointerup')(event);
+    assert.equal(h.play.state.phase,'approach');h.step(2);assert.equal(h.play.state.phase,'cleaning');assert.equal(h.avatar.root.getObjectByName('sweep-broom').visible,true);
+    h.step(3.3);assert.equal(record.mode,'cleared');assert.equal(h.play.state.phase,'idle');assert.equal(h.avatar.root.getObjectByName('sweep-broom').visible,false);assert.equal(h.explorer.state.mode,'walk');
+  }finally{h.dispose();}
+});
+
+test('canceling a sweep restores normal movement and leaves debris available to clean',()=>{
+  const h=harness();try{
+    h.explorer.state.position.set(0,0,30);const record=h.play.store.records.get(`port:${h.initial.id}`);
+    h.play.store.launch(record,{x:0,y:1,z:31,yaw:0},{x:0,y:2,z:1},{shatter:true});h.step(4);
+    h.play.requestCleanup(record);h.step(2);assert.equal(h.play.state.phase,'cleaning');h.play.clearPending();h.step(.2);
+    assert.equal(record.mode,'broken');assert.equal(record.cleaner,null);assert.equal(h.play.state.phase,'idle');assert.equal(h.explorer.state.cleaningTime,null);
+    assert.equal(h.explorer.beginJoystick(),true);
+  }finally{h.dispose();}
 });
 
 test('FOUP inventory refuses occupied/destroyed ports and preserves identity across pickup and placement', () => {

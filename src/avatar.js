@@ -153,7 +153,21 @@ export function createAvatar(THREE) {
     object.scale.y = direction.length() / baseLength; object.quaternion.setFromUnitVectors(up, direction.normalize());
   }
   let phase = 0, activity = 0, facing = 0, currentSpeed = 0, disposed = false;
-  let seated = 0, reclining = 0, hammer = null;
+  let seated = 0, reclining = 0, hammer = null, broom = null;
+  const broomGrip=new THREE.Vector3();
+  function makeBroom(){
+    const group=new THREE.Group();group.name='sweep-broom';body.add(group);
+    function part(name,geometry,color,x,y,z){const m=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({color,roughness:.78}));m.name=name;m.position.set(x,y,z);group.add(m);}
+    part('broom-handle',new THREE.CylinderGeometry(.025,.03,1.14,8),'#cc9a58',0,.73,0);
+    part('broom-head',new THREE.BoxGeometry(.76,.085,.15),'#36858a',0,.19,0);
+    const bristles=new THREE.BufferGeometry(),vertices=[],indices=[];
+    for(let i=0;i<9;i++){
+      const x=(i-4)*.081,g=new THREE.BoxGeometry(.071,.15,.115);g.translate(x,.075,.012);
+      const base=vertices.length/3;vertices.push(...g.attributes.position.array);indices.push(...Array.from(g.index.array,n=>n+base));g.dispose();
+    }
+    bristles.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));bristles.setIndex(indices);bristles.computeVertexNormals();
+    part('broom-bristles',bristles,'#e1c37a',0,0,0);return group;
+  }
   function makeHammer() {
     const group = new THREE.Group(); group.name = 'repair-hammer';
     const handle = new THREE.Mesh(new THREE.CylinderGeometry(.018, .023, .19, 8), new THREE.MeshStandardMaterial({ color: '#dbac66', roughness: .65 }));
@@ -161,17 +175,18 @@ export function createAvatar(THREE) {
     const head = new THREE.Mesh(new THREE.BoxGeometry(.16, .06, .065), new THREE.MeshStandardMaterial({ color: '#5d8991', metalness: .5, roughness: .32 }));
     head.position.y = -.21; group.add(handle, head); rightArm.glove.add(group); return group;
   }
-  function update(dt, { speed = 0, heading = facing, turnRate = 12, pressTarget = null, pressProgress = 0, posture = 'stand', repairTime = null, hanging = false, carrying = false, crouch = 0, snap = false } = {}) {
+  function update(dt, { speed = 0, heading = facing, turnRate = 12, pressTarget = null, pressProgress = 0, posture = 'stand', repairTime = null, cleanTime = null, hanging = false, carrying = false, crouch = 0, snap = false } = {}) {
     if (disposed) return;
     const step = Number.isFinite(dt) ? Math.max(0, Math.min(dt, .1)) : 0;
     speed = Number.isFinite(speed) ? Math.max(0, speed) : 0; heading = Number.isFinite(heading) ? heading : facing;
     const pressing = pressTarget && [pressTarget.x, pressTarget.y, pressTarget.z].every(Number.isFinite)
       ? Math.max(0, Math.min(1, Number.isFinite(pressProgress) ? pressProgress : 0)) : 0;
     const working = Number.isFinite(repairTime);
+    const cleaning = Number.isFinite(cleanTime), sweep=cleaning?Math.sin(cleanTime*Math.PI*2*1.25):0;
     // A pooled body can represent a different visitor next frame. Its first
     // visible pose must belong entirely to that visitor, not the prior owner.
     if(snap){facing=heading;seated=posture==='sit'?1:0;reclining=posture==='lie'?1:0;phase=0;currentSpeed=speed;activity=speed>.02?1:0;}
-    if (posture !== 'stand' || seated + reclining > .01 || working) speed = 0;
+    if (posture !== 'stand' || seated + reclining > .01 || working || cleaning) speed = 0;
     currentSpeed += (speed - currentSpeed) * (1 - Math.exp(-step * 12)); activity += ((speed > .02 ? 1 : 0) - activity) * (1 - Math.exp(-step * 10));
     const turn = Math.atan2(Math.sin(heading - facing), Math.cos(heading - facing));
     facing += turn * (1 - Math.exp(-step * turnRate));
@@ -189,11 +204,14 @@ export function createAvatar(THREE) {
     root.userData.viewHeight = 1.02 - .36 * sit - .68 * lie;
     if (working && !hammer) hammer = makeHammer();
     if (hammer) hammer.visible = working;
+    if(cleaning&&!broom)broom=makeBroom();
+    if(broom){broom.visible=cleaning;broom.position.set(sweep*.35,.025+Math.abs(sweep)*.105,.65);broom.rotation.set(-.26,0,sweep*.25);}
     phase = (phase + step * (1.35 + Math.min(currentSpeed, 4.3) * .25) * activity) % 1;
     const wave = Math.sin(phase * Math.PI * 2), stride = Math.min(.065, .025 + currentSpeed * .010) * activity, bob = -Math.abs(wave) * .006 * activity;
     const duck = Math.max(0, Math.min(1, crouch)) * .16;
     upper.position.set(wave * .002 * activity, bob - .37 * sit - duck, 0); upper.rotation.z = wave * .003 * activity;
-    upper.rotation.x = working ? .035 + .025 * Math.sin(repairTime * 15) : 0;
+    upper.rotation.x = cleaning ? .10+.035*Math.cos(cleanTime*8) : working ? .035 + .025 * Math.sin(repairTime * 15) : 0;
+    if(cleaning){upper.rotation.z=sweep*.045;root.updateMatrixWorld(true);}
     for (const leg of legs) {
       const p = (phase + (leg.side === 1 ? .5 : 0)) % 1, stance = p < .6, q = stance ? p / .6 : (p - .6) / .4;
       const footZ = stride * (stance ? 1 - 2 * q : -1 + 2 * q * q * (3 - 2 * q));
@@ -214,6 +232,10 @@ export function createAvatar(THREE) {
       if (working && arm !== rightArm) { arm.elbow.set(-.21, .72, .13); arm.wrist.set(-.17, .74, .24); }
       if (carrying) { arm.elbow.set(arm.side * .22, .69, .16); arm.wrist.set(arm.side * .23, .83, .34); }
       if (hanging) { arm.shoulder.y = .95; arm.elbow.set(arm.side * .24, 1.27, .035); arm.wrist.set(arm.side * .20, 1.60, .015); }
+      if(cleaning){
+        broomGrip.set(0,arm.side===1?.66:.94,0);broom.localToWorld(broomGrip);upper.worldToLocal(broomGrip);
+        arm.wrist.copy(broomGrip);arm.elbow.copy(arm.shoulder).lerp(arm.wrist,.5);arm.elbow.x+=arm.side*.10;arm.elbow.z-=.025;
+      }
       if (arm === rightArm && pressing > 0) {
         // Lift the shoulder only for the deliberate press; ordinary walking stays relaxed.
         arm.shoulder.y += .065 * pressing;
@@ -263,6 +285,7 @@ export function createAvatar(THREE) {
       if (disposed) return; disposed = true; root.removeFromParent();
       suitMaterial?.dispose(); customFaceMaterial?.dispose(); customFaceTexture?.dispose();
       if (hammer) hammer.traverse(node => { if (node.isMesh) { node.geometry.dispose(); node.material.dispose(); } });
+      if (broom) broom.traverse(node => { if (node.isMesh) { node.geometry.dispose(); node.material.dispose(); } });
       if (--resources.references !== 0) return;
       for (const name of ['hood', 'face', 'torso', 'upperArm', 'forearm', 'glove', 'pants', 'boot', 'shadow']) resources[name].dispose();
       resources.material.dispose(); resources.faceMaterial.dispose(); resources.shadowMaterial.dispose(); resources.faceTexture.dispose(); resources.shadowTexture.dispose(); resourcePools.delete(THREE);

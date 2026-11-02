@@ -337,14 +337,14 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
     if (emoSession && (state.locked || helpVisible || document.hidden)) cancelEmo(state.locked ? 'locked' : helpVisible ? 'help' : 'hidden');
     if (!state.locked) state.speed = 0;
     if (!state.locked && !helpVisible) {
-      if (state.mode === 'walk' && state.posture === 'stand' && !avatar.root.userData.resting && (!emoSession || emoSession.phase === 'approach')) walk(dt);
+      if (state.mode === 'walk' && !Number.isFinite(state.cleaningTime) && state.posture === 'stand' && !avatar.root.userData.resting && (!emoSession || emoSession.phase === 'approach')) walk(dt);
       if (state.mode === 'tour' && !pointers.size) tour(dt);
     }
     updateEmo(dt);
     const repairing = emoSession?.phase === 'repair';
     const repairTarget = repairing ? { ...emoSession.plan.button, y: .96 + .16 * Math.sin(emoSession.elapsed * 15), z: emoSession.plan.button.z + emoSession.plan.button.sign * .09 } : null;
     avatar.root.position.copy(state.position); avatar.update(dt, { speed: state.speed, heading: state.heading, posture: state.posture,
-      turnRate: state.joystickActive ? 22 : 12, repairTime: repairing ? emoSession.elapsed : null, carrying: Boolean(state.carrying),
+      turnRate: state.joystickActive ? 22 : 12, repairTime: repairing ? emoSession.elapsed : null, cleanTime:state.cleaningTime??null, carrying: Boolean(state.carrying),
       pressTarget: repairTarget ?? (emoSession && emoSession.kind === 'emo' && emoSession.phase !== 'approach' ? emoSession.plan.button : null), pressProgress: repairing ? 1 : emoSession?.progress ?? 0 });
     finishEmoContact(dt);
     if (state.mode === 'blast' && blastSession) {

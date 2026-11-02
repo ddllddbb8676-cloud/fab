@@ -11,6 +11,7 @@ export const MOTION_CUES = {
   repair: [.19, 740, .62], complete: [.6, 690, .45], climb: [.2, 175, .48],
   jump: [.32, 420, .46], grab: [.2, 1050, .58], land: [.3, 110, .7],
   pickup: [.22, 380, .48], place: [.28, 260, .6], throw: [.34, 650, .5], bounce: [.3, 430, .6],
+  shatter: [.6, 1900, .85], sweep: [.42, 0, .55],
   chip: [CHIP_REWARD_DURATION, 1600, .92]
 };
 /** Small cloth, shoe, metal and air gestures; buffers are cached by the mixer. */
@@ -18,6 +19,7 @@ export function createMotionSound(kind, { sampleRate = 48000 } = {}) {
   const spec = MOTION_CUES[kind];
   if (!spec) throw new RangeError('Unknown motion cue');
   if (kind === 'chip') return createChipRewardSound({sampleRate});
+  if (kind === 'shatter' || kind === 'sweep') return createFoupSound(kind,{sampleRate});
   if (!Number.isFinite(sampleRate) || sampleRate < 8000 || sampleRate > 192000) throw new RangeError('Unsupported motion sample rate');
   const [duration, frequency] = spec, data = new Float32Array(Math.floor(sampleRate * duration));
   const cloth = ['sit', 'lie', 'stand', 'throw', 'jump'].includes(kind);
@@ -34,6 +36,22 @@ export function createMotionSound(kind, { sampleRate = 48000 } = {}) {
   }
   return data;
 }
+
+/** A hollow case crack, cascading silicon clinks, and a soft broom swish. */
+export function createFoupSound(kind,{sampleRate=48000}={}){
+  if(!['shatter','sweep'].includes(kind)||!Number.isFinite(sampleRate)||sampleRate<8000||sampleRate>192000)throw new RangeError('Unsupported FOUP sound');
+  const duration=MOTION_CUES[kind][0],data=new Float32Array(Math.floor(sampleRate*duration));let seed=0x51f0a,low=0;
+  const hits=[[.005,190,1],[.065,1720,.5],[.14,2310,.5],[.23,1530,.38],[.33,2780,.3],[.42,2070,.23]];
+  for(let i=0;i<data.length;i++){
+    const t=i/sampleRate,p=t/duration;seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;const noise=(seed>>>0)/4294967296*2-1;low+=(noise-low)*.12;let value=0;
+    if(kind==='sweep')value=(noise-low)*.45+low*1.8;
+    else for(const [start,hz,level]of hits){const age=t-start;if(age>=0)value+=level*(Math.sin(age*TAU_AUDIO*Math.min(hz,sampleRate*.34))*Math.exp(-age/.055)+noise*Math.exp(-age/.012)*1.4);}
+    const envelope=kind==='sweep'?Math.sin(Math.PI*p)**1.4:Math.min(1,t/.003)*Math.min(1,(duration-t)/.06);
+    data[i]=.64*Math.tanh(value*1.5)*envelope*Math.min(1,(data.length-1-i)/(sampleRate*.008));
+  }
+  return data;
+}
+const TAU_AUDIO=Math.PI*2;
 
 /** Four tiny metal coin impacts, with a short bright ring for phone speakers. */
 export function createChipRewardSound({sampleRate=48000}={}) {
@@ -333,7 +351,7 @@ export function createAmbience(options = {}) {
     pruneEffects();
     const motion = MOTION_CUES[kind], reward = kind === 'chip';
     if (effects.size >= MAX_EXPLOSION_VOICES) {
-      if (motion && !reward) return false;
+      if (motion && !reward && kind!=='shatter') return false;
       const quiet = [...effects].find(e => e.motion && !e.reward) || (reward ? [...effects].find(e => !e.reward) || effects.values().next().value : null);
       if (!quiet) return false;
       finishEffect(quiet, true);

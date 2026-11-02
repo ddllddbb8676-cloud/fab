@@ -614,7 +614,7 @@ destruction = createEquipmentDestruction({ THREE, scene, machines: layoutMachine
 playActions = createPlayActions({ THREE, scene, materials: M, fleet, explorer, avatar, initialPortIds,
   hideOriginal(portId) { removedOriginalFoups.add(portId); for (const hide of originalFoupParts.get(portId) ?? []) hide(); },
   showOriginal(portId) { removedOriginalFoups.delete(portId);for(const show of originalFoupParts.get(portId)??[])show(true); },
-  isDestroyed: id => destruction.isDestroyed(id), toast, onCue: motionCue, network:onlineLink, isRestricted: () => safetyState.penalty > 0 });
+  isDestroyed: id => destruction.isDestroyed(id), toast, onCue: motionCue, network:onlineLink, isRestricted: () => safetyState.penalty > 0, reducedMotion });
 const nicknameUI=createNicknameUI({command:(...args)=>onlineLink.command(...args),connected:()=>Boolean(onlineLink?.connected),onToggle:open=>{if(open){viewControls.closeAll();directory.close();$('help').classList.add('hidden');$('tool-card').classList.add('hidden');}explorer.lock(open||entry.active);}});
 const nicknameModeration=createNicknameModeration({button:$('nickname-admin'),command:(...args)=>onlineLink.command(...args),onToggle:open=>explorer.lock(open||entry.active)});
 const wardrobe=createWardrobe({THREE,button:$('wardrobe-open'),command:(...args)=>onlineLink?.command(...args)??Promise.resolve({ok:false,message:'온라인 FAB에 연결해 주세요.'}),connected:()=>Boolean(onlineLink?.connected),getName:()=>visitorBadge.name,onChangeName:()=>nicknameUI.open(),onOpen:()=>{if(entry.active)return false;viewControls.closeAll();directory.close();$('help').classList.add('hidden');$('tool-card').classList.add('hidden');explorer.lock(true);},onClose:()=>explorer.lock(false)});
@@ -814,7 +814,7 @@ function updateZone() {
   $('safety-panel').classList.toggle('hidden',!isSafety(safetyState.role)&&(!safetyState.penalty||restingHere));
   const repair = explorer.state.repairInteraction;
   const play = playActions.state;
-  $('oht-dismount').classList.toggle('hidden', !playActions.busy);
+  $('oht-dismount').classList.toggle('hidden', !playActions.busy || play.phase==='cleaning');
   $('oht-dismount').disabled = !play.canDismount;
   $('oht-dismount').textContent = play.phase === 'riding' ? '내리기 ↓' : play.phase === 'climb' ? '올라가는 중…' : '내려오는 중…';
   $('foup-actions').classList.toggle('hidden', !play.carriedId || entry.active);
@@ -824,6 +824,7 @@ function updateZone() {
     button.setAttribute('aria-pressed', String(active)); button.textContent = active ? '일어나기' : posture === 'sit' ? '앉기' : '눕기';
   }
   $('posture-controls').classList.toggle('hidden', entry.active || safetyState.penalty > 0&&!restingHere || !['walk', 'tour'].includes(mode));
+  if(play.phase==='cleaning'){$('view-title').textContent='파티클 청소';$('view-subtitle').textContent='슥삭슥삭 · 완료하면 2칩';currentZone='';return;}
   if (playActions.busy) { $('view-title').textContent = play.phase === 'riding' ? 'OHT · 만세 산책' : 'OHT 타기'; $('view-subtitle').textContent = play.phase === 'riding' ? '드래그로 둘러보기 · 내리기 ↓' : play.phase === 'climb' ? '장비를 딛고 점프!' : '바닥으로 착지하는 중'; currentZone = ''; return; }
   if (repair) {
     $('view-title').textContent = `${equipmentById.get(repair.id)?.code ?? '장비'} · 수리`;
@@ -887,7 +888,7 @@ function animate(now) {
     for (const belt of v.belts) { belt.position.y = (upper + bottom) / 2; belt.scale.y = Math.max(.02, upper - bottom); }
   }
   updateEntry(dt); playActions.update(dt);
-  joystick.setEnabled(movementStyle === 'joystick' && !entry.active && !document.hidden && !explorer.state.locked && !playActions.busy && $('help').classList.contains('hidden') && $('tool-card').classList.contains('hidden') && ['walk','tour','blast'].includes(mode));
+  joystick.setEnabled(movementStyle === 'joystick' && !entry.active && !document.hidden && !explorer.state.locked && (!playActions.busy||playActions.state.phase==='cleaning') && $('help').classList.contains('hidden') && $('tool-card').classList.contains('hidden') && ['walk','tour','blast'].includes(mode));
   explorer.update(dt);restAreaView.update(viewFocus());
   if(now>=nextRefreshReminder&&!nearSafety&&!entry.active&&!explorer.state.emoInteraction&&!explorer.state.repairInteraction&&!playActions.busy&&!directory.isOpen&&!$('zone-toast').classList.contains('visible')&&$('help').classList.contains('hidden')){
     toast('가끔 새로고침해 최신 업데이트를 받아보세요. 이름과 기록은 이어져요.',4500);nextRefreshReminder=now+15*60*1000;
@@ -902,7 +903,7 @@ function animate(now) {
     for(const g of safetyPatrols.people)for(const actor of residents.people)if(canCatch(g,actor,elapsed))residents.beginSafetyLap(actor);
     safetyPeople.synchronize(safetyPatrols.people);safetyPeople.update(dt,camera,mode==='overview');
   }
-  playActions.render();appearance.update(avatar.root.visible); visitorBadge.update(avatar, explorer.state.posture,{headwear:appearance.headwear});
+  playActions.render(dt,camera);appearance.update(avatar.root.visible); visitorBadge.update(avatar, explorer.state.posture,{headwear:appearance.headwear});
   visitorEmote.update(avatar,explorer.state.posture,dt,!entry.active&&mode!=='overview');
   if(now>=nextSafetyCheck){
     const person={...explorer.state.position,id:multiplayer?.id??'self',...safetyState,hidden:entry.active||nicknameUI.isOpen||mode==='overview',phase:explorer.state.repairInteraction?.phase==='repair'?'repair':playActions.state.phase};

@@ -1,4 +1,7 @@
 import { isBlocked, machines, SEATED_FOUP_Y } from './layout.js';
+export const FOUP_CLEAN_SECONDS = 3.2;
+export const FOUP_CLEAN_REWARD = 2;
+export const FOUP_RESTOCK_SECONDS = 12;
 
 export function floorSpot(point, radius = .295) {
   if (!isBlocked(point.x, point.z, radius)) return { x: point.x, z: point.z };
@@ -18,14 +21,14 @@ export function supportHeight(x, z) {
 }
 
 // A FOUP keeps the same identity across port, hands, throw and ground states.
-export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () => {}, showOriginal = () => {}, isDestroyed = () => false, onImpact = () => {} }) {
+export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () => {}, showOriginal = () => {}, isDestroyed = () => false, onImpact = () => {}, onShatter = () => {}, onChange = () => {} }) {
   const byPort = new Map(ports.map(p => [p.id, p])), records = new Map(), occupancy = new Map();
   const hands = new Map();
   function reset() {
     records.clear();occupancy.clear();hands.clear();
     for (const id of initialPortIds) {
     const p = byPort.get(id); if (!p) continue;
-    const record = { id: `port:${id}`, mode: 'port', portId: id, original: true, x: p.x, y: SEATED_FOUP_Y, z: p.z, yaw: p.sign === 1 ? Math.PI : 0 };
+    const record = { id: `port:${id}`, mode: 'port', portId: id, homePortId: id, breakSeq: 0, original: true, x: p.x, y: SEATED_FOUP_Y, z: p.z, yaw: p.sign === 1 ? Math.PI : 0 };
     records.set(record.id, record); occupancy.set(id, record.id);
     showOriginal(id);
     }
@@ -34,8 +37,8 @@ export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () 
   function atPort(id) { const p = byPort.get(id); return p && !isDestroyed(p.machineId) ? records.get(occupancy.get(id)) ?? null : null; }
   function adopt(id, pose, portId = null) {
     if (records.has(id)) return records.get(id);
-    const record = { id, mode: portId ? 'port' : 'ground', portId, original: false, ...pose };
-    records.set(id, record); if (portId) occupancy.set(portId, id); return record;
+    const record = { id, mode: portId ? 'port' : 'ground', portId, homePortId: portId, breakSeq: 0, original: false, ...pose };
+    records.set(id, record); if (portId) occupancy.set(portId, id); onChange(); return record;
   }
   function pickup(id, owner = 'player') {
     const record = records.get(id);
@@ -43,23 +46,76 @@ export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () 
     if (record.portId && atPort(record.portId) !== record) return false;
     if (record.original) { hideOriginal(record.portId); record.original = false; }
     if (record.portId) occupancy.delete(record.portId);
-    record.portId = null; record.mode = 'carried'; record.owner = owner; hands.set(owner, id); return true;
+    record.homePortId ??= record.portId;
+    record.portId = null; record.mode = 'carried'; record.owner = owner; hands.set(owner, id); onChange(); return true;
   }
   function place(portId, owner = 'player') {
     const record = records.get(hands.get(owner)), p = byPort.get(portId);
     if (!record || !p || occupancy.has(portId) || isDestroyed(p.machineId)) return false;
     Object.assign(record, { mode: 'port', portId, x: p.x, y: SEATED_FOUP_Y, z: p.z, yaw: p.sign === 1 ? Math.PI : 0 });
-    occupancy.set(portId, record.id); hands.delete(owner); delete record.owner; return true;
+    occupancy.set(portId, record.id); hands.delete(owner); delete record.owner; onChange(); return true;
   }
-  function launch(record, pose, velocity) {
-    if (!record || !records.has(record.id)) return false;
+  function launch(record, pose, velocity, { shatter = false } = {}) {
+    if (!record || !records.has(record.id) || ['broken','cleared'].includes(record.mode)) return false;
     if (record.original) { hideOriginal(record.portId); record.original = false; }
     if (record.portId) occupancy.delete(record.portId);
     if (record.owner) hands.delete(record.owner); delete record.owner;
-    Object.assign(record, pose, { mode: 'flying', portId: null, vx: velocity.x, vy: velocity.y, vz: velocity.z, bounce: 0 }); return true;
+    Object.assign(record, pose, { mode: 'flying', portId: null, vx: velocity.x, vy: velocity.y, vz: velocity.z, bounce: 0, shatter }); onChange(); return true;
+  }
+  function breakFoup(record, silent = false) {
+    const spot = floorSpot(record, .48) ?? floorSpot(record, .24);
+    if (spot) Object.assign(record, spot);
+    Object.assign(record, {mode:'broken',y:.035,damageAge:silent?2:0,breakSeq:(record.breakSeq||0)+1,shatter:false,cleaner:null,cleanProgress:0});
+    delete record.goal;
+    if (!silent) onShatter(record);
+    onChange();
+  }
+  function beginCleanup(id, owner, breakSeq) {
+    const r=records.get(id);
+    if(!r||r.mode!=='broken'||r.damageAge<1.4||r.breakSeq!==breakSeq||r.cleaner&&r.cleaner!==owner)return false;
+    r.cleaner=owner;r.cleanProgress=0;return true;
+  }
+  function cancelCleanup(owner) {for(const r of records.values())if(r.cleaner===owner){r.cleaner=null;r.cleanProgress=0;}}
+  function finishCleanup(id, owner, breakSeq) {
+    const r=records.get(id);if(!r||r.mode!=='broken'||r.cleaner!==owner||r.breakSeq!==breakSeq||r.cleanProgress<1)return false;
+    Object.assign(r,{mode:'cleared',cleaner:null,cleanProgress:0,refillIn:FOUP_RESTOCK_SECONDS});onChange();return true;
+  }
+  function restock(r) {
+    const available=id=>{const p=byPort.get(id);return p&&initialPortIds.includes(id)&&!occupancy.has(id)&&!isDestroyed(p.machineId);};
+    const id=available(r.homePortId)?r.homePortId:initialPortIds.find(available),p=byPort.get(id);
+    if(!p)return;
+    Object.assign(r,{mode:'port',portId:id,homePortId:id,x:p.x,y:SEATED_FOUP_Y,z:p.z,yaw:p.sign===1?Math.PI:0,damageAge:0});
+    occupancy.set(id,r.id);onChange();
+  }
+  function checkpoint() {
+    const rounded=n=>Math.round(n*1000)/1000;
+    return {version:1,records:[...records.values()].filter(r=>!r.original).map(r=>[r.id,r.mode,r.portId??null,rounded(r.x),rounded(r.y),rounded(r.z),rounded(r.yaw||0),r.breakSeq||0,Boolean(r.shatter),r.homePortId??null])};
+  }
+  function restore(saved) {
+    if(saved?.version!==1||!Array.isArray(saved.records)||saved.records.length>1200)throw new Error('Invalid FOUP checkpoint');
+    const seen=new Set(),slots=new Set();
+    for(const row of saved.records){
+      if(!Array.isArray(row)||typeof row[0]!=='string'||!/^(port:\d{1,3}:\d|vehicle:\d{1,2})$/.test(row[0])||seen.has(row[0])||!['port','carried','flying','ground','broken','cleared'].includes(row[1])||!row.slice(3,7).every(Number.isFinite)||Math.abs(row[3])>60||Math.abs(row[5])>90||row[4]<0||row[4]>6||!Number.isSafeInteger(row[7])||row[7]<0)throw new Error('Invalid FOUP record');
+      if(row[1]==='port'&&(!byPort.has(row[2])||slots.has(row[2])))throw new Error('Invalid FOUP occupancy');
+      if(row[1]==='port')slots.add(row[2]);seen.add(row[0]);
+    }
+    reset();
+    const incoming=saved.records.map(([id,mode,portId,x,y,z,yaw,breakSeq,shatter,homePortId])=>({id,mode,portId,x,y,z,yaw,breakSeq,shatter,homePortId,damageAge:2,cleaner:null,cleanProgress:0,refillIn:FOUP_RESTOCK_SECONDS}));
+    synchronize(incoming,null,true);
+    for(const r of records.values())if(['flying','carried'].includes(r.mode)){
+      // An interrupted throw cannot return a fresh, reward-eligible FOUP. Restore
+      // its settled result; interrupted carries/drop actions remain intact.
+      if(r.shatter)breakFoup(r,true);
+      else {Object.assign(r,floorSpot(r,.24)??{x:0,z:70},{mode:'ground',y:.225});delete r.owner;}
+    }
+    onChange();
   }
   function step(dt) {
     if (!Number.isFinite(dt) || dt <= 0) return;
+    for(const r of records.values()){
+      if(r.mode==='broken')r.damageAge=Math.min(2,(r.damageAge||0)+Math.min(dt,.1));
+      if(r.mode==='cleared'){r.refillIn=Math.max(0,(r.refillIn??FOUP_RESTOCK_SECONDS)-Math.min(dt,.1));if(r.refillIn===0)restock(r);}
+    }
     const steps = Math.max(1, Math.ceil(Math.min(dt, .1) / .016)), h = Math.min(dt, .1) / steps;
     for (let i = 0; i < steps; i++) for (const record of records.values()) {
       if (record.mode !== 'flying') continue;
@@ -68,29 +124,32 @@ export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () 
       else { record.vx *= -.25; record.vz *= -.25; }
       record.vy -= 9.8 * h; record.y += record.vy * h; record.yaw += h * 5;
       if (record.y <= .225) {
+        if(record.shatter){breakFoup(record);continue;}
         if (Math.abs(record.vy) > 1) onImpact(record, Math.abs(record.vy));
         record.y = .225;
         if (Math.abs(record.vy) > 1 && record.bounce++ < 2) { record.vy = -record.vy * .25; record.vx *= .4; record.vz *= .4; }
-        else { const spot = floorSpot(record, .24); if (spot) Object.assign(record, spot); record.mode = 'ground'; }
+        else { const spot = floorSpot(record, .24); if (spot) Object.assign(record, spot); record.mode = 'ground'; onChange(); }
       }
     }
   }
-  function synchronize(rows, selfId) {
+  function synchronize(rows, selfId, initial = false) {
     // Clear all previous slots first: two records can exchange ports in one frame.
     for(const incoming of rows){const old=records.get(incoming.id);if(old?.original)hideOriginal(old.portId);if(old?.portId)occupancy.delete(old.portId);if(old?.owner)hands.delete(old.owner);}
     for(const incoming of rows) {
       let r=records.get(incoming.id);
       const owner=incoming.owner===selfId?'player':incoming.owner;
       const next={...incoming,owner,original:false};
-      if(r && incoming.mode==='flying') {const {x,y,z,yaw}=r;Object.assign(r,next,{x,y,z,yaw,goal:next});}
+      if(incoming.mode==='broken'&&initial)next.damageAge=2;
+      if(r?.mode===incoming.mode&&r.breakSeq===incoming.breakSeq&&incoming.mode==='broken')next.damageAge=Math.max(r.damageAge||0,next.damageAge||0);
+      if(r && incoming.mode==='flying' && !initial) {const {x,y,z,yaw}=r;Object.assign(r,next,{x,y,z,yaw,goal:next});}
       else {r=Object.assign(r??{},next);delete r.goal;}
       records.set(r.id,r);
       if(r.portId)occupancy.set(r.portId,r.id);
       if(r.mode==='carried'&&owner)hands.set(owner,r.id);
     }
   }
-  function interpolate(dt) {const f=1-Math.exp(-dt*16);for(const r of records.values())if(r.goal){for(const k of ['x','y','z'])r[k]+=(r.goal[k]-r[k])*f;r.yaw=r.goal.yaw;}}
-  return { records, atPort, adopt, pickup, place, launch, step, reset, synchronize, interpolate, occupied: id => occupancy.has(id),
+  function interpolate(dt) {const f=1-Math.exp(-dt*16);for(const r of records.values()){if(r.goal){for(const k of ['x','y','z'])r[k]+=(r.goal[k]-r[k])*f;r.yaw=r.goal.yaw;}if(r.mode==='broken')r.damageAge=Math.min(2,(r.damageAge||0)+dt);}}
+  return { records, atPort, adopt, pickup, place, launch, step, reset, synchronize, interpolate, checkpoint, restore, beginCleanup, cancelCleanup, finishCleanup, occupied: id => occupancy.has(id),
     getCarried: owner => records.get(hands.get(owner)) ?? null,
     get carried() { return records.get(hands.get('player')) ?? null; },
     get state() { return { carriedId: hands.get('player') ?? null, managed: records.size, moved: [...records.values()].filter(r => !r.original).map(r => ({ id: r.id, mode: r.mode, owner: r.owner, portId: r.portId, x: r.x, y: r.y, z: r.z })) }; }
@@ -113,7 +172,7 @@ export function createFoupRenderer(THREE, scene, materials, capacity = 1200) {
   }
   return {
     update(records) {
-      const visible = records.filter(r => !r.original && !r.hidden).slice(0, capacity);
+      const visible = records.filter(r => !r.original && !r.hidden && !['broken','cleared'].includes(r.mode)).slice(0, capacity);
       for (const group of pieces) {
         group.mesh.count = visible.length * group.locals.length;
         visible.forEach((record, index) => {

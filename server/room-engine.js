@@ -4,7 +4,7 @@ import {restoreWallet,grantChips,wardrobeCommand,walletView} from './chip-wallet
 import {npcOutfit} from '../src/npc-outfits.js';
 import { machines, ports, isBlocked } from '../src/layout.js';
 import { createFleet, reservedPortIds } from '../src/network-transport.js';
-import { createFoupStore } from '../src/foup-play.js';
+import { createFoupStore, FOUP_CLEAN_SECONDS, FOUP_CLEAN_REWARD } from '../src/foup-play.js';
 import { createResidentSimulation } from '../src/residents.js';
 import { getEmoApproach } from '../src/emo-interaction.js';
 import { boardingMachine,boardingApproach,NO_LOADPORT_MESSAGE } from '../src/play-actions.js';
@@ -20,7 +20,7 @@ import {isRestArea,canSafetyTraverse,restAreaExit,SAFETY_CLEARANCE} from '../src
 const distance=(a,b)=>Math.hypot(a.x-b.x,a.z-b.z);
 const finite=(n,a,b)=>Number.isFinite(n)&&n>=a&&n<=b;
 export const SAFETY_DUTY={warmup:60,handover:15,cooldown:90,goal:SAFETY_CATCH_GOAL};
-export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()=>{},onRosterChange=()=>{},getHistoricalScores=()=>[],onEquipmentChange=()=>{},claimName=(id,kind,preferred,excluded)=>(kind==='safety'?createSafetyName:createVisitorName)(random,excluded,preferred),now=Date.now,nicknameAvailable=null,replaceNickname=null,ownerId=''}={}) {
+export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()=>{},onRosterChange=()=>{},getHistoricalScores=()=>[],onEquipmentChange=()=>{},onFoupChange=()=>{},claimName=(id,kind,preferred,excluded)=>(kind==='safety'?createSafetyName:createVisitorName)(random,excluded,preferred),now=Date.now,nicknameAvailable=null,replaceNickname=null,ownerId=''}={}) {
   ownerId=configuredOwnerId(ownerId);
   const players=new Map(), broken=new Map(), leases=new Map(), events=[], foupVersions=new Map();
   const fleet=createFleet(), byPort=new Map(ports.map(p=>[p.id,p]));
@@ -53,7 +53,13 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
     cancelRepair(id){const r=broken.get(id);if(!r)return false;delete r.owner;delete r.progress;return true;},
     reset(id){const changed=broken.delete(id);if(changed)onEquipmentChange(equipmentState());return changed;}
   };
-  const store=createFoupStore({ports,initialPortIds:initialSharedPorts,isDestroyed:destruction.isDestroyed,onImpact:r=>emit('bounce',r)});
+  let foupReady=false;
+  const store=createFoupStore({ports,initialPortIds:initialSharedPorts,isDestroyed:destruction.isDestroyed,onImpact:r=>emit('bounce',r),onShatter:r=>emit('shatter',r),onChange:()=>{if(foupReady)onFoupChange(store.checkpoint());}});
+  function restoreFoups(saved){
+    if(time!==0||players.size)throw new Error('FOUP restore is only allowed before the room starts');
+    store.restore(saved);
+    for(const r of store.records.values())if(r.id.startsWith('vehicle:'))fleet.detachCargo(Number(r.id.slice(8)));
+  }
   function detachCargo(v) {
     if(v.cargoDetached)return;
     const s=v.state,r=store.adopt(`vehicle:${v.id}`,{...s.foup},s.parked?s.target.id:null);
@@ -88,6 +94,7 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
     changed(p);recordCatch(guard,p,{penalty:p.penalty});
   }
   function release(p) {
+    store.cancelCleanup(p.id);p.cleanTargetId=null;p.cleanBreakSeq=null;
     for(const [id,l] of leases)if(l.owner===p.id){if(l.kind==='repair')destruction.cancelRepair(id);leases.delete(id);}
     for(const v of fleet.vehicles)if(v.playerId===p.id){fleet.leavePassenger(v.id);delete v.playerId;}
     p.rideSeconds=0;p.targetId=null;p.vehicleId=null;p.phase='idle';p.time=0;
@@ -129,9 +136,10 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
     Object.assign(p,{x:data.x,y:data.y,z:data.z,heading:data.heading,speed:finite(data.speed,0,5)?data.speed:0,
       posture:(!p.penalty||isRestArea(data))&&['stand','sit','lie'].includes(data.posture)?data.posture:'stand',hidden:Boolean(data.hidden),lastSeen:time});
     if(v?.passenger)Object.assign(p,{x:v.state.car.x,y:2.16,z:v.state.car.z,heading:v.state.car.yaw,phase:'riding'});
-    else if(!['press','repair','climb'].includes(p.phase))p.phase='idle';
+    else if(!['press','repair','climb','cleaning'].includes(p.phase))p.phase='idle';
     const l=leases.get(p.targetId);if(l?.owner===id)l.expires=time+30;
     if(p.phase==='repair'&&distance(p,getEmoApproach(machines[p.targetId]).destination)>1.2)release(p);
+    if(p.phase==='cleaning'){const r=store.records.get(p.cleanTargetId);if(!r||p.hidden||p.posture!=='stand'||p.y>.15||distance(p,r)>1.65||distance(p,p.cleanPosition)>.18)release(p);}
     p.carrying=Boolean(store.getCarried(id));
     if(!p.hidden&&p.y<.1&&!isBlocked(p.x,p.z,.295)) {
       p.groundPosition={x:p.x,y:0,z:p.z,heading:p.heading};
@@ -210,6 +218,21 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
     if(isSafety(p.role)&&(kind==='press'||kind==='explode'||kind==='claim'&&data.kind==='emo'))return fail(SAFETY_NO_EMO_MESSAGE);
     if(p.penalty && !(kind==='cancel'||['repair','finish'].includes(kind)||kind==='claim'&&data.kind==='repair'))return fail(`장비를 ${p.penalty}대 더 고쳐야 다시 팹뿌를 하실 수 있습니다.`);
     if(kind==='cancel'){release(p);return {ok:true};}
+    if(kind==='clean') {
+      const r=store.records.get(data.id);
+      if(p.phase==='cleaning'&&p.cleanTargetId===data.id&&p.cleanBreakSeq===data.breakSeq)return {ok:true};
+      if(!r||r.mode!=='broken'||r.breakSeq!==data.breakSeq)return fail('이미 치워진 잔해예요');
+      if(p.hidden||p.posture!=='stand'||p.y>.15||distance(p,r)>1.65)return fail('잔해 가까이 다가가 주세요');
+      if(store.getCarried(id)||p.vehicleId!=null)return fail('FOUP을 내려놓고 청소해 주세요');
+      if(r.cleaner&&r.cleaner!==id)return fail('다른 사람이 청소하고 있어요');
+      if(r.damageAge<1.4)return fail('웨이퍼가 바닥에 떨어진 뒤 치워주세요');
+      release(p);
+      if(!store.beginCleanup(r.id,id,data.breakSeq))return fail('잔해를 다시 눌러주세요');
+      p.phase='cleaning';p.time=0;p.cleanTargetId=r.id;p.cleanBreakSeq=r.breakSeq;p.cleanPosition={x:p.x,z:p.z};p.heading=Math.atan2(r.x-p.x,r.z-p.z);p.speed=0;p.nextSweep=0;
+      r.cleanHeading=p.heading;
+      return {ok:true,duration:FOUP_CLEAN_SECONDS};
+    }
+    if(p.phase==='cleaning')return fail('청소를 끝내거나 움직여 멈춘 뒤 해주세요');
     if(kind==='claim') {
       const m=machines[data.id];
       if(!m||!['emo','repair'].includes(data.kind)||store.getCarried(id))return fail('FOUP을 내려놓고 다시 눌러주세요');
@@ -242,7 +265,7 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
       const r=store.getCarried(id);if(!r||p.vehicleId!==null&&p.vehicleId!==undefined)return fail();
       const drop=Boolean(data.drop),speed=drop?.8:4.7;
       store.launch(r,{x:p.x+Math.sin(p.heading)*.34,y:Math.max(.4,p.y+.82),z:p.z+Math.cos(p.heading)*.34,yaw:p.heading+Math.PI},
-        {x:Math.sin(p.heading)*speed,y:drop?.2:3.1,z:Math.cos(p.heading)*speed});p.carrying=false;emit(drop?'place':'throw',p);if(!drop){grantChips(p,1);changed(p);}return {ok:true};
+        {x:Math.sin(p.heading)*speed,y:drop?.2:3.1,z:Math.cos(p.heading)*speed},{shatter:!drop});p.carrying=false;emit(drop?'place':'throw',p);if(!drop){grantChips(p,1);changed(p);}return {ok:true};
     }
     if(kind==='board') {
       const v=fleet.vehicles[data.id],m=v&&boardingMachine(v.state.car);
@@ -274,6 +297,15 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
     for(const p of players.values()) {
       if(time-p.lastSeen>40){remove(p.id);continue;}
       p.time+=dt;
+      if(p.phase==='cleaning'){
+        const r=store.records.get(p.cleanTargetId);
+        if(!r||r.cleaner!==p.id||r.breakSeq!==p.cleanBreakSeq||p.hidden||p.posture!=='stand'||p.y>.15||distance(p,r)>1.65||distance(p,p.cleanPosition)>.18)release(p);
+        else {
+          r.cleanProgress=Math.min(1,p.time/FOUP_CLEAN_SECONDS);
+          if(p.time>=(p.nextSweep||0)){emit('sweep',p);p.nextSweep=p.time+.52;}
+          if(p.time+1e-8>=FOUP_CLEAN_SECONDS){r.cleanProgress=1;if(store.finishCleanup(r.id,p.id,p.cleanBreakSeq)){grantChips(p,FOUP_CLEAN_REWARD);changed(p);}release(p);}
+        }
+      }
       p.emoteLeft=Math.max(0,(p.emoteUntil||0)-time);if(!p.emoteLeft)p.emote='';
       if(!p.hidden&&time-p.lastSeen<12&&(Math.abs(p.x)>6||p.z<70))p.activeSeconds+=dt;
       if(time-p.lastSavedAt>=30)changed(p);
@@ -301,5 +333,6 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
       fleet:fleet.vehicles.map(v=>{const s=v.state;return [v.id,round(s.car.x),round(s.car.z),round(s.car.yaw),round(s.foup.x),round(s.foup.y),round(s.foup.z),round(s.foup.yaw),round(s.gripperY),s.phase,s.parked,round(s.lowered),s.target.id,s.destination.id,Boolean(v.cargoDetached),Boolean(v.passenger),Boolean(v.boardingHold),v.residentId??v.playerId??null,s.waiting,s.delivered];}),
       events:full?[]:events.splice(0),totals:residents.state.actions};
   }
-  return {nicknameState,applyNickname,wallet:id=>players.has(id)?walletView(players.get(id)):null,join,remove,pose,command,step,snapshot,roster,ranking,equipmentState,restoreEquipment,players,fleet,store,residents,safety,destruction,profile:id=>players.has(id)?profile(players.get(id)):null,get time(){return time;}};
+  foupReady=true;
+  return {nicknameState,applyNickname,wallet:id=>players.has(id)?walletView(players.get(id)):null,join,remove,pose,command,step,snapshot,roster,ranking,equipmentState,restoreEquipment,restoreFoups,players,fleet,store,residents,safety,destruction,profile:id=>players.has(id)?profile(players.get(id)):null,get time(){return time;}};
 }

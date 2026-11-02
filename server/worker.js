@@ -38,13 +38,15 @@ export default {
 export class FabRoom extends DurableObject {
   constructor(ctx,env) {
     super(ctx,env);this.sockets=new Map();this.profiles=createProfileStore(ctx.storage,{ownerId:env.FAB_OWNER_VISITOR_ID});this.rosterDirty=false;
-    this.room=createRoom({ownerId:env.FAB_OWNER_VISITOR_ID,nicknameAvailable:(...args)=>this.profiles.nicknameAvailable(...args),replaceNickname:(...args)=>this.profiles.replaceNickname(...args),claimName:(...args)=>this.profiles.claimName(...args),getHistoricalScores:()=>this.profiles.ranking(),onEquipmentChange:s=>this.profiles.saveEquipment(s),onProfileChange:p=>this.profiles.save(p),onRosterChange:()=>{this.rosterDirty=true;},onCatch:event=>{
+    this.room=createRoom({ownerId:env.FAB_OWNER_VISITOR_ID,nicknameAvailable:(...args)=>this.profiles.nicknameAvailable(...args),replaceNickname:(...args)=>this.profiles.replaceNickname(...args),claimName:(...args)=>this.profiles.claimName(...args),getHistoricalScores:()=>this.profiles.ranking(),onEquipmentChange:s=>this.profiles.saveEquipment(s),onFoupChange:s=>this.profiles.saveFoups(s),onProfileChange:p=>this.profiles.save(p),onRosterChange:()=>{this.rosterDirty=true;},onCatch:event=>{
       for(const [ws,s] of this.sockets)if(s.id===event.guardId)this.send(ws,{type:'safety-catch',...event});
     }});this.timer=null;this.tickCount=0;this.previous=Date.now();
     ctx.blockConcurrencyWhile(async()=>{
       const saved=await this.profiles.getEquipment();
       this.room.restoreEquipment(saved===undefined?(env.FAB_ENVIRONMENT==='production'?equipmentBootstrap:{version:1,broken:[]}):saved);
       if(saved===undefined)this.profiles.saveEquipment(this.room.equipmentState());
+      const foups=await this.profiles.getFoups();
+      if(foups!==undefined)this.room.restoreFoups(foups);else this.profiles.saveFoups(this.room.store.checkpoint());
       await this.checkpoint();
       await this.profiles.loadRanking();
       for(const p of [...this.room.residents.people,...this.room.safety.people])p.name=this.profiles.claimName(p.id,p.role.startsWith('safety-')?'safety':'visitor',p.name);

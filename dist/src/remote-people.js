@@ -15,10 +15,10 @@ export function createRemotePeople({THREE,scene,store,fleet=null,maxDetailed=40}
   const tint=new THREE.Color(),white=new THREE.Color('#ffffff');
   const ball=new THREE.SphereGeometry(1,8,5),proxy=new THREE.InstancedMesh(ball,softMaterial,280);proxy.count=0;proxy.frustumCulled=false;scene.add(proxy);
   function createSlot() {
-    const avatar=createAvatar(THREE);avatar.update(0,{repairTime:0});avatar.update(0,{});
+    const avatar=createAvatar(THREE);avatar.update(0,{repairTime:0});avatar.update(0,{cleanTime:0});avatar.update(0,{});
     const badge=createVisitorBadge(THREE,scene,'',{resident:true});
     const slot={avatar,badge,appearance:createAvatarAppearance(THREE,avatar,{scene,external:true}),emote:createEmoteView(THREE,scene),actor:null,clock:1,resetPose:true};
-    avatar.root.traverse(mesh=>{if(!mesh.isMesh||mesh.name==='face')return;const key=mesh.parent.name==='repair-hammer'?`hammer:${mesh.geometry.type}`:mesh.geometry.uuid+mesh.material.uuid;
+    avatar.root.traverse(mesh=>{if(!mesh.isMesh||mesh.name==='face')return;const key=mesh.parent.name==='sweep-broom'?mesh.name:mesh.parent.name==='repair-hammer'?`hammer:${mesh.geometry.type}`:mesh.geometry.uuid+mesh.material.uuid;
       if(!groups.has(key)){const instance=new THREE.InstancedMesh(mesh.geometry,mesh.material,maxDetailed*2);instance.count=0;instance.frustumCulled=false;instance.instanceMatrix.setUsage(THREE.DynamicDrawUsage);scene.add(instance);groups.set(key,{instance,sources:[]});}
       groups.get(key).sources.push({mesh,slot});});
     pool.push(slot);return slot;
@@ -60,7 +60,7 @@ export function createRemotePeople({THREE,scene,store,fleet=null,maxDetailed=40}
         const working=a.phase==='repair',pressing=a.phase==='press',plan=Number.isInteger(a.targetId)?getEmoApproach(machines[a.targetId]):null;
         const target=plan&&(working?{...plan.button,y:.96+.16*Math.sin(a.time*15),z:plan.button.z+plan.button.sign*.09}:pressing?plan.button:null);
         avatar.update(Math.min(.1,slot.clock),{speed:a.speed,heading:a.heading,posture:a.posture,hanging:a.phase==='riding'||a.role==='rider',carrying:a.carrying,snap:slot.resetPose,
-          repairTime:working?a.time:null,pressTarget:target,pressProgress:working?1:pressing?Math.min(1,a.time/.48):0,crouch:a.phase==='climb'?.7:0});slot.clock=0;slot.resetPose=false;
+          repairTime:working?a.time:null,cleanTime:a.phase==='cleaning'?a.time:null,pressTarget:target,pressProgress:working?1:pressing?Math.min(1,a.time/.48):0,crouch:a.phase==='climb'?.7:0});slot.clock=0;slot.resetPose=false;
       }
       slot.appearance.update(true);
       slot.badge.update(slot.avatar,a.posture,{headwear:slot.appearance.headwear,camera});slot.badge.sprite.visible=a.distance<18&&labelled.has(a.id);

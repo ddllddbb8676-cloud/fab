@@ -1,6 +1,7 @@
 import { machines, ports, TOOL_WIDTH, TOOL_FRONT, PORT_Z, VEHICLE_Y, SEATED_FOUP_Y, isBlocked } from './layout.js';
 import { reservedPortIds } from './network-transport.js';
-import { floorSpot, supportHeight, createFoupStore, createFoupRenderer } from './foup-play.js';
+import { floorSpot, supportHeight, createFoupStore, createFoupRenderer, FOUP_CLEAN_SECONDS } from './foup-play.js';
+import { createFoupDebris } from './foup-debris.js';
 
 const smooth = t => { const p = Math.max(0, Math.min(1, t)); return p * p * (3 - 2 * p); };
 export function boardingMachine(car) {
@@ -11,18 +12,21 @@ export function boardingApproach(car,machine=boardingMachine(car)) {
   return machine?{x:car.x,z:machine.z+machine.sign*(TOOL_FRONT+.43)}:null;
 }
 
-export function createPlayActions({ THREE, scene, materials, fleet, explorer, avatar, initialPortIds, hideOriginal, showOriginal, isDestroyed, toast, onCue = () => {}, network = null, isRestricted = () => false }) {
-  const store = createFoupStore({ ports, initialPortIds, hideOriginal, showOriginal, isDestroyed, onImpact: record => onCue('bounce', record) });
+export function createPlayActions({ THREE, scene, materials, fleet, explorer, avatar, initialPortIds, hideOriginal, showOriginal, isDestroyed, toast, onCue = () => {}, network = null, isRestricted = () => false, reducedMotion = false }) {
+  const store = createFoupStore({ ports, initialPortIds, hideOriginal, showOriginal, isDestroyed, onImpact: record => onCue('bounce', record), onShatter:record=>onCue('shatter',record) });
   const renderer = createFoupRenderer(THREE, scene, materials);
+  const debris = createFoupDebris(THREE,scene,{reducedMotion});
   const byPort = new Map(ports.map(port => [port.id, port]));
   const box = new THREE.Box3(), hit = new THREE.Vector3();
-  let action = null, pending = null, passengerId = null, awaiting = false, requestGeneration = 0;
+  let action = null, pending = null, passengerId = null, awaiting = false, requestGeneration = 0, cleanRequest = false;
+  const visibility=()=>{if(document.hidden)clearPending();};
+  if(typeof document!=='undefined')document.addEventListener('visibilitychange',visibility);
   const pose = () => ({ x: explorer.state.position.x, y: explorer.state.position.y, z: explorer.state.position.z, heading: explorer.state.heading });
   const vehicle = id => fleet.vehicles.find(v => v.id === id);
   function onFoot() { return !isRestricted() && !awaiting && !action && passengerId === null && (!network || network.connected) && ['walk', 'tour'].includes(explorer.state.mode) && !explorer.state.locked; }
-  function remote(kind,data,success) {
+  function remote(kind,data,success,failure) {
     if(!network)return false;awaiting=true;const generation=++requestGeneration;
-    network.command(kind,data).then(result=>{if(generation!==requestGeneration)return;awaiting=false;if(result.ok)success?.(result);else {if(['climb','ride'].includes(kind)){network.command('cancel');resetOnline();}toast(result.message??'다시 시도해 주세요');}});return true;
+    network.command(kind,data).then(result=>{if(generation!==requestGeneration)return;awaiting=false;if(result.ok)success?.(result);else {failure?.();if(['climb','ride'].includes(kind)){network.command('cancel');resetOnline();}toast(result.message??'다시 시도해 주세요');}});return true;
   }
   function reserved(port) {
     return reservedPortIds.has(port.id) && fleet.vehicles.some(v => !v.cargoDetached && [v.homePort.id, v.currentPort.id, v.destinationPort.id].includes(port.id));
@@ -31,6 +35,8 @@ export function createPlayActions({ THREE, scene, materials, fleet, explorer, av
     return fleet.vehicles.find(v => !v.cargoDetached && v.state.parked && v.currentPort.id === port.id);
   }
   function clearPending() {
+    if(cleanRequest){cleanRequest=false;requestGeneration++;awaiting=false;network?.command('cancel');}
+    if(action?.phase==='cleaning')cancelCleanup();
     if (!pending) return;
     if (pending.kind === 'board') { if(network)network.command('cancel');else fleet.holdVehicle(pending.vehicleId, false); }
     pending = null;
@@ -80,6 +86,28 @@ export function createPlayActions({ THREE, scene, materials, fleet, explorer, av
     if (store.occupied(port.id) || movingAtPort(port) || reserved(port)) { toast('비어 있는 다른 로드포트를 눌러주세요'); return true; }
     return startWalk({ x: port.x, z: port.z + port.sign * .96 }, { kind: 'place', portId: port.id });
   }
+  function requestCleanup(record){
+    if(!onFoot())return false;
+    if(store.carried){toast('FOUP을 내려놓고 청소해 주세요');return true;}
+    if(record.cleaner){toast('다른 사람이 청소하고 있어요');return true;}
+    const p=pose(),angle=Math.atan2(p.x-record.x,p.z-record.z);
+    const destination=floorSpot({x:record.x+Math.sin(angle)*.78,z:record.z+Math.cos(angle)*.78});
+    if(!destination)return false;
+    if(startWalk(destination,{kind:'clean',recordId:record.id,breakSeq:record.breakSeq}))toast('잔해 앞으로 이동해요 · 청소 완료 시 2칩');
+    return true;
+  }
+  function startCleanup(task){
+    const r=store.records.get(task.recordId);if(!r||r.mode!=='broken')return;
+    explorer.cancelEmo('cleaning');explorer.endJoystick?.();explorer.state.path=[];explorer.state.posture='stand';explorer.state.speed=0;
+    explorer.state.heading=Math.atan2(r.x-pose().x,r.z-pose().z);
+    r.cleanHeading=explorer.state.heading;
+    action={...task,phase:'cleaning',elapsed:0,from:pose(),nextSweep:0};explorer.state.cleaningTime=0;toast('슥삭슥삭! 파티클 청소 중…');
+  }
+  function cancelCleanup(){
+    if(action?.phase!=='cleaning')return;
+    if(network)network.command('cancel');else store.cancelCleanup('player');
+    action=null;explorer.state.cleaningTime=null;
+  }
   function rayDistance(ray, x, y, z, sx, sy, sz) {
     box.min.set(x - sx / 2, y - sy / 2, z - sz / 2); box.max.set(x + sx / 2, y + sy / 2, z + sz / 2);
     return ray.intersectBox(box, hit) ? ray.origin.distanceTo(hit) : Infinity;
@@ -113,13 +141,23 @@ export function createPlayActions({ THREE, scene, materials, fleet, explorer, av
         if (record || v) consider(rayDistance(ray, port.x, SEATED_FOUP_Y, port.z, .6, .55, .55), { kind: 'pickup', record, port, v }, port.machineId);
       }
     }
-    if (!store.carried) for (const record of store.records.values()) if (record.mode === 'ground') consider(rayDistance(ray, record.x, record.y, record.z, .6, .55, .55), { kind: 'pickup', record });
+    if (!store.carried) for (const record of store.records.values()) {
+      if (record.mode === 'ground') consider(rayDistance(ray, record.x, record.y, record.z, .6, .55, .55), { kind: 'pickup', record });
+      if (record.mode === 'broken') consider(rayDistance(ray, record.x, .15, record.z, 1.8, .3, 1.8), { kind: 'clean', record });
+    }
     if (!candidate) { clearPending(); return false; }
     if (candidate.kind === 'board') return requestBoard(candidate.id);
     if (candidate.kind === 'place') return requestPlace(candidate.port);
+    if (candidate.kind === 'clean') return requestCleanup(candidate.record);
     return requestPickup(candidate.record, candidate.port, candidate.v);
   }
   function begin(task) {
+    if(task.kind==='clean'){
+      if(network){cleanRequest=true;remote('clean',{id:task.recordId,breakSeq:task.breakSeq},()=>{cleanRequest=false;startCleanup(task);},()=>{cleanRequest=false;});}
+      else if(store.beginCleanup(task.recordId,'player',task.breakSeq))startCleanup(task);
+      else toast('잔해를 다시 눌러주세요');
+      return;
+    }
     if(network) {
       if(task.kind==='board')remote('climb',{},result=>startClimb(task,result));
       else {
@@ -171,9 +209,9 @@ export function createPlayActions({ THREE, scene, materials, fleet, explorer, av
   }
   function throwFoup(drop = false) {
     const record = store.carried; if (!record || action || passengerId !== null) return false;
-    if(network){if(awaiting)return false;return remote('throw',{drop},()=>{explorer.state.carrying=Boolean(store.carried);toast(drop?'FOUP을 내려놓았어요':'FOUP을 던졌어요');});}
+    if(network){if(awaiting)return false;return remote('throw',{drop},()=>{explorer.state.carrying=Boolean(store.carried);toast(drop?'FOUP을 내려놓았어요':'FOUP을 던졌어요 · 깨진 잔해를 누르면 청소해요');});}
     const p = pose(), heading = p.heading;
-    store.launch(record, { x: record.x, y: record.y, z: record.z, yaw: record.yaw }, { x: Math.sin(heading) * (drop ? .8 : 4.7), y: drop ? .2 : 3.1, z: Math.cos(heading) * (drop ? .8 : 4.7) });
+    store.launch(record, { x: record.x, y: record.y, z: record.z, yaw: record.yaw }, { x: Math.sin(heading) * (drop ? .8 : 4.7), y: drop ? .2 : 3.1, z: Math.cos(heading) * (drop ? .8 : 4.7) }, {shatter:!drop});
     explorer.state.carrying = false; onCue(drop ? 'place' : 'throw'); toast(drop ? 'FOUP을 바닥에 내려놓았어요' : 'FOUP을 던졌어요'); return true;
   }
   function update(dt) {
@@ -187,7 +225,20 @@ export function createPlayActions({ THREE, scene, materials, fleet, explorer, av
     }
     if (action) {
       action.elapsed += Math.min(dt, .05); const a = action;
-      if (a.phase === 'climb') {
+      if(a.phase==='cleaning'){
+        const r=store.records.get(a.recordId);
+        if(explorer.state.locked||explorer.state.mode!=='walk'||explorer.state.posture!=='stand'||explorer.state.path.length||explorer.state.joystickActive||typeof document!=='undefined'&&document.hidden){cancelCleanup();return;}
+        if(!r||r.mode!=='broken'){
+          action=null;explorer.state.cleaningTime=null;if(r?.mode==='cleared')toast('파티클 청소 완료!');return;
+        }
+        if(network&&!r.cleaner){cancelCleanup();return;}
+        explorer.state.cleaningTime=a.elapsed;
+        if(!network){
+          r.cleanProgress=Math.min(1,a.elapsed/FOUP_CLEAN_SECONDS);
+          if(a.elapsed>=a.nextSweep){onCue('sweep',r);a.nextSweep=a.elapsed+.52;}
+          if(a.elapsed>=FOUP_CLEAN_SECONDS){store.finishCleanup(r.id,'player',a.breakSeq);action=null;explorer.state.cleaningTime=null;toast('파티클 청소 완료!');}
+        }
+      } else if (a.phase === 'climb') {
         if (a.elapsed >= 1.7 && !a.jumped) { a.jumped = true; onCue('jump'); }
         if (isDestroyed(a.machine.id)) { if(network)network.command('cancel');else fleet.holdVehicle(a.vehicleId, false); resetOnline();toast('장비가 부셔져서 탈 수가 없어요'); return; }
         const sign = a.machine.sign, ledge = { x: a.car.x, y: 1.47, z: a.machine.z + sign * 2.92 };
@@ -227,7 +278,7 @@ export function createPlayActions({ THREE, scene, materials, fleet, explorer, av
     onCue('land');
     action = null; explorer.setScriptedPose(null); explorer.state.position.set(destination.x, 0, destination.z); explorer.setMode('walk'); toast('착지! 다시 걸어갈 수 있어요');
   }
-  function render() {
+  function render(dt=.016,camera=null) {
     const record = store.carried;
     if (record) {
       const p = pose(), heading = avatar.root.userData.heading ?? p.heading;
@@ -237,6 +288,7 @@ export function createPlayActions({ THREE, scene, materials, fleet, explorer, av
     const records = [...store.records.values()];
     for (const r of records) r.hidden = r.mode === 'port' && isDestroyed(byPort.get(r.portId)?.machineId);
     renderer.update(records);
+    debris.update(records,{dt,focus:explorer.state.position,overview:explorer.state.mode==='overview',camera});
   }
   function targets(camera, viewport) {
     const result = [], point = new THREE.Vector3(), ray = new THREE.Ray();
@@ -254,14 +306,17 @@ export function createPlayActions({ THREE, scene, materials, fleet, explorer, av
       if (store.atPort(p.id) || movingAtPort(p)) add('foup', p.id, p.x, SEATED_FOUP_Y, p.z, p.machineId);
       else if (!reserved(p)) add('port', p.id, p.x, p.y + .05, p.z, p.machineId);
     }
+    for(const r of store.records.values())if(r.mode==='broken')add('debris',r.id,r.x,.15,r.z);
     return result.sort((a,b) => a.distance - b.distance).slice(0, 30);
   }
   function resetOnline() {
-    requestGeneration++;awaiting=false;pending=null;action=null;passengerId=null;
+    requestGeneration++;awaiting=false;cleanRequest=false;pending=null;action=null;passengerId=null;
+    explorer.state.cleaningTime=null;
     explorer.setScriptedPose(null);const p=floorSpot(explorer.state.position);if(p)explorer.state.position.set(p.x,0,p.z);
     explorer.state.carrying=false;explorer.setMode('walk');
   }
-  return { tap, update, render, requestBoard, requestPlace, dismount, throwFoup, clearPending, targets, store, resetOnline,
+  return { tap, update, render, requestBoard, requestPlace, requestCleanup, dismount, throwFoup, clearPending, targets, store, resetOnline,
+    dispose(){clearPending();if(typeof document!=='undefined')document.removeEventListener?.('visibilitychange',visibility);renderer.dispose();debris.dispose();},
     detachVehicleCargo: detachedVehicleCargo,
     get protectedMachineId() { return pending?.machine?.id ?? action?.machine?.id ?? byPort.get(pending?.portId)?.machineId ?? null; },
     get busy() { return Boolean(action || passengerId !== null); },

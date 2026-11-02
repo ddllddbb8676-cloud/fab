@@ -5,6 +5,7 @@ import {isSafety} from '../src/safety-team.js';
 import {configuredOwnerId,hasUnlimitedChips,OWNER_DISPLAY_NAME} from './owner-privileges.js';
 const COOKIE='fab-session-v1';
 const EQUIPMENT_KEY='world:equipment:v1';
+const FOUP_KEY='world:foups:v1';
 export function sessionToken(request) {
   const value=(request.headers.get('Cookie')||'').split(';').map(v=>v.trim()).find(v=>v.startsWith(COOKIE+'='))?.slice(COOKIE.length+1);
   return /^[a-f0-9]{64}$/.test(value||'')?value:null;
@@ -43,6 +44,8 @@ export function createProfileStore(storage,{ownerId=''}={}) {
     replacementNickname:(...args)=>nicknames.replacement(...args),
     async getEquipment(){await writes.catch(()=>{});return pending.has(EQUIPMENT_KEY)?structuredClone(pending.get(EQUIPMENT_KEY)):storage.get(EQUIPMENT_KEY);},
     saveEquipment(state){pending.set(EQUIPMENT_KEY,structuredClone(state));},
+    async getFoups(){await writes.catch(()=>{});return pending.has(FOUP_KEY)?structuredClone(pending.get(FOUP_KEY)):storage.get(FOUP_KEY);},
+    saveFoups(state){pending.set(FOUP_KEY,structuredClone(state));},
     get hasPending(){return pending.size>0;},
     async loadRanking(){
       let startAfter;const records=new Map();

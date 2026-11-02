@@ -53,8 +53,9 @@ test('FOUP ownership and throws are authoritative, and disconnect drops the same
   for(const who of ['a','b'])move(r,who,{x:port.x,z:port.z+port.sign*.96});
   const count=r.store.records.size;assert.equal(r.command('a','pickup',{id}).ok,true);assert.equal(r.command('b','pickup',{id}).ok,false);
   assert.equal(r.command('a','throw').ok,true);assert.equal(r.store.records.get(id).mode,'flying');step(r,3);
-  const landed=r.store.records.get(id);move(r,'b',landed);assert.equal(r.command('b','pickup',{id}).ok,true);
-  r.remove('b');assert.equal(landed.mode,'flying');assert.equal(r.store.records.size,count);assert.equal(r.store.getCarried('b'),null);
+  const landed=r.store.records.get(id);move(r,'b',landed);assert.equal(landed.mode,'broken');assert.equal(r.command('b','pickup',{id}).ok,false);
+  const nextPort=ports.find(p=>p.id!==port.id&&r.store.atPort(p.id)),nextId=`port:${nextPort.id}`;move(r,'b',nextPort);assert.equal(r.command('b','pickup',{id:nextId}).ok,true);
+  r.remove('b');assert.equal(r.store.records.get(nextId).mode,'flying');assert.equal(r.store.records.size,count);assert.equal(r.store.getCarried('b'),null);assert.equal(landed.mode,'broken');
 });
 
 test('OHT requires equipment, exclusive boarding, timed climb and frees its seat on disconnect',()=>{
