@@ -67,7 +67,7 @@ export function createRemotePeople({THREE,scene,store,fleet=null,maxDetailed=40}
       slot.appearance.update(true);
       slot.badge.update(slot.avatar,a.posture,{headwear:slot.appearance.headwear,camera});slot.badge.sprite.visible=a.distance<18&&labelled.has(a.id);
       const expression=a.goal??a;slot.emote.set(expression.emote,expression.emoteSeq,expression.emoteLeft,a.id);
-      slot.emote.update(slot.avatar,a.posture,dt,a.distance<24);
+      slot.emote.update(slot.avatar,a.posture,dt,a.distance<24,{camera,anchor:slot.badge.sprite.position,title:Boolean(a.titleId)});
     }
     for(const group of groups.values()){group.instance.count=group.sources.length;group.sources.forEach(({mesh,slot},i)=>{let shown=Boolean(slot.actor);for(let n=mesh;n&&shown;n=n.parent)shown=n.visible;group.instance.setMatrixAt(i,shown?mesh.matrixWorld:zero);group.instance.setColorAt(i,isSuitMesh(mesh.name)?tint.set(isSafety(slot.actor?.role)?safetyColor(slot.actor.role):suitColor(slot.actor?.outfit)):white);});group.instance.instanceMatrix.needsUpdate=true;if(group.instance.instanceColor)group.instance.instanceColor.needsUpdate=true;}
     const full=new Set(detailed.map(a=>a.id));let n=0;

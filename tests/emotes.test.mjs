@@ -51,3 +51,49 @@ test('old packets without expression fields remain compatible',()=>{
   const actor=actorFromPacket(['old',0,0,0,0,0,'lie','idle',0,null,null,false,false,'visitor',0,12,3,0]);
   assert.equal(actor.emote,'');assert.equal(actor.emoteLeft,0);assert.equal(actor.brokenCount,12);assert.equal(actor.posture,'lie');
 });
+
+function emoteFixture() {
+  const previous=globalThis.document,previousPath=globalThis.Path2D;
+  globalThis.document={createElement:()=>({getContext:()=>({clearRect(){},beginPath(){},roundRect(){},fill(){},fillText(){}})})};
+  globalThis.Path2D=class {};
+  const view=createEmoteView(THREE,new THREE.Scene(),{self:true}),avatar={root:new THREE.Object3D()};
+  return {view,avatar,close(){view.dispose();globalThis.document=previous;globalThis.Path2D=previousPath;}};
+}
+
+test('self feedback appears before the reply, survives queued frames and ignores a rejected older tap',()=>{
+  const {view,avatar,close}=emoteFixture();
+  try {
+    view.set('',0,0);
+    const first=view.play('plead');view.update(avatar,'stand',.01);assert.equal(view.sprite.visible,true);
+    view.set('',0,0);view.update(avatar,'stand',.2);assert.equal(view.sprite.visible,true,'pre-tap snapshots cannot hide local feedback');
+    const second=view.play('cool'),current=view.sprite.material.map;
+    view.cancel(first);view.set('plead',1,2.8);view.update(avatar,'stand',.2);
+    assert.equal(view.sprite.visible,true);assert.equal(view.sprite.material.map,current,'older reply cannot replace the latest tap');
+    view.set('cool',2,2.6);view.update(avatar,'stand',.2);
+    for(let i=0;i<30;i++){view.set('cool',2,2.6);view.update(avatar,'stand',.1);}
+    assert.equal(view.sprite.visible,false,'echoed snapshots do not prolong the expression');
+    const rejected=view.play('thumbs-up');view.update(avatar,'stand',.01);view.cancel(rejected);
+    assert.equal(view.sprite.visible,false,'failed transmission rolls back its own preview');
+    view.play('wave');view.update(avatar,'stand',3.1);assert.equal(view.sprite.visible,false,'no reply still expires');
+    view.play('heart');view.reset();view.set('clap',1,3);view.update(avatar,'stand',.1);
+    assert.equal(view.sprite.visible,true,'reconnection accepts fresh server sequences');
+    assert.equal(view.play('invalid'),null);assert.notEqual(second,first);
+  } finally {close();}
+});
+
+test('self expressions stay readable above the title in close and distant top views',()=>{
+  const {view,avatar,close}=emoteFixture();
+  try {
+    for(const viewportHeight of [390,844])for(const distance of [3,6,24,220,400])for(const title of [false,true]) {
+      const anchor=new THREE.Vector3(0,1.6,0),camera=new THREE.PerspectiveCamera(72,390/viewportHeight,.08,1000);
+      camera.position.set(0,anchor.y+distance*.9,distance*.43);camera.lookAt(anchor);camera.updateMatrixWorld();
+      view.play('heart');view.update(avatar,'stand',.1,true,{camera,anchor,title,viewportHeight});
+      assert.equal(view.sprite.visible,true);
+      const depth=-view.sprite.position.clone().applyMatrix4(camera.matrixWorldInverse).z;
+      const perPixel=2*Math.tan(camera.fov*Math.PI/360)*depth/viewportHeight;
+      assert.ok(Math.abs(view.sprite.scale.y/perPixel-38)<1e-8,`38px at distance ${distance}`);
+      assert.ok(-view.sprite.center.y*view.sprite.scale.y/perPixel>=(title?42:26)-1e-8,'bubble clears nickname and title');
+      assert.equal(view.sprite.material.fog,false);assert.equal(view.sprite.material.depthTest,false);
+    }
+  } finally {close();}
+});
