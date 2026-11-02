@@ -1,3 +1,4 @@
+import {createCuteAccessories} from './cute-accessories.js';
 export function createExtraAccessories(THREE, attachment) {
   const result = {};
   const material = (color, options = {}) => new THREE.MeshStandardMaterial({ color, roughness: .45, ...options });
@@ -124,7 +125,7 @@ export function createAllAccessories(THREE, attachment) {
   const crownMat = gold.clone(); crownMat.side = THREE.DoubleSide; mesh(crownGeo, crownMat, crown, 0, 0, 0);
   const band = mesh(new THREE.TorusGeometry(.18, .017, 8, 40), gold, crown, 0, 1.40, 0); band.rotation.x = Math.PI / 2;
   mesh(new THREE.SphereGeometry(.028, 12, 8), material('#67b7bb', { metalness: .3, roughness: .2 }), crown, 0, 1.44, .194);
-  Object.assign(accessories, createExtraAccessories(THREE, attachment));
+  Object.assign(accessories, createExtraAccessories(THREE, attachment),createCuteAccessories(THREE,attachment));
 
  return accessories;
 }

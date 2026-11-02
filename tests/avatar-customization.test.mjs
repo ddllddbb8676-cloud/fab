@@ -12,7 +12,7 @@ test('name clears headwear across poses and angles, while outfit changes stay lo
   const appearance=createAvatarAppearance(THREE,a),other=createAvatarAppearance(THREE,b),badge=createAvatarNameplate(THREE,scene,'FAB짱 세미');
   try{
     assert.deepEqual(calls,[['stroke','#f4fbf8'],['fill','#204e55']]);
-    for(const head of ['helmet-white','helmet-orange','sprout','crown'])for(const posture of ['stand','sit','lie'])for(const heading of [0,1.5,3.14]){
+    for(const head of ['helmet-white','helmet-orange','sprout','crown','bunny-ears','baby-chick'])for(const posture of ['stand','sit','lie'])for(const heading of [0,1.5,3.14]){
       appearance.setOutfit({...DEFAULT_OUTFIT,head,bag:'bag-bear',face:'glasses',beauty:'eyes-cry',suit:'suit-black'});
       a.update(.1,{posture,heading,snap:true});a.root.updateMatrixWorld(true);appearance.update();badge.update(a,posture,{headwear:appearance.headwear});
       const box=new THREE.Box3().setFromObject(appearance.headwear[0]);assert.ok(badge.sprite.position.y-.09>box.max.y,'name never crosses the headwear');assert.ok(badge.sprite.position.toArray().every(Number.isFinite));

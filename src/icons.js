@@ -20,6 +20,12 @@ export function itemIcon(id) {
   } else if (id.startsWith('helmet')) {
     const color = id.endsWith('white') ? '#f2f6f3' : '#ef9b45';
     drawing = `<path d="M9 30v-6a15 15 0 0 1 30 0v6z" fill="${color}" stroke="#8a9da5" stroke-width="1.5"/><path d="M21 10v19h6V10" fill="${color}" stroke="#a9b9bd"/><path d="M5 29h38v5H5z" fill="${color}" stroke="#8a9da5" stroke-width="1.5"/>`;
+  } else if (id === 'bunny-ears') {
+    drawing='<ellipse cx="14" cy="25" rx="7" ry="21" fill="#f5eeee" stroke="#c4c9c6"/><ellipse cx="14" cy="24" rx="3.5" ry="15" fill="#ed9bb6"/><path d="M27 45c-2-14-1-29 5-38 6-8 14 0 12 8-1 6-6 7-8 2-3 10-2 20-2 28z" fill="#f5eeee" stroke="#c4c9c6"/><ellipse cx="31" cy="29" rx="3" ry="11" fill="#ed9bb6"/>';
+  } else if (id === 'baby-chick') {
+    drawing='<ellipse cx="24" cy="31" rx="16" ry="12" fill="#ffdb63"/><circle cx="24" cy="17" r="12" fill="#ffdb63"/><ellipse cx="10" cy="31" rx="5" ry="8" fill="#ffe791"/><ellipse cx="38" cy="31" rx="5" ry="8" fill="#ffe791"/><g fill="#34494e"><circle cx="20" cy="15" r="1.5"/><circle cx="28" cy="15" r="1.5"/></g><ellipse cx="24" cy="21" rx="5" ry="2.5" fill="#ef9b42"/><path d="M13 43h7m8 0h7" stroke="#ef9b42" stroke-width="4" stroke-linecap="round"/>';
+  } else if (id === 'heart-glasses') {
+    drawing='<g fill="#ffe8ef" fill-opacity=".35" stroke="#ff1685" stroke-width="2.6" stroke-linejoin="round"><path d="M13 20C5 9 0 25 13 34c13-9 8-25 0-14zM35 20c-8-11-13 5 0 14 13-9 8-25 0-14z"/><path d="M22 22h4M1 21l4 2m38 0 4-2" fill="none"/></g>';
   } else if (['glasses', 'goggles', 'sunglasses'].includes(id)) {
     const fill = id === 'sunglasses' ? '#253b48' : '#c4e2e9';
     if (id === 'goggles') drawing = '<path d="m4 17 8-3h24l8 3-3 18H28l-4-5-4 5H7z" fill="#b7dce6" fill-opacity=".55" stroke="#8ca6ae" stroke-width="3"/><path d="m10 18 7 13m11-13 7 13" stroke="#f3f9fa" stroke-width="2"/>';
@@ -29,7 +35,8 @@ export function itemIcon(id) {
   else {
     const pattern = `<defs><pattern id="grid-${id}" width="5" height="5" patternUnits="userSpaceOnUse"><rect width="5" height="5" fill="#c6e0e2" fill-opacity=".45"/><path d="M5 0H0V5" fill="none" stroke="#8ba9b1" stroke-width=".7"/></pattern></defs>`;
     let shape;
-    if (id === 'bag-turtle') shape = '<ellipse cx="24" cy="25" rx="16" ry="19"/><path d="m24 12 9 6v14l-9 7-9-7V18zM8 20l7-2m18 0 7 2M8 31l7 1m18 0 7-1" fill="none" stroke="#9ab7ad" stroke-width="1.5"/>';
+    if (id === 'bag-star') shape = '<path d="m24 4 7 13 14 2-10 11 2 14-13-6-13 6 2-14L3 19l14-2z" stroke-linejoin="round"/><g fill="#557971" stroke="none"><ellipse cx="19" cy="25" rx="1.4" ry="2"/><ellipse cx="29" cy="25" rx="1.4" ry="2"/></g><path d="M20 30q4 4 8 0" fill="none" stroke="#557971" stroke-width="1.4"/><path d="M14 29h3m14 0h3" stroke="#ed9bb6" stroke-width="2" stroke-linecap="round"/>';
+    else if (id === 'bag-turtle') shape = '<ellipse cx="24" cy="25" rx="16" ry="19"/><path d="m24 12 9 6v14l-9 7-9-7V18zM8 20l7-2m18 0 7 2M8 31l7 1m18 0 7-1" fill="none" stroke="#9ab7ad" stroke-width="1.5"/>';
     else if (id === 'bag-wings') shape = '<path d="M23 37C6 36 4 20 6 8c8 2 16 12 17 19m2 10c17-1 19-17 17-29-8 2-16 12-17 19"/><path d="M12 18 21 33m15-15-9 15" fill="none"/>';
     else if (id === 'bag-bear') shape = '<circle cx="13" cy="11" r="7"/><circle cx="35" cy="11" r="7"/><rect x="9" y="13" width="30" height="29" rx="13"/><g fill="#7c9aa2" stroke="none"><circle cx="18" cy="26" r="1.6"/><circle cx="30" cy="26" r="1.6"/><ellipse cx="24" cy="32" rx="2" ry="1.5"/></g>';
     else shape = '<path d="M17 12V7h14v5" fill="none"/><rect x="9" y="12" width="30" height="32" rx="7"/><rect x="13" y="29" width="22" height="11" rx="3"/>';
