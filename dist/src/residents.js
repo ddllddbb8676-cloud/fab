@@ -6,6 +6,8 @@ import { getEmoApproach } from './emo-interaction.js';
 import { findRestHeading } from './posture.js';
 import { createVisitorName, createVisitorBadge } from './visitor-name.js';
 import { createAvatar } from './avatar.js';
+import {createAvatarAppearance} from './avatar-appearance.js';
+import {npcOutfit} from './npc-outfits.js';
 import { floorSpot } from './foup-play.js';
 import { reservedPortIds } from './network-transport.js';
 
@@ -231,16 +233,17 @@ export function createResidents({ THREE, scene, ...options }) {
   const simulation = createResidentSimulation(options), groups = new Map();
   const visuals = simulation.people.map(actor => {
     const avatar = createAvatar(THREE), badge = createVisitorBadge(THREE, scene, actor.name, { resident: true });
+    const appearance=createAvatarAppearance(THREE,avatar,{scene,external:true});appearance.setOutfit(npcOutfit(actor.id),actor.role);
     // Build the optional tool once; identical hammer shapes are also batched.
     if (actor.role === 'repairer') avatar.update(0, { repairTime: 0 });
     avatar.update(0, {});
-    const parts = []; avatar.root.traverse(mesh => { if (mesh.isMesh) {
+    const parts = []; avatar.root.traverse(mesh => { if (mesh.isMesh&&mesh.name!=='face') {
       const hammer = mesh.parent.name === 'repair-hammer';
       const key = hammer ? `hammer:${mesh.geometry.type}` : mesh.geometry.uuid + mesh.material.uuid;
       if (!groups.has(key)) groups.set(key, { geometry:mesh.geometry, material:mesh.material, sources:[] });
       groups.get(key).sources.push({ mesh, actor }); parts.push(mesh);
     } });
-    return { actor, avatar, badge, clock: 1, parts };
+    return { actor, avatar, badge, appearance, clock: 1, parts };
   });
   const zero = new THREE.Matrix4().makeScale(0,0,0);
   for (const group of groups.values()) {
@@ -264,7 +267,8 @@ export function createResidents({ THREE, scene, ...options }) {
           repairTime:repairing?a.time:null, pressTarget:target, pressProgress:repairing?1:pressing?clamp(a.time/.48):0 });
       }
       a.renderVisible = visible;
-      badge.update(avatar,a.posture); badge.sprite.visible = visible && d < 13 && !overview;
+      visual.appearance.update(visible&&!overview&&d<32);
+      badge.update(avatar,a.posture,{headwear:visual.appearance.headwear}); badge.sprite.visible = visible && d < 13 && !overview;
     }
     for (const group of groups.values()) {
       group.sources.forEach(({mesh,actor},i) => {
@@ -276,6 +280,6 @@ export function createResidents({ THREE, scene, ...options }) {
     }
   }
   return { update, people:simulation.people, beginSafetyLap:simulation.beginSafetyLap, yieldMachine: simulation.yieldMachine, get state() { return simulation.state; },
-    dispose() { for (const group of groups.values()) { group.instance.removeFromParent(); group.instance.dispose(); } for (const v of visuals) { v.badge.dispose(); v.avatar.dispose(); } }
+    dispose() { for (const group of groups.values()) { group.instance.removeFromParent(); group.instance.dispose(); } for (const v of visuals) { v.badge.dispose(); v.appearance.dispose(); v.avatar.dispose(); } }
   };
 }

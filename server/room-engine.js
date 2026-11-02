@@ -1,4 +1,5 @@
 import {restoreWallet,grantChips,wardrobeCommand,walletView} from './chip-wallet.js';
+import {npcOutfit} from '../src/npc-outfits.js';
 import { machines, ports, isBlocked } from '../src/layout.js';
 import { createFleet, reservedPortIds } from '../src/network-transport.js';
 import { createFoupStore } from '../src/foup-play.js';
@@ -235,7 +236,7 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
       else if(residents.beginSafetyLap(p))recordCatch(guard,p,{penalty:3});
     }
   }
-  function roster(){return [...residents.people,...safety.people,...players.values()].map(p=>[p.id,p.name,p.role,p.wallet?.equipped??null]);}
+  function roster(){return [...residents.people,...safety.people,...players.values()].map(p=>[p.id,p.name,p.role,p.wallet?.equipped??npcOutfit(p.id)]);}
   function ranking(){return rankScores([...getHistoricalScores(),...residents.people,...safety.people,...[...players.values()].map(p=>({...p,name:p.civilianName||p.name}))]);}
   function snapshot(full=false) {
     const foups=[];

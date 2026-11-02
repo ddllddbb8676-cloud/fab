@@ -1,3 +1,5 @@
+import {npcOutfit} from './npc-outfits.js';
+import {createWardrobeNotice,WARDROBE_NOTICE,WARDROBE_NOTICE_DURATION} from './wardrobe-notice.js';
 import {createAvatarAppearance} from './avatar-appearance.js';
 import {createWardrobe} from './wardrobe-ui.js';
 import * as THREE from 'three';
@@ -408,7 +410,8 @@ colliders.push({ minX: -2.02, maxX: 2.02, minZ: 82.2, maxZ: 88.92, minY: 3.07, m
   { minX: -2.58, maxX: 2.58, minZ: 82.02, maxZ: 82.38, minY: 2.65, maxY: 3.23 });
 const entry = createEntrySequence({ reducedMotion });
 let mode = 'walk', elapsed = 0, lastTime = 0, currentZone = '', toastTimer, selectedEquipment = null, playActions = null;
-let nextRefreshReminder=performance.now()+15*60*1000;
+let nextRefreshReminder=performance.now()+15*60*1000,lastToastAt=-Infinity;
+const wardrobeNotice=createWardrobeNotice();
 const visitorBadge = createVisitorBadge(THREE, scene, createVisitorName());
 const visitorEmote=createEmoteView(THREE,scene,{self:true});
 let localEmoteSeq=0,lastEmoteClick=-Infinity,nearSafety=false,nextSafetyCheck=0;
@@ -426,7 +429,7 @@ for(const emote of EMOTES){
     else visitorEmote.set(emote.id,++localEmoteSeq);
   });$('emote-controls').append(button);
 }
-function toast(text,duration=3200) { $('zone-toast').textContent = text; $('zone-toast').classList.add('visible'); clearTimeout(toastTimer); toastTimer = setTimeout(() => $('zone-toast').classList.remove('visible'), duration); }
+function toast(text,duration=3200) { lastToastAt=performance.now(); $('zone-toast').textContent = text; $('zone-toast').classList.add('visible'); clearTimeout(toastTimer); toastTimer = setTimeout(() => $('zone-toast').classList.remove('visible'), duration); }
 function updatePersonalStats(next) {
   const broken=next.brokenCount||0,repaired=next.repairedCount||0;
   if(broken===personalStats.brokenCount&&repaired===personalStats.repairedCount)return;
@@ -622,7 +625,7 @@ else {
 if(!connectionConfig) {
   safetyPatrols=createSafetyPatrols({excludedNames:[visitorBadge.name,...residents.state.people.map(p=>p.name)]});
   safetyPeople=createRemotePeople({THREE,scene,store:playActions.store,maxDetailed:4});
-  safetyPeople.setRoster(safetyPatrols.people.map(p=>[p.id,p.name,p.role]));
+  safetyPeople.setRoster(safetyPatrols.people.map(p=>[p.id,p.name,p.role,npcOutfit(p.id)]));
   realVisitorCount=1;totalCharacterCount=1+residents.state.people.length+safetyPatrols.people.length;
   updateConnectionLabel('offline');
 }
@@ -897,6 +900,9 @@ function animate(now) {
     $('safety-proximity').classList.toggle('hidden',!nearSafety);$('safety-warning').classList.toggle('hidden',!nearSafety);
     $('safety-proximity').style.setProperty('--danger-strength',warning.strength.toFixed(2));
   }
+  if(wardrobeNotice.tick(dt,{wallet:currentWallet,active:Boolean(multiplayer?.connected&&currentWallet&&!entry.active),eligible:!nearSafety&&!safetyState.penalty&&!explorer.state.locked&&!explorer.state.emoInteraction&&!explorer.state.repairInteraction&&!playActions.busy&&!directory.isOpen&&!wardrobe.isOpen&&!viewControls.isOpen&&$('help').classList.contains('hidden')&&$('tool-card').classList.contains('hidden')&&!$('zone-toast').classList.contains('visible')&&now-lastToastAt>12000})){
+    toast(WARDROBE_NOTICE+' · 메뉴 → 꾸미기 · 내 옷장',WARDROBE_NOTICE_DURATION);
+  }
   const walked = lastStepPosition.distanceTo(explorer.state.position);
   if (mode === 'walk' || mode === 'tour') { if (walked < 1) stepDistance += walked; if (stepDistance > .86) { motionCue('step'); stepDistance = 0; } }
   lastStepPosition.copy(explorer.state.position);
@@ -938,7 +944,7 @@ function animate(now) {
     nextDiagnosticAt = now + 500;
     const demo = observedVehicle();
     updateSoundButton();
-    $('world').dataset.diagnostics = JSON.stringify({ ready: true, revision: 'fab-wardrobe-1', movementStyle, joystickActive: explorer.state.joystickActive, cameraFov: camera.fov, safety: safetyState, safetyPatrols: safetyPeople?.state.people, mode, audio: audio.state, multiplayer: multiplayer ? {status:multiplayer.status,id:multiplayer.id,count:realVisitorCount,total:totalCharacterCount,capacity:ROOM_CAPACITY,visitorCapacity:MAX_VISITORS} : null, residents: residents?.state ?? {total:AUTOMATED_COUNT,simulated:true,actions:sharedWorld.totals,people:remotePeople.state.people.filter(p=>p.id.startsWith('resident:')||p.id.startsWith('safety:'))}, remotePlayers:remotePeople?.state.people.filter(p=>!p.id.startsWith('resident:')&&!p.id.startsWith('safety:')), destruction: destruction.state, equipmentVisibility: equipmentVisibility.state, emoInteraction: explorer.state.emoInteraction, repairInteraction: explorer.state.repairInteraction, posture: explorer.state.posture, play: playActions.state, actionTargets: new URLSearchParams(location.search).has('qa') ? playActions.targets(camera, { width: innerWidth, height: innerHeight }) : undefined, visitorName: visitorBadge.name, controlsOpen: viewControls.isOpen, mapVisible: viewControls.mapVisible, emoButtons: layoutMachines.length, amberBays: bayLighting.bayIds.map(id => id + 1), amberLights: bayLighting.lights.length, amberLightsVisible: bayLighting.root.visible, entry: { active: entry.active, ...entry.state }, width: WIDTH, length: LENGTH, ceiling: HEIGHT,
+    $('world').dataset.diagnostics = JSON.stringify({ ready: true, revision: 'fab-npc-outfits-1', movementStyle, joystickActive: explorer.state.joystickActive, cameraFov: camera.fov, safety: safetyState, safetyPatrols: safetyPeople?.state.people, mode, audio: audio.state, multiplayer: multiplayer ? {status:multiplayer.status,id:multiplayer.id,count:realVisitorCount,total:totalCharacterCount,capacity:ROOM_CAPACITY,visitorCapacity:MAX_VISITORS} : null, residents: residents?.state ?? {total:AUTOMATED_COUNT,simulated:true,actions:sharedWorld.totals,people:remotePeople.state.people.filter(p=>p.id.startsWith('resident:')||p.id.startsWith('safety:'))}, remotePlayers:remotePeople?.state.people.filter(p=>!p.id.startsWith('resident:')&&!p.id.startsWith('safety:')), destruction: destruction.state, equipmentVisibility: equipmentVisibility.state, emoInteraction: explorer.state.emoInteraction, repairInteraction: explorer.state.repairInteraction, posture: explorer.state.posture, play: playActions.state, actionTargets: new URLSearchParams(location.search).has('qa') ? playActions.targets(camera, { width: innerWidth, height: innerHeight }) : undefined, visitorName: visitorBadge.name, controlsOpen: viewControls.isOpen, mapVisible: viewControls.mapVisible, emoButtons: layoutMachines.length, amberBays: bayLighting.bayIds.map(id => id + 1), amberLights: bayLighting.lights.length, amberLightsVisible: bayLighting.root.visible, entry: { active: entry.active, ...entry.state }, width: WIDTH, length: LENGTH, ceiling: HEIGHT,
       equipmentCount: equipment.length, equipmentFamilies: families.length, uniqueEquipmentCodes: new Set(equipment.map(e => e.code)).size, selectedEquipment: selectedEquipment?.code ?? null,
       machines: machinePositions.length, bays: bays.length, toolsPerRow: 10, loadports: layoutMachines.length * 3,
       frontAisle: AISLE, rearAisle: SERVICE_AISLE, sideGap: SIDE_GAP, vehicles: vehicles.length, junctions: network.junctions.length,
