@@ -6,6 +6,10 @@ const smooth = t => { const p = Math.max(0, Math.min(1, t)); return p * p * (3 -
 export function boardingMachine(car) {
   return machines.find(m => Math.abs(car.x - m.x) <= TOOL_WIDTH / 2 && Math.abs(car.z - (m.z + m.sign * PORT_Z)) < .65) ?? null;
 }
+export const NO_LOADPORT_MESSAGE='로드포트가 있는 곳에서 타야 해요';
+export function boardingApproach(car,machine=boardingMachine(car)) {
+  return machine?{x:car.x,z:machine.z+machine.sign*(TOOL_FRONT+.43)}:null;
+}
 
 export function createPlayActions({ THREE, scene, materials, fleet, explorer, avatar, initialPortIds, hideOriginal, showOriginal, isDestroyed, toast, onCue = () => {}, network = null, isRestricted = () => false }) {
   const store = createFoupStore({ ports, initialPortIds, hideOriginal, showOriginal, isDestroyed, onImpact: record => onCue('bounce', record) });
@@ -48,12 +52,17 @@ export function createPlayActions({ THREE, scene, materials, fleet, explorer, av
   }
   function requestBoard(id) {
     if (!onFoot()) return false;
+    if(pending?.kind==='board'&&pending.vehicleId===id)return true;
     if (store.carried) { toast('FOUP을 내려놓고 타주세요'); return true; }
     const v = vehicle(id), m = v && boardingMachine(v.state.car);
-    if (v?.residentId || v?.playerId) { toast('친구가 타고 있는 OHT예요. 다른 OHT를 눌러주세요'); return true; }
-    if (!m || isDestroyed(m.id)) { toast('장비가 부셔져서 탈 수가 없어요'); return true; }
-    const destination = { x: v.state.car.x, z: m.z + m.sign * (TOOL_FRONT + .43) };
-    if(network){clearPending();remote('board',{id},result=>{const actual=machines[result.machineId];if(!startWalk({x:v.state.car.x,z:actual.z+actual.sign*(TOOL_FRONT+.43)},{kind:'board',vehicleId:id,machine:actual}))network.command('cancel');else toast('장비를 딛고 올라가 OHT에 점프해요');});return true;}
+    if(!v)return false;
+    // The rendered OHT is interpolated behind the server. Always approach the
+    // held car's confirmed position, not that earlier rendered position.
+    if(network){clearPending();remote('board',{id},result=>{const actual=machines[result.machineId],destination=result.approach??(actual&&boardingApproach(v.state.car,actual));if(!actual||!destination||!startWalk(destination,{kind:'board',vehicleId:id,machine:actual,boardingCar:result.boardingCar}))network.command('cancel');else toast('장비를 딛고 올라가 OHT에 점프해요');});return true;}
+    if (v.residentId || v.playerId) { toast('친구가 타고 있는 OHT예요. 다른 OHT를 눌러주세요'); return true; }
+    if (!m) { toast(NO_LOADPORT_MESSAGE); return true; }
+    if (isDestroyed(m.id)) { toast('장비가 부셔져서 탈 수가 없어요'); return true; }
+    const destination = boardingApproach(v.state.car,m);
     if (!startWalk(destination, { kind: 'board', vehicleId: id, machine: m })) return true;
     fleet.holdVehicle(id, true); toast('장비를 딛고 올라가 OHT에 점프해요'); return true;
   }
@@ -112,7 +121,7 @@ export function createPlayActions({ THREE, scene, materials, fleet, explorer, av
   }
   function begin(task) {
     if(network) {
-      if(task.kind==='board')remote('climb',{},()=>startClimb(task));
+      if(task.kind==='board')remote('climb',{},result=>startClimb(task,result));
       else {
         const port=byPort.get(task.portId);if(port)explorer.state.heading=port.sign===1?Math.PI:0;
         remote(task.kind==='pickup'?'pickup':'place',task.kind==='pickup'?{id:task.recordId,portId:task.portId,vehicleId:task.vehicleId}:{id:task.portId},()=>{
@@ -143,9 +152,9 @@ export function createPlayActions({ THREE, scene, materials, fleet, explorer, av
       } else if (port && !reserved(port) && !movingAtPort(port) && store.place(port.id)) { explorer.state.carrying = false; onCue('place'); toast('FOUP을 이 로드포트에 내려놓았어요'); }
     }
   }
-  function startClimb(task) {
+  function startClimb(task,result={}) {
     const v=vehicle(task.vehicleId);
-    action={...task,phase:'climb',elapsed:0,from:pose(),car:{...v.state.car}};
+    action={...task,phase:'climb',elapsed:0,from:pose(),car:{...(result.boardingCar??task.boardingCar??v.state.car)}};
     onCue('climb');explorer.setMode('passenger');explorer.state.rideYaw=.5;
   }
   function dismount() {

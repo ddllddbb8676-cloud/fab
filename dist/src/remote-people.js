@@ -63,7 +63,7 @@ export function createRemotePeople({THREE,scene,store,fleet=null,maxDetailed=40}
           repairTime:working?a.time:null,pressTarget:target,pressProgress:working?1:pressing?Math.min(1,a.time/.48):0,crouch:a.phase==='climb'?.7:0});slot.clock=0;slot.resetPose=false;
       }
       slot.appearance.update(true);
-      slot.badge.update(slot.avatar,a.posture,{headwear:slot.appearance.headwear});slot.badge.sprite.visible=a.distance<11&&labelled.has(a.id);
+      slot.badge.update(slot.avatar,a.posture,{headwear:slot.appearance.headwear,camera});slot.badge.sprite.visible=a.distance<18&&labelled.has(a.id);
       const expression=a.goal??a;slot.emote.set(expression.emote,expression.emoteSeq,expression.emoteLeft,a.id);
       slot.emote.update(slot.avatar,a.posture,dt,a.distance<24);
     }

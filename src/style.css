@@ -255,3 +255,5 @@ body[data-movement=joystick] .view-label div > span { display:none; }
 body[data-movement=joystick] .safety-panel { left:auto; right:var(--safe-right); transform:none; width:min(280px,calc(100vw - 184px)); padding:8px 10px; background:#fff8eec9; }
 body.entering .joystick-zone { display:none; }
 @media (max-height:540px) and (orientation:landscape) { .joystick-zone { bottom:var(--safe-bottom); } }
+.visitor-nickname-label{position:fixed;left:0;top:0;z-index:6;pointer-events:none;user-select:none;white-space:nowrap;color:#204e55;font:700 16px/1.2 "Noto Sans KR",system-ui,sans-serif;text-shadow:-1px -1px 0 #f4fbf8,1px -1px 0 #f4fbf8,-1px 1px 0 #f4fbf8,1px 1px 0 #f4fbf8,0 1px 3px #f4fbf8;will-change:transform}
+.visitor-nickname-label[hidden]{display:none}

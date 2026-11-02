@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {createRoom} from '../server/room-engine.js';
 import {machines,ports,TOOL_FRONT} from '../src/layout.js';
 import {getEmoApproach} from '../src/emo-interaction.js';
-import {boardingMachine} from '../src/play-actions.js';
+import {boardingMachine,boardingApproach,NO_LOADPORT_MESSAGE} from '../src/play-actions.js';
 import {createFoupStore} from '../src/foup-play.js';
 import {initialSharedPorts,actorFromPacket} from '../src/shared-protocol.js';
 
@@ -66,6 +66,19 @@ test('OHT requires equipment, exclusive boarding, timed climb and frees its seat
   assert.ok(Math.hypot(v.state.car.x-start.x,v.state.car.z-start.z)>1);r.remove('a');assert.equal(v.passenger,false);assert.equal(v.playerId,undefined);
   const other=r.fleet.vehicles.find(v=>!v.residentId&&boardingMachine(v.state.car));const tool=boardingMachine(other.state.car);r.destruction.trigger(tool.id);
   assert.match(r.command('b','board',{id:other.id}).message,/부셔져서/);
+});
+
+test('OHT distinguishes absent loadports from broken equipment and confirms its held boarding position',()=>{
+  const r=fixture(),v=r.fleet.vehicles.find(v=>!v.residentId&&boardingMachine(v.state.car)),car={...v.state.car},m=boardingMachine(car);
+  v.state.car={...car,x:0,z:0};assert.equal(boardingMachine(v.state.car),null);
+  assert.equal(r.command('a','board',{id:v.id}).message,NO_LOADPORT_MESSAGE);
+  assert.equal(v.playerId,undefined);assert.equal(r.players.get('a').vehicleId,undefined);
+  v.state.car=car;move(r,'a',boardingApproach(car,m));
+  r.destruction.trigger(m.id);assert.match(r.command('a','board',{id:v.id}).message,/부셔져서/);
+  r.destruction.reset(m.id);const result=r.command('a','board',{id:v.id});
+  assert.equal(result.ok,true);assert.equal(result.machineId,m.id);assert.deepEqual(result.approach,boardingApproach(car,m));assert.deepEqual(result.boardingCar,car);
+  move(r,'a',{x:result.approach.x+2,z:result.approach.z});assert.match(r.command('a','climb').message,/로드포트 앞으로/);
+  move(r,'a',result.approach);const climbed=r.command('a','climb');assert.equal(climbed.ok,true);assert.deepEqual(climbed.boardingCar,result.boardingCar);
 });
 
 test('malformed controls, impossible coordinates and command floods do not mutate the world',()=>{

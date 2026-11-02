@@ -7,7 +7,7 @@ import { createFleet, reservedPortIds } from '../src/network-transport.js';
 import { createFoupStore } from '../src/foup-play.js';
 import { createResidentSimulation } from '../src/residents.js';
 import { getEmoApproach } from '../src/emo-interaction.js';
-import { boardingMachine } from '../src/play-actions.js';
+import { boardingMachine,boardingApproach,NO_LOADPORT_MESSAGE } from '../src/play-actions.js';
 import { createVisitorName } from '../src/visitor-name.js';
 import { createSafetyPatrols, createSafetyName, canCatch, isSafety, SAFETY_CATCH_GOAL, SAFETY_NO_EMO_MESSAGE } from '../src/safety-team.js';
 import { PROTOCOL,MAX_VISITORS,initialSharedPorts,actorPacket,foupPacket,round } from '../src/shared-protocol.js';
@@ -216,7 +216,7 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
       const m=machines[data.id],l=leases.get(data.id);
       if(!m||l?.owner!==id||distance(p,getEmoApproach(m).destination)>1.2)return fail('장비 앞으로 가까이 다가가 주세요');
       if(kind==='press'&&l.kind==='emo'){if(l.started===undefined)l.started=time;p.phase='press';p.time=0;emit('press',p);return {ok:true};}
-      if(kind==='explode'&&l.kind==='emo'&&l.started!==undefined&&time-l.started>=.55){const ok=destruction.trigger(m.id);if(ok){p.brokenCount++;grantChips(p,5);}release(p);if(ok)changed(p);return {ok};}
+      if(kind==='explode'&&l.kind==='emo'&&l.started!==undefined&&time-l.started>=.55){const ok=destruction.trigger(m.id);if(ok){p.brokenCount++;grantChips(p,5,{destructionId:m.id});}release(p);if(ok)changed(p);return {ok};}
       if(kind==='repair'&&l.kind==='repair'){if(!destruction.beginRepair(m.id,id))return fail();l.started=time;p.phase='repair';p.time=0;return {ok:true};}
       if(kind==='finish'&&l.kind==='repair'&&l.started!==undefined&&time-l.started>=4.7){if(!destruction.reset(m.id))return fail();p.repairedCount++;grantChips(p,3);p.penalty=Math.max(0,p.penalty-1);if(!p.penalty)p.safeUntil=time+12;emit('complete',p);release(p);changed(p);return {ok:true};}
       return fail('동작이 끝난 뒤 다시 눌러주세요');
@@ -242,15 +242,20 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
     }
     if(kind==='board') {
       const v=fleet.vehicles[data.id],m=v&&boardingMachine(v.state.car);
-      if(!m||destruction.isDestroyed(m.id))return fail('장비가 부셔져서 탈 수가 없어요');
+      if(!v)return fail('탑승할 OHT를 다시 눌러주세요');
+      if(!m)return fail(NO_LOADPORT_MESSAGE);
+      if(destruction.isDestroyed(m.id))return fail('장비가 부셔져서 탈 수가 없어요');
       if(v.residentId||v.playerId||store.getCarried(id))return fail('다른 OHT를 누르거나 FOUP을 내려놓아 주세요');
       if(distance(p,v.state.car)>28||!claim(p,m,'board'))return fail();
-      v.playerId=id;fleet.holdVehicle(v.id,true);p.vehicleId=v.id;return {ok:true,machineId:m.id};
+      v.playerId=id;fleet.holdVehicle(v.id,true);p.vehicleId=v.id;return {ok:true,machineId:m.id,approach:boardingApproach(v.state.car,m),boardingCar:{...v.state.car}};
     }
     if(kind==='climb') {
       const v=fleet.vehicles[p.vehicleId],m=v&&boardingMachine(v.state.car);
-      if(!v||v.playerId!==id||!m||destruction.isDestroyed(m.id)||distance(p,v.state.car)>1.6)return fail('장비 앞으로 다가가 주세요');
-      detachCargo(v);p.phase='climb';p.time=0;return {ok:true};
+      if(!v||v.playerId!==id)return fail('탑승할 OHT를 다시 눌러주세요');
+      if(!m)return fail(NO_LOADPORT_MESSAGE);
+      if(destruction.isDestroyed(m.id))return fail('장비가 부셔져서 탈 수가 없어요');
+      if(distance(p,v.state.car)>1.6)return fail('로드포트 앞으로 조금 더 가까이 와 주세요');
+      detachCargo(v);p.phase='climb';p.time=0;return {ok:true,boardingCar:{...v.state.car}};
     }
     if(kind==='ride') {
       const v=fleet.vehicles[p.vehicleId];if(!v||v.playerId!==id||p.phase!=='climb'||p.time<2.3)return fail();

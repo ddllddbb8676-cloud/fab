@@ -1,15 +1,34 @@
 // Spending and repeated wallet packets must never look like another reward.
 const count=value=>Number.isSafeInteger(value)&&value>=0?value:0;
-export function createChipRewardTracker(){
+export function createChipRewardTracker(counter='earnedChips'){
   let earned=null,revision=-1;
   return {
-    reset(wallet){earned=count(wallet?.earnedChips);revision=count(wallet?.revision);},
+    reset(wallet){earned=count(wallet?.[counter]);revision=count(wallet?.revision);},
     receive(wallet){
-      const next=count(wallet?.earnedChips),nextRevision=count(wallet?.revision);
+      const next=count(wallet?.[counter]),nextRevision=count(wallet?.revision);
       if(earned===null){earned=next;revision=nextRevision;return 0;}
       if(nextRevision<revision)return 0;
       const gained=Math.max(0,next-earned);earned=Math.max(earned,next);revision=nextRevision;return gained;
     }
+  };
+}
+
+// Only destruction feedback waits for the local animation and its camera.
+// Other grants keep their immediate presentation, even while this queue waits.
+export function createDestructionRewardQueue(emit){
+  let pending=[];
+  return {
+    add(amount,id){if(Number.isSafeInteger(amount)&&amount>0&&Number.isInteger(id))pending.push({amount,id,seen:false});},
+    update({cameraBusy=false,collapseState}){
+      const ready=[];
+      pending=pending.filter(item=>{
+        const state=collapseState(item.id);if(state!==null)item.seen=true;
+        if(!item.seen||state===false||cameraBusy)return true;
+        ready.push(item.amount);return false;
+      });
+      for(const amount of ready)emit(amount);
+    },
+    clear(){pending=[];}
   };
 }
 

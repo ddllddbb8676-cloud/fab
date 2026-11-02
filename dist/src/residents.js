@@ -268,7 +268,7 @@ export function createResidents({ THREE, scene, ...options }) {
       }
       a.renderVisible = visible;
       visual.appearance.update(visible&&!overview&&d<32);
-      badge.update(avatar,a.posture,{headwear:visual.appearance.headwear}); badge.sprite.visible = visible && d < 13 && !overview;
+      badge.update(avatar,a.posture,{headwear:visual.appearance.headwear,camera}); badge.sprite.visible = visible && d < 18 && !overview;
     }
     for (const group of groups.values()) {
       group.sources.forEach(({mesh,actor},i) => {

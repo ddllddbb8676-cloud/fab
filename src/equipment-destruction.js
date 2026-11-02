@@ -297,5 +297,5 @@ export function createEquipmentDestruction({ THREE, scene, machines, reducedMoti
     for (const effect of effects) for (const mesh of [effect.fire, effect.smoke, effect.sparks]) mesh.material.dispose();
     root.clear(); changed();
   }
-  return { root, pick, trigger, update, reset, resetAll, beginRepair, setRepairProgress, cancelRepair, dispose, isDestroyed: id => destroyed.has(id), get state() { return state(); } };
+  return { root, pick, trigger, update, reset, resetAll, beginRepair, setRepairProgress, cancelRepair, dispose, isDestroyed: id => destroyed.has(id), collapseState: id => destroyed.has(id) ? destroyed.get(id).settled : null, get state() { return state(); } };
 }

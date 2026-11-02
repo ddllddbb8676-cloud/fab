@@ -20,7 +20,7 @@ export function createWardrobe({THREE,button,command,connected,getName,onOpen,on
     ticketBuy.disabled=busy||!wallet||!nickname||!connected()||(!hasTicket&&(nickname.freeChoice||wallet.chips<NICKNAME_TICKET_PRICE));
     for(const b of dialog.querySelectorAll('[data-mode]'))b.setAttribute('aria-pressed',String(b.dataset.mode===mode));
     for(const b of dialog.querySelectorAll('[data-slot]'))b.setAttribute('aria-pressed',String(b.dataset.slot===slot));
-    const owned=new Set(wallet?.owned||[]),list=items.filter(i=>i.slot===slot&&(mode==='shop'||owned.has(i.id)));
+    const owned=new Set(wallet?.owned||[]),list=items.filter(i=>i.slot===slot&&(mode==='shop'||owned.has(i.id))).sort((a,b)=>a.price-b.price);
     $('.wardrobe-items').innerHTML=list.length?list.map(i=>`<button type="button" data-item="${i.id}" aria-pressed="${outfit[slot]===i.id}">${itemIcon(i.id)}<b>${i.name.replaceAll('<','&lt;').replaceAll('>','&gt;')}</b><span>${wallet?.equipped[slot]===i.id?'착용 중':owned.has(i.id)?'보유':i.price.toLocaleString('ko-KR')+'칩'}</span><small>${owned.has(i.id)?'무료로 갈아입기':'미보유 · 시착 가능'}</small></button>`).join(''):'<p class="wardrobe-empty">아직 보유한 아이템이 없어요.<br>상점에서 마음에 드는 것을 입어보세요.</p>';
     const item=items.find(i=>i.id===selected),buy=$('.wardrobe-buy');
     buy.disabled=busy||!wallet||!connected()||!item||(!owned.has(item?.id)&&!wallet.unlimited&&wallet.chips<item.price);

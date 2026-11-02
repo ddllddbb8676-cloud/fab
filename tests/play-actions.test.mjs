@@ -3,13 +3,13 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { createAvatar } from '../src/avatar.js';
 import { createExplorer } from '../src/explorer.js';
-import { createPlayActions, boardingMachine } from '../src/play-actions.js';
+import { createPlayActions, boardingMachine, boardingApproach, NO_LOADPORT_MESSAGE } from '../src/play-actions.js';
 import { createFleet, reservedPortIds } from '../src/network-transport.js';
 import { machines, ports, isBlocked, SEATED_FOUP_Y } from '../src/layout.js';
 import { createFoupStore } from '../src/foup-play.js';
 import { VISITOR_NAMES, createVisitorName } from '../src/visitor-name.js';
 
-function harness({ destroyed = false } = {}) {
+function harness({ destroyed = false,networkFactory=null } = {}) {
   const previousDocument = globalThis.document, previousWindow = globalThis.window;
   globalThis.document = { hidden: false, getElementById: () => ({ classList: { contains: () => true, add() {}, remove() {} } }), addEventListener() {} };
   globalThis.window = { addEventListener() {} };
@@ -21,9 +21,10 @@ function harness({ destroyed = false } = {}) {
   const explorer = createExplorer({ THREE, camera, scene, avatar, canvas, orbit: { target: new THREE.Vector3(), update() {} }, colliders: [], vehicles: [{ state: v.state }], onMode() {}, onToast: t => toasts.push(t), onInspect() {}, onActionTap:ray=>play.tap(ray) });
   explorer.state.position.set(v.state.car.x, 0, m.z + m.sign * 4.1);
   const materials = Object.fromEntries(['foup', 'foupDoor', 'dark', 'foupRib'].map(k => [k, new THREE.MeshStandardMaterial()]));
-  play = createPlayActions({ THREE, scene, materials, fleet, explorer, avatar, initialPortIds: [initial.id], hideOriginal: id => hidden.push(id), isDestroyed: id => destroyed && id === m.id, toast: t => toasts.push(t) });
+  const network=networkFactory?.({fleet,explorer,avatar,v,m});
+  play = createPlayActions({ THREE, scene, materials, fleet, explorer, avatar, network, initialPortIds: [initial.id], hideOriginal: id => hidden.push(id), isDestroyed: id => destroyed && id === m.id, toast: t => toasts.push(t) });
   return { scene, camera, listeners, avatar, fleet, explorer, play, v, m, initial, empty, toasts, hidden,
-    step(seconds) { for (let t = 0; t < seconds; t += 1 / 60) { fleet.step(1 / 60); play.update(1 / 60); explorer.update(1 / 60); play.render(); } },
+    step(seconds) { for (let t = 0; t < seconds; t += 1 / 60) { if(!network)fleet.step(1 / 60); play.update(1 / 60); explorer.update(1 / 60); play.render(); } },
     dispose() { avatar.dispose(); for (const material of Object.values(materials)) material.dispose(); globalThis.document = previousDocument; globalThis.window = previousWindow; }
   };
 }
@@ -84,6 +85,35 @@ test('destroyed equipment denies boarding with the requested message and does no
     assert.equal(h.toasts.at(-1), '장비가 부셔져서 탈 수가 없어요');
     assert.equal(h.play.state.phase, 'idle'); assert.ok(!h.v.boardingHold && !h.v.cargoDetached);
   } finally { h.dispose(); }
+});
+
+test('an OHT over a route without loadports explains the boarding location instead of reporting broken equipment',()=>{
+  const h=harness();try{
+    h.v.state.car={x:0,z:0,yaw:0};assert.equal(boardingMachine(h.v.state.car),null);
+    assert.equal(h.play.requestBoard(h.v.id),true);assert.equal(h.toasts.at(-1),NO_LOADPORT_MESSAGE);
+    assert.equal(h.play.state.phase,'idle');assert.ok(!h.v.boardingHold&&!h.v.cargoDetached);
+  }finally{h.dispose();}
+});
+
+test('online boarding reaches the server-held position even when the displayed OHT is two metres behind',async()=>{
+  let destination,climbedAt,boardCalls=0;
+  const h=harness({networkFactory:({explorer,v,m})=>{
+    const actual={x:m.x+1,z:v.state.car.z,yaw:v.state.car.yaw};v.state.car={...actual,x:m.x-1};destination=boardingApproach(actual,m);
+    return {connected:true,async command(kind){
+      if(kind==='board'){boardCalls++;return {ok:true,machineId:m.id,approach:destination,boardingCar:actual};}
+      if(kind==='climb'){climbedAt={x:explorer.state.position.x,z:explorer.state.position.z};return {ok:Math.hypot(climbedAt.x-actual.x,climbedAt.z-actual.z)<=1.6,boardingCar:actual,message:'로드포트 앞으로 조금 더 가까이 와 주세요'};}
+      if(kind==='ride'){v.state.car={...actual};return {ok:true};}
+      return {ok:true};
+    }};
+  }});
+  try{
+    assert.equal(h.play.requestBoard(h.v.id),true);await Promise.resolve();
+    assert.deepEqual(h.explorer.state.path.at(-1),destination);
+    h.play.requestBoard(h.v.id);assert.equal(boardCalls,1,'repeated taps keep the same reservation');
+    for(let i=0;i<40;i++){h.step(.2);await Promise.resolve();}
+    assert.ok(climbedAt);assert.ok(Math.hypot(climbedAt.x-destination.x,climbedAt.z-destination.z)<.03);
+    assert.equal(h.play.state.phase,'riding');assert.ok(!h.toasts.some(t=>t.includes('가까이 와')));
+  }finally{h.dispose();}
 });
 
 test('a clicked port FOUP is carried to another empty port then thrown without duplicating it', () => {
