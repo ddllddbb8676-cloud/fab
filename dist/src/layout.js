@@ -1,6 +1,6 @@
-import { AIR_SHOWER } from './air-shower.js?v=0ce5f1ac6b3a';
-import { bayFamilyIndices } from './equipment-catalog.js?v=0ce5f1ac6b3a';
-import { isRuntimeBlocked } from './runtime-obstacles.js?v=0ce5f1ac6b3a';
+import { AIR_SHOWER } from './air-shower.js?v=28968bf060dc';
+import { bayFamilyIndices } from './equipment-catalog.js?v=28968bf060dc';
+import { isRuntimeBlocked } from './runtime-obstacles.js?v=28968bf060dc';
 // Metres. A viewing model informed by bay-layout research, not a construction plan.
 export const HALL = { width: 120, length: 180, height: 5 };
 export const AISLE = 5.2, SERVICE_AISLE = 1.4, SIDE_GAP = .65, TOOL_SCALE_X = 103 / 120;

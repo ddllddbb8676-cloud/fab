@@ -9,6 +9,10 @@ import {canonicalRedirect} from './canonical-url.js';
 import {rejectOutdatedRoom} from './room-version.js';
 import {serveEntry} from './entry-response.js';
 import {HttpRoomPeer,HTTP_IDLE_MS,connectionOrder,readRoomBody} from './http-room-peer.js';
+import {ADMIN_HEADERS,isAdmin,adminDenied,metricExclusions} from './admin-access.js';
+import {createProfileMetrics} from './profile-metrics.js';
+import {createActivityMetrics} from './activity-metrics.js';
+import {items as cosmeticItems} from '../src/cosmetics-catalog.js';
 
 const PRIVATE_HEADERS = {'Cache-Control':'private, no-store','Vary':'Cookie'};
 const httpResult = (status, data = {}) => Response.json(data,{status,headers:PRIVATE_HEADERS});
@@ -17,6 +21,16 @@ export default {
   async fetch(request,env) {
     const redirect=canonicalRedirect(request);if(redirect)return redirect;
     const url=new URL(request.url);
+    if(['/admin','/admin/','/admin.html','/api/admin/metrics'].includes(url.pathname)){
+      if(!await isAdmin(request,env))return url.pathname.startsWith('/api/')?httpResult(403):adminDenied();
+      if(request.method!=='GET')return httpResult(405);
+      if(url.pathname==='/api/admin/metrics')return env.FAB_ROOM.getByName('FAB-A-v20').fetch(request);
+      if(url.pathname!=='/admin')return new Response(null,{status:302,headers:{...ADMIN_HEADERS,Location:'/admin'}});
+      const asset=await env.ASSETS.fetch(request),headers=new Headers(asset.headers);
+      for(const [key,value] of Object.entries(ADMIN_HEADERS))headers.set(key,value);
+      headers.set('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
+      return new Response(asset.body,{status:asset.status,headers});
+    }
     if(url.pathname==='/api/leaderboard'){
       if(request.method!=='GET')return new Response('Method not allowed',{status:405});
       return env.FAB_ROOM.getByName('FAB-A-v20').fetch(request);
@@ -56,12 +70,21 @@ export default {
 
 export class FabRoom extends DurableObject {
   constructor(ctx,env) {
-    super(ctx,env);this.sockets=new Map();this.profiles=createProfileStore(ctx.storage,{ownerId:env.FAB_OWNER_VISITOR_ID});this.rosterDirty=false;
+    super(ctx,env);this.adminEnv=env;this.sockets=new Map();this.rosterDirty=false;
+    const excludedIds=metricExclusions(env);
+    this.activityMetrics=createActivityMetrics({excludedIds});this.profileMetrics=createProfileMetrics({ownerId:env.FAB_OWNER_VISITOR_ID,excludedIds});
+    this.metricProfiles=new Map();this.paidItems=new Set(cosmeticItems.filter(item=>item.price>0).map(item=>item.id));this.lastMetricsFlush=Date.now();
+    this.profiles=createProfileStore(ctx.storage,{ownerId:env.FAB_OWNER_VISITOR_ID,onProfileObserved:p=>this.observeProfile(p),onProfileRemoved:id=>{this.profileMetrics.remove(id);this.metricProfiles.delete(id);}});
     this.httpPeers=new Map();this.connectionOrders=new Map();
     this.room=createRoom({ownerId:env.FAB_OWNER_VISITOR_ID,nicknameAvailable:(...args)=>this.profiles.nicknameAvailable(...args),replaceNickname:(...args)=>this.profiles.replaceNickname(...args),claimName:(...args)=>this.profiles.claimName(...args),getHistoricalScores:()=>this.profiles.ranking(),onEquipmentChange:s=>this.profiles.saveEquipment(s),onFoupChange:s=>this.profiles.saveFoups(s),onProfileChange:p=>this.profiles.save(p),onRosterChange:()=>{this.rosterDirty=true;},onCatch:event=>{
       for(const [ws,s] of this.sockets)if(s.id===event.guardId)this.send(ws,{type:'safety-catch',...event});
     }});this.timer=null;this.tickCount=0;this.previous=Date.now();
     ctx.blockConcurrencyWhile(async()=>{
+      try{
+        let startAfter;const records=new Map();
+        do{const page=await ctx.storage.list({prefix:'metrics:v1:',limit:500,...(startAfter?{startAfter}:{})});for(const [key,value] of page)records.set(key,value);if(page.size<500)break;startAfter=[...page.keys()].at(-1);}while(startAfter);
+        this.activityMetrics.restore(records);
+      }catch{this.metricsUnavailable=true;}
       const saved=await this.profiles.getEquipment();
       this.room.restoreEquipment(saved===undefined?(env.FAB_ENVIRONMENT==='production'?equipmentBootstrap:{version:1,broken:[]}):saved);
       if(saved===undefined)this.profiles.saveEquipment(this.room.equipmentState());
@@ -78,7 +101,31 @@ export class FabRoom extends DurableObject {
         else try{ws.close(1012,'다시 연결해 주세요');}catch{}
       }
       await this.checkpoint();if(this.sockets.size)this.start();
+      this.track(()=>this.activityMetrics.sync(this.room.players.keys()));
     });
+  }
+  track(callback){try{if(!this.metricsUnavailable)callback();}catch{this.metricsUnavailable=true;}}
+  observeProfile(p){
+    try{
+      this.profileMetrics.observe(p);
+      const previous=this.metricProfiles.get(p.id),owned=new Set((p.wallet?.owned||[]).filter(id=>this.paidItems.has(id)));
+      const current={broken:p.brokenCount||0,repaired:p.repairedCount||0,owned};this.metricProfiles.set(p.id,current);
+      if(previous)this.track(()=>this.activityMetrics.action(p.id,{destructions:Math.max(0,current.broken-previous.broken),repairs:Math.max(0,current.repaired-previous.repaired),purchases:p.id===this.adminEnv.FAB_OWNER_VISITOR_ID?0:[...owned].filter(id=>!previous.owned.has(id)).length}));
+    }catch{this.profileMetricsUnavailable=true;}
+  }
+  async flushMetrics(force=false){
+    if(this.metricsUnavailable)return;
+    if(this.flushingMetrics){if(force){await this.flushingMetrics;return this.flushMetrics(true);}return;}
+    if(!force&&Date.now()-this.lastMetricsFlush<60000)return;
+    this.lastMetricsFlush=Date.now();
+    this.flushingMetrics=(async()=>{try{await this.activityMetrics.flush(this.ctx.storage);this.metricsWriteDelayed=false;}catch{this.metricsWriteDelayed=true;}})();
+    try{await this.flushingMetrics;}finally{this.flushingMetrics=null;}
+  }
+  pose(id,data){
+    const p=this.room.players.get(id),before=p?{x:p.x,z:p.z,hidden:p.hidden}:null;
+    const accepted=this.room.pose(id,data);
+    if(accepted&&before&&!p.hidden&&!before.hidden&&Math.hypot(p.x-before.x,p.z-before.z)>.03)this.track(()=>this.activityMetrics.activity(id));
+    return accepted;
   }
   send(ws,data){try{ws.send(typeof data==='string'?data:JSON.stringify(data));return true;}catch{return false;}}
   async checkpoint(){do{await this.profiles.flush();}while(this.profiles.hasPending);}
@@ -86,6 +133,15 @@ export class FabRoom extends DurableObject {
   sendWallets(){for(const [ws,s] of this.sockets){const player=this.room.players.get(s.id);if(s.ready!==false&&player&&s.walletRevision!==player.wallet.revision){const wallet=this.room.wallet(s.id);this.send(ws,{type:'wallet',wallet});s.walletRevision=wallet.revision;}}}
   broadcastRoster(){const data=JSON.stringify({type:'roster',roster:this.room.roster(),count:this.room.players.size});for(const [ws,s] of this.sockets)if(s.ready!==false)this.send(ws,data);}
   async fetch(request) {
+    if(new URL(request.url).pathname==='/api/admin/metrics'){
+      if(!await isAdmin(request,this.adminEnv))return httpResult(403);
+      if(request.method!=='GET')return httpResult(405);
+      this.track(()=>this.activityMetrics.sync(this.room.players.keys()));
+      if(this.metricsUnavailable)return httpResult(503,{error:'통계를 준비하지 못했어요. 게임은 계속 이용할 수 있어요.'});
+      const activity=this.activityMetrics.snapshot();
+      this.ctx.waitUntil(this.flushMetrics());
+      return Response.json({...activity,generatedAt:Date.now(),timezone:'Asia/Seoul',live:{...activity.live,npcs:AUTOMATED_COUNT},profiles:this.profileMetricsUnavailable?null:this.profileMetrics.snapshot(),notes:['평균 동시 접속은 서버가 관측한 시간 기준이에요. 수집 공백과 수집 이전 시간은 포함하지 않아요.',...(this.metricsWriteDelayed?['최근 통계 저장이 지연되어 서버 재시작 시 일부 수집값이 누락될 수 있어요.']:[])]},{headers:ADMIN_HEADERS});
+    }
     if(new URL(request.url).pathname==='/api/room-http')return this.httpRoom(request);
     if(new URL(request.url).pathname==='/api/leaderboard')return Response.json({scope:'all-time',rows:this.room.ranking(),recordedVisitors:this.profiles.rankedVisitorCount,highestVisitorScore:this.profiles.ranking()[0]?.brokenCount??0},{headers:{'Cache-Control':'no-store'}});
     if(new URL(request.url).pathname==='/api/session/reset') {
@@ -148,6 +204,7 @@ export class FabRoom extends DurableObject {
     catch(error){try{peer.close(1013,'Try again');}catch{}this.close(peer);throw error;}
     if(!this.sockets.has(peer))return;
     this.welcome(peer,id);session.ready=true;session.walletRevision=this.room.players.get(id).wallet.revision;this.broadcastRoster();this.start();
+    this.track(()=>{this.activityMetrics.sync(this.room.players.keys());this.activityMetrics.connect(id,peer instanceof HttpRoomPeer?'https':'websocket');});
   }
   async httpRoom(request) {
     const parsed=await readRoomBody(request);
@@ -206,6 +263,7 @@ export class FabRoom extends DurableObject {
       this.sendWallets();
       if(changed||this.rosterDirty){this.rosterDirty=false;this.broadcastRoster();}
       if(++this.tickCount%4===0){const data=JSON.stringify(this.room.snapshot());for(const [ws,s] of this.sockets)if(s.ready!==false&&!this.send(ws,data)){this.room.remove(s.id);this.sockets.delete(ws);}}
+      this.track(()=>this.activityMetrics.sync(this.room.players.keys()));this.ctx.waitUntil(this.flushMetrics(!this.sockets.size));
       if(!this.sockets.size){clearInterval(this.timer);this.timer=null;}
     }finally{this.ticking=false;}
   }
@@ -215,17 +273,18 @@ export class FabRoom extends DurableObject {
     if(typeof message!=='string'||message.length>2048||++session.rate>24){try{ws.close(1008,'Message limit');}catch{}this.close(ws);return;}
     let data;try{data=JSON.parse(message);}catch{return;}
     if(!data||typeof data!=='object'||Array.isArray(data))return;
-    if(data.type==='pose'){this.room.pose(session.id,data.pose);return;}
+    if(data.type==='pose'){this.pose(session.id,data.pose);return;}
     if(data.type==='command'&&Number.isSafeInteger(data.seq)&&typeof data.kind==='string') {
-      if(data.pose)this.room.pose(session.id,data.pose);
+      if(data.pose)this.pose(session.id,data.pose);
       const result=data.kind==='nickname-reset'?await resetInappropriateNickname({actorId:session.id,targetName:data.data?.name,profiles:this.profiles,room:this.room}):this.room.command(session.id,data.kind,data.data);
       if(data.kind==='civilian'&&result.ok)this.broadcastRoster();
       try{await this.checkpoint();}catch{this.send(ws,{type:'ack',seq:data.seq,ok:false,message:'기록 저장이 지연되고 있어요. 잠시 후 다시 확인해 주세요.'});return;}
+      if(result.ok&&['emote','press','repair','clean','pickup','place','throw','board','climb','ride','dismount','equip','unequip'].includes(data.kind))this.track(()=>this.activityMetrics.activity(session.id));
       if(result.ok&&['nickname-confirm','nickname-reset'].includes(data.kind)){this.broadcastRoster();for(const [peer,s] of this.sockets)this.send(peer,{type:'nickname',nickname:this.room.nicknameState(s.id)});}
       this.send(ws,{type:'ack',seq:data.seq,...result,wallet:this.room.wallet(session.id),titles:this.room.titleState(session.id),frame:this.room.snapshot(true)});
     }
   }
-  close(ws){const s=this.sockets.get(ws);if(s){const ticket=this.connectionOrders.get(s.id);if(ticket)ticket.at=Date.now();this.room.remove(s.id);this.sockets.delete(ws);this.broadcastRoster();this.ctx.waitUntil(this.checkpoint());}if(!this.sockets.size&&this.timer){clearInterval(this.timer);this.timer=null;}}
+  close(ws){const s=this.sockets.get(ws);if(s){const ticket=this.connectionOrders.get(s.id);if(ticket)ticket.at=Date.now();this.room.remove(s.id);this.sockets.delete(ws);this.broadcastRoster();this.ctx.waitUntil(this.checkpoint());this.track(()=>this.activityMetrics.sync(this.room.players.keys()));}if(!this.sockets.size){if(this.timer){clearInterval(this.timer);this.timer=null;}this.ctx.waitUntil(this.flushMetrics(true));}}
   webSocketClose(ws,code,reason){
     // Hibernatable sockets may already have auto-replied. A peer that sends
     // an empty or abnormal close cannot have that synthetic code echoed.

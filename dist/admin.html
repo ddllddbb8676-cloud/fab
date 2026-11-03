@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="color-scheme" content="light">
+  <title>FAB 운영 현황</title>
+  <link rel="stylesheet" href="/admin/admin.css">
+  <script type="module" src="/admin/admin.js"></script>
+</head>
+<body>
+  <main class="dashboard">
+    <header class="page-header">
+      <div><p class="eyebrow">FAB OBSERVATORY</p><h1>운영 현황</h1></div>
+      <a class="game-link" href="/">게임으로 <span aria-hidden="true">↗</span></a>
+    </header>
+    <div class="update-bar">
+      <div><p id="connection-status" class="connection-status" role="status" aria-live="polite">운영자 권한을 확인하고 있어요.</p><p id="updated-at" class="muted">화면을 보고 있을 때 1분마다 갱신해요.</p></div>
+      <button id="refresh" type="button">새로고침</button>
+    </div>
+    <section id="access-message" class="notice" hidden aria-live="polite"></section>
+    <div id="report" hidden>
+      <section aria-labelledby="live-heading">
+        <div class="section-heading"><h2 id="live-heading">지금 팹에는</h2><span class="live-label">LIVE</span></div>
+        <div class="stat-grid">
+          <article class="stat-card accent"><p>연결된 실제 계정</p><strong id="connected">—</strong><span>NPC를 뺀 접속 계정</span></article>
+          <article class="stat-card"><p>최근 5분 활동 계정</p><strong id="active">—</strong><span>현재 연결 중이며 최근 활동한 계정</span></article>
+          <article class="stat-card"><p>오늘 접속 계정</p><strong id="today-unique">—</strong><span>같은 계정은 한 번만</span></article>
+          <article class="stat-card"><p>오늘 최고 동시 접속</p><strong id="today-peak">—</strong><span>실제 계정 기준</span></article>
+        </div>
+        <p class="section-note" id="live-note"></p>
+      </section>
+      <section class="panel" aria-labelledby="hourly-heading">
+        <div class="section-heading"><div><h2 id="hourly-heading">시간별 접속</h2><p id="hourly-date" class="muted"></p></div><span class="legend"><i aria-hidden="true"></i>최고 동시 접속</span></div>
+        <div class="date-filter"><label for="hourly-day">날짜 선택</label><select id="hourly-day" aria-label="시간별 접속 날짜 선택"></select><span>최근 30일</span></div>
+        <div id="hourly-chart" class="hourly-chart" role="img" aria-label="시간별 최고 동시 접속 그래프"></div>
+        <p id="hourly-note" class="section-note">아직 수집하지 않은 시간은 빈칸으로 표시해요.</p>
+        <details class="hourly-details"><summary>시간별 숫자 보기</summary><div class="table-scroll"><table><caption id="hourly-caption" class="sr-only">선택한 날짜의 시간별 이용 현황, 한국 시간</caption><thead><tr><th scope="col">시간</th><th scope="col">접속 계정</th><th scope="col">최고 동접</th><th scope="col">평균 동접</th></tr></thead><tbody id="hourly-rows"></tbody></table></div></details>
+      </section>
+      <section class="panel" aria-labelledby="play-heading">
+        <div class="section-heading"><h2 id="play-heading">오늘 얼마나 놀았을까</h2><span class="muted">실제 계정의 완료 행동</span></div>
+        <div class="activity-grid">
+          <div><span>장비 파괴</span><strong id="today-destructions">—</strong><small>대</small></div>
+          <div><span>장비 수리</span><strong id="today-repairs">—</strong><small>대</small></div>
+          <div><span>아이템 구매</span><strong id="today-purchases">—</strong><small>개</small></div>
+        </div>
+        <p class="section-note">오늘 수치는 통계 수집을 시작한 이후부터 쌓여요. 이전 기록을 오늘 활동으로 더하지 않아요.</p>
+      </section>
+      <section class="panel" aria-labelledby="shop-heading">
+        <div class="section-heading"><h2 id="shop-heading">꾸미기 현황</h2><span class="muted">현재 저장된 보유품</span></div>
+        <div class="shop-summary">
+          <div><span>구매한 계정</span><strong id="buyers">—</strong></div>
+          <div><span>유료 보유품</span><strong id="paid-copies">—</strong></div>
+          <div><span>상점가 환산</span><strong id="price-value">—</strong></div>
+        </div>
+        <div class="table-scroll"><table class="items-table"><caption class="sr-only">아이템별 현재 보유 수와 착용 수</caption><thead><tr><th scope="col">아이템</th><th scope="col">가격</th><th scope="col">보유</th><th scope="col">착용</th></tr></thead><tbody id="item-rows"></tbody></table></div>
+        <p id="shop-note" class="section-note"></p>
+      </section>
+      <section class="panel" aria-labelledby="record-heading">
+        <div class="section-heading"><h2 id="record-heading">누적 기록과 연결</h2></div>
+        <dl class="record-list">
+          <div><dt>저장된 일반 계정</dt><dd id="accounts">—</dd></div>
+          <div><dt>장비를 한 대 이상 부순 계정</dt><dd id="broken-accounts">—</dd></div>
+          <div><dt>누적 파괴 / 수리</dt><dd id="lifetime-actions">—</dd></div>
+          <div><dt>오늘 성공한 연결</dt><dd id="connections">—</dd></div>
+          <div><dt>그중 HTTPS 연결</dt><dd id="https-connections">—</dd></div>
+        </dl>
+        <p class="section-note">연결 횟수에는 새로고침과 재접속이 포함돼요. 접속 계정 수나 접속 실패율과는 달라요.</p>
+      </section>
+      <footer class="report-footer">
+        <p id="collection-start"></p>
+        <p>게스트 계정 기준이에요. 같은 사람도 기기·브라우저가 달라지면 별도 계정일 수 있어요.</p>
+        <ul id="server-notes" hidden></ul>
+      </footer>
+    </div>
+    <noscript><p class="notice">운영 현황을 보려면 자바스크립트를 켜 주세요.</p></noscript>
+  </main>
+</body>
+</html>

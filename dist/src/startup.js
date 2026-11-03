@@ -1,5 +1,5 @@
-import {startGame} from './startup-controller.js?v=0ce5f1ac6b3a';
-import {multiplayerConfiguration,embeddedRoomConfig} from './room-config.js?v=0ce5f1ac6b3a';
+import {startGame} from './startup-controller.js?v=28968bf060dc';
+import {multiplayerConfiguration,embeddedRoomConfig} from './room-config.js?v=28968bf060dc';
 const script=document.querySelector('script[data-fab-entry]');
 // The production document already set the same HttpOnly session cookie.
 // Static/local pages still use the original configuration discovery.

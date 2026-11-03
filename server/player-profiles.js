@@ -17,10 +17,13 @@ export async function sessionId(token) {
   const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('fab-profile-v1:'+token));
   return 'visitor:'+Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
 }
-export function createProfileStore(storage,{ownerId=''}={}) {
+export function createProfileStore(storage,{ownerId='',onProfileObserved=()=>{},onProfileRemoved=()=>{}}={}) {
   ownerId=configuredOwnerId(ownerId);
   const pending=new Map(),scores=new Map(),nicknames=createNicknameRegistry();let writes=Promise.resolve(),ranking=[],rankingDirty=true;
   if(ownerId)nicknames.reserve(ownerId,'visitor',OWNER_DISPLAY_NAME);
+  // Optional read-only projections must never prevent a game profile from
+  // being saved. Observers can mark their own data unavailable on failure.
+  function observed(profile){try{onProfileObserved(profile);}catch{}}
   function named(profile) {
     if(!profile.name&&!profile.civilianName)return profile;
     const civilianName=nicknames.claim(profile.id,'visitor',profile.civilianName||(!isSafety(profile.role)?profile.name:''));
@@ -62,7 +65,7 @@ export function createProfileStore(storage,{ownerId=''}={}) {
         nicknames.reserve(p.id,'visitor',p.civilianName||(!isSafety(p.role)?p.name:''));
         nicknames.reserve(p.id,'safety',p.safetyName||(isSafety(p.role)?p.name:''));
       }
-      for(const p of ordered){const next=named(p);remember(next);if(JSON.stringify(next)!==JSON.stringify(p))pending.set('profile:'+p.id,next);}
+      for(const p of ordered){const next=named(p);remember(next);observed(next);if(JSON.stringify(next)!==JSON.stringify(p))pending.set('profile:'+p.id,next);}
     },
     ranking(){if(rankingDirty){ranking=rankScores([...scores.values()]);rankingDirty=false;}return ranking;},
     get rankedVisitorCount(){return scores.size;},
@@ -72,7 +75,7 @@ export function createProfileStore(storage,{ownerId=''}={}) {
       await writes.catch(()=>{});
       return pending.has(key)?structuredClone(pending.get(key)):storage.get(key);
     },
-    save(profile){if(profile.id.startsWith('visitor:')){const next=named(profile);pending.set('profile:'+profile.id,structuredClone(next));remember(next);}},
+    save(profile){if(profile.id.startsWith('visitor:')){const next=named(profile);pending.set('profile:'+profile.id,structuredClone(next));remember(next);observed(next);}},
     flush(){
       if(!pending.size)return writes;
       const batch=Object.fromEntries(pending);pending.clear();
@@ -85,6 +88,6 @@ export function createProfileStore(storage,{ownerId=''}={}) {
         throw error;
       });return writes;
     },
-    async remove(id){const key='profile:'+id;pending.delete(key);await writes.catch(()=>{});pending.delete(key);await storage.delete(key);scores.delete(id);nicknames.forget(id);rankingDirty=true;}
+    async remove(id){const key='profile:'+id;pending.delete(key);await writes.catch(()=>{});pending.delete(key);await storage.delete(key);scores.delete(id);nicknames.forget(id);rankingDirty=true;try{onProfileRemoved(id);}catch{}}
   };
 }

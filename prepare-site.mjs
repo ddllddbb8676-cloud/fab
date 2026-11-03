@@ -40,6 +40,9 @@ for (const name of ['controls/OrbitControls.js', 'environments/RoomEnvironment.j
 await copyFile(new URL('node_modules/three/LICENSE', root), new URL('vendor/three/LICENSE.txt', dist));
 await copyFile(new URL('docs/capacity-plan.html', root), new URL('docs/capacity-plan.html', dist));
 await copyFile(new URL('connection-check.html', root), new URL('connection-check.html', dist));
+await mkdir(new URL('admin/',dist),{recursive:true});
+await copyFile(new URL('admin.html',root),new URL('admin.html',dist));
+for(const name of ['admin.js','admin.css'])await copyFile(new URL('admin/'+name,root),new URL('admin/'+name,dist));
 for(const name of (await readdir(new URL('src/',dist))).filter(name=>name.endsWith('.js'))){
   const file=new URL('src/'+name,dist);await writeFile(file,versionLocalModules(await readFile(file,'utf8'),revision));
 }
