@@ -1,6 +1,6 @@
 # 운영자 통계 페이지
 
-2026-11-03 14:26 KST 첫 운영 배포 후, 14:52 KST 접속 닉네임 목록을 추가 배포했다. 최신 운영 버전은 `d450b6cd-c047-4913-9572-094559c7dc2f`, 닉네임 기능 커밋은 `c510062`다. 사용자가 14시대에 실제 연결 2계정 이하 조건을 해제하고 즉시 진행하도록 지시했다. 반복 확인 자동화 `fab-2`는 삭제했다.
+2026-11-03 14:26 KST 첫 운영 배포 후, 14:52 KST 접속 닉네임 목록, 15:27 KST 닉네임을 눌러 걸어가기 기능을 추가 배포했다. 최신 운영 버전은 `fa03b968-44d2-4f95-89b1-df744ffeb003`, 방문 기능 커밋은 `e2cb73b`다. 사용자가 14시대에 실제 연결 2계정 이하 조건을 해제하고 즉시 진행하도록 지시했다. 반복 확인 자동화 `fab-2`는 삭제했다.
 
 ## 접속과 표시
 
@@ -43,5 +43,6 @@
 - 기존 검증 계정의 ID·닉네임·파괴/수리·지갑/보유품 해시가 관리자 배포 전후 같다. HTTPS 연결·조회·종료도 확인했다. 운영자 실제 iPhone 로그인과 시각 검증은 아직 하지 않았다.
 - 완료 표시는 `outputs/admin-release/completed.json`, 검증은 `verification.json`이다. 판매 결과와 비교는 `outputs/purchase-20261103-midday/`의 완료·검증·비교 파일에만 보관한다. 두 작업 모두 완료했으므로 다시 임시 집계하거나 이전 버전으로 복원하지 않는다.
 - 14:52 KST 닉네임 후속 배포는 `outputs/admin-names-release/completed.json`과 `verification.json`에 기록했다. 전체 테스트 362개, DOM 닉네임 문자열 안전 처리·퇴장자 제거·인증 해제 시 목록 비우기, 로컬 실제 Worker의 운영자 닉네임 응답 및 일반 계정 403을 확인했다. 운영에서는 일반/익명 관리자 차단, 새 자산 일치, 기존 검증 계정의 ID·본래 닉네임·지갑·파괴/수리 기록 해시 보존을 확인했다. 실제 iPhone 화면은 미확인이다.
+- 15:27 KST 방문 이동 배포는 `outputs/admin-visit-release/completed.json`·`verification.json`에 기록했다. 운영의 관리자 HTML/API와 방문 POST가 익명·일반 계정을 차단하고, 신규 이동 모듈을 포함한 70개 모듈이 같은 빌드 해시/배포 파일과 일치한다. 기존 검증 계정의 ID·본래 닉네임·지갑/보유품·파괴/수리 기록 해시가 배포 전후 같다. 실제 iPhone 시각 검증은 하지 않았다.
 
 참고: [Cloudflare SQLite storage의 출력 게이트와 allowUnconfirmed](https://developers.cloudflare.com/durable-objects/api/sqlite-storage-api/), [Durable Objects 과금](https://developers.cloudflare.com/durable-objects/platform/pricing/).
