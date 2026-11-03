@@ -1,6 +1,6 @@
 # 운영자 통계 페이지
 
-2026-11-03 구현. 운영 배포는 실제 연결 계정 2개 이하 조건을 확인한 뒤 진행한다. 이 문서 작성 시 운영은 기존 `738f78db-4ec3-4ff0-9dfe-42c8aac26a3d`이며, 새 페이지는 아직 미배포다.
+2026-11-03 14:26 KST 운영 배포 완료. 운영 버전은 `f012598c-1bdc-4bd1-a336-b19a085a38f0`, 구현 커밋은 `dadc42e`다. 사용자가 14시대에 실제 연결 2계정 이하 조건을 해제하고 즉시 진행하도록 지시했다. 반복 확인 자동화 `fab-2`는 삭제했다.
 
 ## 접속과 표시
 
@@ -30,5 +30,12 @@
 - 실제 iPhone 및 브라우저 시각 검증은 미실시. 브라우저 제어가 비활성화된 환경이므로 우회 도구를 쓰지 않았다.
 
 배포 준비/검증 산출물은 Git 제외 경로 `outputs/admin-release/`에 둔다. 기존 조건부 판매 집계는 비공개 임시 기능을 제거하고 원래 운영 버전을 복원한 뒤, 별도의 승인된 관리자 기능 배포를 진행한다. 현재 소스/운영 버전이 준비 기준과 다르면 자동으로 덮어쓰지 않는다.
+
+## 운영 검증 결과
+
+- 14:25 KST 비공개 판매 집계를 한 번 수행하고 기존 `738f78db-4ec3-4ff0-9dfe-42c8aac26a3d` 버전으로 복원했다. 임시 집계 경로가 제거되고 원래 게임 파일이 복원된 것을 확인한 뒤 관리자 버전을 별도 배포했다.
+- `/admin`, `/admin/`, `/admin.html`, `/api/admin/metrics`는 익명 요청에 403이며 일반 검증 계정도 관리자 API에 접근할 수 없다. 관리자 정적 파일과 게임 파일은 새 배포본과 일치한다.
+- 기존 검증 계정의 ID·닉네임·파괴/수리·지갑/보유품 해시가 관리자 배포 전후 같다. HTTPS 연결·조회·종료도 확인했다. 운영자 실제 iPhone 로그인과 시각 검증은 아직 하지 않았다.
+- 완료 표시는 `outputs/admin-release/completed.json`, 검증은 `verification.json`이다. 판매 결과와 비교는 `outputs/purchase-20261103-midday/`의 완료·검증·비교 파일에만 보관한다. 두 작업 모두 완료했으므로 다시 임시 집계하거나 이전 버전으로 복원하지 않는다.
 
 참고: [Cloudflare SQLite storage의 출력 게이트와 allowUnconfirmed](https://developers.cloudflare.com/durable-objects/api/sqlite-storage-api/), [Durable Objects 과금](https://developers.cloudflare.com/durable-objects/platform/pricing/).
