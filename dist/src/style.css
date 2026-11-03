@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;600;700&display=swap');
-
 :root {
   font-family: 'DM Sans', 'Noto Sans KR', sans-serif;
   font-synthesis: none;
@@ -211,6 +209,11 @@ body.entering .brand { pointer-events: none; }
 .loading p { color: #6c8c92; font-size: 12px; }
 .loading > span { margin-top: 12px; color: #9ab0b5; font-size: 8px; letter-spacing: .3em; }
 .loading.done { opacity: 0; pointer-events: none; }
+.loading { padding: 24px; overflow-y: auto; }
+.loading [data-loading-detail] { max-width: 350px; margin-top: 20px; color: #526f77; text-align: center; overflow-wrap: anywhere; line-height: 1.6; }
+.loading-actions { display: flex; gap: 8px; margin-top: 12px; }
+.loading-actions button { padding: 8px 14px; border-radius: 12px; background: #d9e8e7; font-size: 13px; }
+.loading textarea { width: min(100%,350px); height: 120px; margin-top: 12px; font: 12px/1.5 sans-serif; color: #294b53; }
 .error { position: fixed; z-index: 50; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(440px, calc(100vw - 32px)); padding: 28px; border-radius: 14px; background: #fff; font-size: 14px; line-height: 1.8; box-shadow: 0 15px 60px #20455033; }
 
 @media (max-width: 540px) {

@@ -5,9 +5,11 @@ import { PROTOCOL, MAX_VISITORS } from '../src/shared-protocol.js';
 import { ROOM_CAPACITY, AUTOMATED_COUNT } from '../src/room-population.js';
 import {sessionToken,newSessionToken,sessionCookie,sessionId,createProfileStore} from './player-profiles.js';
 import equipmentBootstrap from './equipment-bootstrap.json';
+import {canonicalRedirect} from './canonical-url.js';
 
 export default {
   async fetch(request,env) {
+    const redirect=canonicalRedirect(request);if(redirect)return redirect;
     const url=new URL(request.url);
     if(url.pathname==='/api/leaderboard'){
       if(request.method!=='GET')return new Response('Method not allowed',{status:405});

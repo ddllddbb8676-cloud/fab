@@ -9,11 +9,12 @@
   <link rel="stylesheet" href="/src/wardrobe.css">
   <link rel="stylesheet" href="/src/nickname.css">
   <link rel="stylesheet" href="/src/chip-rewards.css">
+  <link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;600;700&display=swap">
   <script type="importmap">{"imports":{"three":"/node_modules/three/build/three.module.js","three/addons/":"/node_modules/three/examples/jsm/","nipplejs":"/node_modules/nipplejs/dist/index.mjs"}}</script>
 </head>
 <body>
   <main id="world" aria-label="가로 120미터 세로 180미터 층고 5미터의 반도체 팹 3D 공간"></main>
-  <div class="loading" id="loading"><div class="loading-mark">F<span>·</span></div><p>넓은 세계를 여는 중</p><span>FAB OBSERVATORY</span></div>
+  <div class="loading" id="loading" role="status"><div class="loading-mark">F<span>·</span></div><p>넓은 세계를 여는 중</p><span>FAB OBSERVATORY</span><small data-loading-detail hidden></small><div class="loading-actions"><button type="button" data-loading-retry hidden>다시 연결</button><button type="button" data-loading-copy hidden>점검 결과 복사</button></div><textarea data-loading-result readonly hidden aria-label="게임 시작 점검 결과"></textarea></div>
   <section class="entry-overlay hidden" id="entry-overlay" aria-label="에어샤워 입장">
     <button class="entry-skip" id="entry-skip">건너뛰고 입장 <span aria-hidden="true">→</span></button>
     <div class="entry-caption"><div class="eyebrow">WELCOME TO THE CLEANROOM</div><h1 id="entry-title" aria-live="polite">에어샤워실에 오신 걸 환영해요.</h1><p id="entry-description">잠시 뒤 바람이 나옵니다.</p><div class="entry-progress" role="progressbar" aria-label="팹 입장 진행" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="entry-progress-fill"></span></div><div class="entry-steps"><span id="entry-step-air">01 에어샤워</span><span id="entry-step-door">02 자동문 열림</span><span id="entry-step-walk">03 FAB 입장</span></div></div>
@@ -78,6 +79,6 @@
   <aside class="view-label" aria-label="현재 위치"><span class="view-dot" aria-hidden="true"></span><div><strong id="view-title">중앙 통로</strong><span id="view-subtitle">FAB A · 직접 걷기</span></div></aside>
   <section class="help hidden" id="help" role="dialog" aria-label="조작 방법" tabindex="-1"><button id="help-close" class="panel-close" type="button" aria-label="도움말 닫기">×</button><div class="eyebrow">MAKE YOURSELF AT HOME</div><h2>천천히 둘러보세요.</h2><p><b>직접 걷기</b> 왼쪽 아래 조이스틱을 누른 채 밀면 이동하고, 손을 떼면 멈춰요. 화면을 다른 손으로 드래그하면 이동하면서 둘러볼 수 있어요. 두 손가락이나 마우스 휠로 거리를 조절하고, 메뉴에서 바닥 터치 이동으로 바꿀 수도 있어요.</p><p><b>자동 산책</b> 캐릭터가 긴 장비열과 중앙 통로를 따라 걸어갑니다.</p><p><b>OHT 시점</b> 실제 주행 차량을 따라 다른 구역을 봅니다. 메뉴의 ‘다음 OHT 따라보기’로 차량을 바꿀 수 있어요.</p><p><b>EMO</b> 장비의 빨간 버튼 주변을 누르면 조작창이 열려요. 창에서 ‘EMO 누르기’를 선택하면 캐릭터가 앞으로 걸어가 손으로 꾹 누릅니다. 누르기를 마치면 폭발과 붕괴 연출이 시작돼요. 이동하거나 관람 방식을 바꾸면 누르기가 취소됩니다. 메뉴의 ‘수리할 장비 선택’에서 한 대를 골라 수리할 수 있어요.</p><p><b>같이 놀기</b> 지나가는 빈 OHT를 누르면 장비를 딛고 점프해 타요. 아래의 내리기로 착지할 수 있습니다. FOUP을 누르면 집고, 빈 로드포트를 누르면 내려놓아요. 아래 버튼으로 던지면 1칩! 바닥에서 FOUP과 웨이퍼가 와르르 깨져요. 깨진 잔해를 누르면 큰 빗자루로 청소하고 2칩을 받아요. 움직이면 청소가 중단돼요. 앉거나 누워 쉴 수도 있어요.</p><p><b>상주 캐릭터</b> 놀이 캐릭터 30명과 안전팀 4명, 총 34명의 자동 캐릭터가 돌아다닙니다. 화면의 전체 인원에 포함되며, 실제 방문자는 최대 66명까지 함께 입장할 수 있어요.</p><p><b>전체 보기</b> 지붕을 걷어낸 팹을 위에서 봅니다. 드래그로 회전하고 두 손가락이나 휠로 확대합니다.</p><p>장비를 누르면 공정 설명을 볼 수 있어요. 지도와 장비 목록은 오른쪽 위 메뉴, 효과음과 공조음은 맨 위의 작은 버튼에서 조절해요.</p><small>앞쪽 작업 통로 5.2m · 뒤쪽 통로 1.4m · 장비 사이 틈 0.65m. 실제 특정 팹의 설계가 아닌 관람용 공간입니다.</small></section>
   <div class="error hidden" id="error" role="alert"></div>
-  <script type="module" src="/src/main.js"></script>
+  <script type="module" src="/src/startup.js" data-fab-entry="/src/main.js"></script>
 </body>
 </html>

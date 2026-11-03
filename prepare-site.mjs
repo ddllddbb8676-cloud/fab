@@ -1,12 +1,26 @@
 import { mkdir, readFile, writeFile, copyFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import {createHash} from 'node:crypto';
+import {build} from 'esbuild';
 const root = new URL('.', import.meta.url);
 const dist = new URL('./dist/', root);
 for (const dir of ['src/', 'docs/', 'vendor/nipplejs/', 'vendor/three/', 'vendor/addons/controls/', 'vendor/addons/environments/', 'vendor/addons/objects/', 'vendor/addons/lights/']) await mkdir(new URL(dir, dist), { recursive: true });
 let html = await readFile(new URL('index.html', root), 'utf8');
 html = html.replace('/node_modules/three/build/three.module.js', '/vendor/three/three.module.js').replace('/node_modules/three/examples/jsm/', '/vendor/addons/');
 html = html.replace('/node_modules/nipplejs/dist/index.mjs', '/vendor/nipplejs/index.mjs');
+// The loading screen and its failure handler arrive in the HTML itself. Fonts
+// load with media=print until ready, so they cannot block this first paint.
+for(const name of ['style.css','equipment-directory.css','wardrobe.css','nickname.css','chip-rewards.css']){
+  const css=await readFile(new URL('src/'+name,root),'utf8');
+  if(/@import\b/i.test(css))throw new Error('Startup CSS must not import blocking styles: '+name);
+  html=html.replace(`<link rel="stylesheet" href="/src/${name}">`,`<style data-source="${name}">${css}</style>`);
+}
+const bootstrap=await build({entryPoints:[fileURLToPath(new URL('src/startup.js',root))],bundle:true,format:'iife',platform:'browser',target:'safari15',write:false,minify:true,legalComments:'none'});
+const revision=createHash('sha256').update(await readFile(new URL('src/main.js',root))).digest('hex').slice(0,12);
+const startupCode=bootstrap.outputFiles[0].text.replace(/<\/script/gi,'<\\/script');
+html=html.replace('<script type="module" src="/src/startup.js" data-fab-entry="/src/main.js"></script>',`<script data-fab-entry="/src/main.js?v=${revision}">${startupCode}</script>`);
 await writeFile(new URL('index.html', dist), html);
+for(const name of ['startup.js','startup-controller.js','startup-signals.js','room-connection.js'])await copyFile(new URL('src/'+name,root),new URL('src/'+name,dist));
 for (const name of ['main.js', 'layout.js', 'transport.js', 'rail-network.js', 'network-transport.js', 'avatar.js', 'spatial-batch.js', 'walking.js', 'posture.js', 'foup-play.js', 'play-actions.js', 'visitor-name.js', 'explorer.js', 'view-controls.js', 'tour-route.js', 'transfer-view.js', 'runtime-obstacles.js', 'ambience.js', 'equipment-visibility.js', 'emo-controls.js', 'emo-interaction.js', 'equipment-destruction.js', 'air-shower.js', 'entry-sequence.js', 'equipment-catalog.js', 'equipment-labels.js', 'equipment-directory.js', 'equipment-directory.css', 'bay-lighting.js', 'style.css']) await copyFile(new URL('src/' + name, root), new URL('src/' + name, dist));
 await copyFile(new URL('src/residents.js', root), new URL('src/residents.js', dist));
 await copyFile(new URL('src/scene-depth.js', root), new URL('src/scene-depth.js', dist));

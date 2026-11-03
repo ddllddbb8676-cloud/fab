@@ -43,10 +43,16 @@ import {createLeaderboard} from './leaderboard.js';
 import {EMOTES,HEART_PATH,HEART_COLOR} from './emotes.js';
 import {createEmoteView} from './emote-view.js';
 import {safetyProximity} from './safety-proximity.js';
+import {startupStage,startupStep,startupFailure} from './startup-signals.js';
 
-const connectionConfig = await multiplayerConfiguration();
+startupStage('connection');
+const connectionConfig = await (window.__fabConnectionConfig||multiplayerConfiguration());
+delete window.__fabConnectionConfig;
+await startupStep('graphics');
 let multiplayer = null, sharedWorld = null, remotePeople = null, realVisitorCount = 0, totalCharacterCount = 0;
 const personalStats = { brokenCount: 0, repairedCount: 0 };
+let personalStatsLoaded=false;
+if(connectionConfig)for(const id of ['personal-broken','personal-repaired'])document.getElementById(id).textContent='…';
 let safetyPatrols = null, safetyPeople = null, safetyState = {role:'visitor',penalty:0}, safetyGrace = 12;
 const onlineLink = connectionConfig ? { get connected(){return Boolean(multiplayer?.connected);}, command:(...args)=>multiplayer?.command(...args)??Promise.resolve({ok:false,message:'팹에 연결 중이에요'}) } : null;
 
@@ -64,12 +70,12 @@ camera.rotation.order = 'YXZ';
 let renderer;
 try {
   renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-} catch {
-  $('loading').classList.add('done');
-  $('error').classList.remove('hidden');
-  $('error').textContent = '이 브라우저에서 3D 화면을 열 수 없어요. 하드웨어 가속을 켠 Chrome 또는 Edge에서 다시 열어주세요.';
-  throw new Error('WebGL initialization failed');
+} catch (error) {
+  throw new Error('3D 화면 초기화 실패: '+error.message);
 }
+let firstFrameDrawn=false;
+renderer.domElement.addEventListener('webglcontextlost',()=>{if(!firstFrameDrawn)startupFailure('3D 그래픽 연결이 중단됐어요. 다시 연결해 주세요.');});
+renderer.debug.onShaderError=()=>{if(!firstFrameDrawn)throw new Error('3D 화면의 셰이더를 준비하지 못했어요.');};
 const maxPixelRatio = Math.min(devicePixelRatio, mobile ? 1.25 : 1.5);
 let renderPixelRatio = maxPixelRatio;
 renderer.setPixelRatio(renderPixelRatio);
@@ -78,12 +84,14 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 $('world').appendChild(renderer.domElement);
+await startupStep('lighting');
 const pmrem = new THREE.PMREMGenerator(renderer);
 const envSource = new RoomEnvironment();
 const envTarget = pmrem.fromScene(envSource, .04);
 scene.environment = envTarget.texture;
 scene.environmentIntensity = .65;
 envSource.dispose(); pmrem.dispose();
+await startupStep('equipment');
 scene.add(new THREE.HemisphereLight('#effaff', '#8199a0', 1.65));
 const sun = new THREE.DirectionalLight('#ffffff', 2.1); sun.position.set(15, 30, 20); scene.add(sun);
 const fill = new THREE.DirectionalLight('#c0e4ff', .8); fill.position.set(-40, 10, -40); scene.add(fill);
@@ -285,7 +293,10 @@ function machine(layout, family) {
     cameraBounds: layout.walkBounds.map((bounds, i) => ({ ...bounds, minY: 0, maxY: i === 0 ? 3.4 : 1.45 })) });
   machinePositions.push({ x, z, family, equipment: equipmentById.get(index), index, sign, frontZ });
 }
-for (const layout of layoutMachines) { buildingMachineId = layout.id; machine(layout, families[layout.familyIndex]); }
+for (let i=0;i<layoutMachines.length;i++) {
+  const layout=layoutMachines[i];buildingMachineId = layout.id;machine(layout, families[layout.familyIndex]);
+  if((i+1)%60===0&&i+1<layoutMachines.length)await startupStep('equipment');
+}
 buildingMachineId = null;
 const equipmentLabels = createEquipmentLabels(THREE, layoutMachines, equipment, families); scene.add(equipmentLabels);
 for (const machine of layoutMachines) equipmentVisibility.register(machine.id, visible => equipmentLabels.setEquipmentVisible(machine.id, visible));
@@ -349,6 +360,7 @@ function movingFoup(parent) {
   for (let i = 0; i < 5; i++) for (const side of [-1, 1]) mesh(foup, boxGeometry, M.foupRib, side * .222, -.13 + i * .065, 0, .025, .024, .31);
   parent.add(foup); return foup;
 }
+await startupStep('transport');
 const fleet = createFleet(), vehicles = [];
 function createOHT(controller) {
   const root = new THREE.Group(); root.position.set(controller.state.car.x, VEHICLE_Y, controller.state.car.z); scene.add(root);
@@ -380,6 +392,7 @@ for (const batch of movingBatches.values()) {
 }
 
 // Static geometry is instanced by material so the huge hall stays lightweight.
+await startupStep('batches');
 let staticInstances = 0;
 for (const { geometry, material, transforms, owners, maxDistance, portIds } of batches.values()) {
   addSpatialBatch(scene, geometry, material, transforms, owners, maxDistance, portIds); staticInstances += transforms.length;
@@ -405,6 +418,7 @@ consolidate(roof); consolidate(walls); consolidate(scene);
 const orbit = new OrbitControls(camera, renderer.domElement);
 orbit.enabled = false; orbit.enableDamping = true; orbit.dampingFactor = .06;
 orbit.minDistance = 16; orbit.maxDistance = 700; orbit.maxPolarAngle = Math.PI * .46; orbit.target.set(0, 0, 0);
+await startupStep('people');
 const avatar = createAvatar(THREE); scene.add(avatar.root);
 const appearance=createAvatarAppearance(THREE,avatar);let currentWallet=null;
 const airShower = createAirShower(THREE); scene.add(airShower.root);
@@ -417,7 +431,7 @@ const entry = createEntrySequence({ reducedMotion });
 let mode = 'walk', elapsed = 0, lastTime = 0, currentZone = '', toastTimer, selectedEquipment = null, playActions = null;
 let nextRefreshReminder=performance.now()+15*60*1000,lastToastAt=-Infinity;
 const wardrobeNotice=createWardrobeNotice();
-const visitorBadge = createVisitorBadge(THREE, scene, createVisitorName(),{screenLabel:true});
+const visitorBadge = createVisitorBadge(THREE, scene, connectionConfig?'연결 중':createVisitorName(),{screenLabel:true});
 const chipRewardTracker=createChipRewardTracker(),destructionRewardTracker=createChipRewardTracker('earnedDestructionChips'),chipRewards=createChipRewardView(THREE,{reducedMotion});
 const destructionRewards=createDestructionRewardQueue(showChipReward);
 function showChipReward(amount){if(amount>0&&!document.hidden){chipRewards.show(amount);audio.playChipReward();}}
@@ -444,7 +458,8 @@ for(const emote of EMOTES){
 function toast(text,duration=3200) { lastToastAt=performance.now(); $('zone-toast').textContent = text; $('zone-toast').classList.add('visible'); clearTimeout(toastTimer); toastTimer = setTimeout(() => $('zone-toast').classList.remove('visible'), duration); }
 function updatePersonalStats(next) {
   const broken=next.brokenCount||0,repaired=next.repairedCount||0;
-  if(broken===personalStats.brokenCount&&repaired===personalStats.repairedCount)return;
+  if(personalStatsLoaded&&broken===personalStats.brokenCount&&repaired===personalStats.repairedCount)return;
+  personalStatsLoaded=true;
   personalStats.brokenCount=broken;personalStats.repairedCount=repaired;
   if(!connectionConfig)visitorBadge.setTitle(destructionTitle(broken)?.id);
   $('personal-broken').textContent=String(broken);$('personal-repaired').textContent=String(repaired);
@@ -462,6 +477,7 @@ function showMachine(item) {
   updateEmoCard();
   $('tool-card').classList.remove('hidden');
 }
+await startupStep('controls');
 const explorer = createExplorer({ THREE, camera, scene, canvas: renderer.domElement, avatar, orbit, colliders, vehicles,
   canTraverse:(a,b)=>!isSafety(safetyState.role)||canSafetyTraverse(a,b),
   isEquipmentVisible: id => equipmentVisibility.isVisible(id),
@@ -632,13 +648,15 @@ if(!connectionConfig)residents = createResidents({ THREE, scene, fleet, store: p
   excludedNames: [visitorBadge.name], onCue: motionCue,
   protectedIds: () => [explorer.state.emoInteraction?.id, explorer.state.repairInteraction?.id, playActions.protectedMachineId].filter(Number.isFinite) });
 else {
+  startupStage('room');
   remotePeople=createRemotePeople({THREE,scene,store:playActions.store,fleet,maxDetailed:mobile?32:48});
   sharedWorld=createSharedWorldView({fleet,store:playActions.store,destruction,onPeople:rows=>remotePeople.synchronize(rows),onCue:motionCue,onCount:(n,total)=>{realVisitorCount=n;totalCharacterCount=total;updateConnectionLabel();},onSelf:updateSafetyState});
-  multiplayer=createMultiplayer({config:connectionConfig,getPose:()=>({x:+explorer.state.position.x.toFixed(3),y:+explorer.state.position.y.toFixed(3),z:+explorer.state.position.z.toFixed(3),heading:+explorer.state.heading.toFixed(3),speed:+(explorer.state.speed||0).toFixed(2),posture:explorer.state.posture,hidden:entry.active||nicknameUI.isOpen}),
+  multiplayer=createMultiplayer({config:connectionConfig,prepared:window.__fabPreparedRoom,getPose:()=>({x:+explorer.state.position.x.toFixed(3),y:+explorer.state.position.y.toFixed(3),z:+explorer.state.position.z.toFixed(3),heading:+explorer.state.heading.toFixed(3),speed:+(explorer.state.speed||0).toFixed(2),posture:explorer.state.posture,hidden:entry.active||nicknameUI.isOpen}),
     onTitles:applyTitles,onNickname:applyNickname,onWallet:applyWallet,onWelcome:data=>{visitorEmote.reset();chipRewardTracker.reset(data.wallet);destructionRewardTracker.reset(data.wallet);clearChipRewards();sharedWorld.welcome(data.id);leaderboard.setSelf(data.id);visitorBadge.rename(data.name);if(data.resume){finishEntry();airShower.update(entry.state);explorer.state.path=[];explorer.state.position.set(data.resume.x,0,data.resume.z);explorer.state.heading=data.resume.heading;toast('이름과 기록을 이어서 접속했어요.');}$('nickname-admin').classList.toggle('hidden',!data.privileges?.unlimitedChips);applyNickname(data.nickname);},onRoster:rows=>{remotePeople.setRoster(rows);leaderboard.setRoster(rows);const self=rows.find(row=>row[0]===multiplayer?.id);if(self)visitorBadge.rename(self[1]);},onFrame:(frame,initial)=>{sharedWorld.apply(frame,initial);leaderboard.setPeople(frame.people);leaderboard.setRanking(frame.leaderboard);},onError:toast,
     onCatch:data=>toast(`${data.targetName}님을 잡았어요! 장비 3대를 고쳐야 합니다. (${data.caught??0} / ${SAFETY_CATCH_GOAL})${data.completed?` ${SAFETY_CATCH_GOAL}명 잡기 완료! 원래 방진복으로 돌아왔어요.`:''}`,5000),
     onStatus:status=>{updateConnectionLabel(status);wardrobe.refresh();nicknameUI.refresh();if(status==='reconnecting'){clearChipRewards();playActions.resetOnline();explorer.cancelEmo('disconnect');toast('연결이 끊겨 다시 접속하고 있어요');}}
   });
+  delete window.__fabPreparedRoom;
 }
 if(!connectionConfig) {
   safetyPatrols=createSafetyPatrols({excludedNames:[visitorBadge.name,...residents.state.people.map(p=>p.name)]});
@@ -980,7 +998,11 @@ function animate(now) {
     $('transfer-status').textContent = mode === 'transfer' ? (explorer.state.transferLabel || demo.state.label) : demo.state.label;
 
   }
+  if(!firstFrameDrawn){firstFrameDrawn=true;renderer.debug.onShaderError=null;startupStage('ready');}
 }
 window.addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
-startEntry(); requestAnimationFrame(animate);
-requestAnimationFrame(() => { $('loading').classList.add('done'); setTimeout(() => $('loading').remove(), 800); });
+// All declarations are ready before yielding: socket callbacks can now safely
+// restore the existing player while the first frame is being prepared.
+startEntry();
+await startupStep('render');
+requestAnimationFrame(animate);
