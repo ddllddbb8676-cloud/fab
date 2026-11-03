@@ -43,6 +43,7 @@ import {REST_AREAS,isRestArea,canSafetyTraverse,restAreaExit,SAFETY_CLEARANCE} f
 import {createRestAreaView} from './rest-area-view.js';
 import {createLeaderboard} from './leaderboard.js';
 import {EMOTES,HEART_PATH,HEART_COLOR} from './emotes.js';
+import {bindEmoteStrip} from './emote-strip.js';
 import {createEmoteView} from './emote-view.js';
 import {safetyProximity} from './safety-proximity.js';
 import {startupStage,startupStep,startupFailure} from './startup-signals.js';
@@ -458,6 +459,7 @@ for(const emote of EMOTES){
     }
   });$('emote-controls').append(button);
 }
+bindEmoteStrip($('emote-controls'));
 function toast(text,duration=3200) { lastToastAt=performance.now(); $('zone-toast').textContent = text; $('zone-toast').classList.add('visible'); clearTimeout(toastTimer); toastTimer = setTimeout(() => $('zone-toast').classList.remove('visible'), duration); }
 function updatePersonalStats(next) {
   const broken=next.brokenCount||0,repaired=next.repairedCount||0;

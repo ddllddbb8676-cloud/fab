@@ -6,11 +6,12 @@ import {actorFromPacket} from '../src/shared-protocol.js';
 import {EMOTES,EMOTE_SECONDS} from '../src/emotes.js';
 import {createEmoteView} from '../src/emote-view.js';
 
-test('ten validated emotes are shared, rate limited, expire and never alter saved scores',()=>{
+test('seventeen validated emotes are shared, rate limited, expire and never alter saved scores',()=>{
   const room=createRoom();room.join('a');const player=room.players.get('a');
   player.hidden=false;player.penalty=3;player.brokenCount=7;player.repairedCount=2;
   const walletBefore=structuredClone(player.wallet);
-  assert.equal(EMOTES.length,10);assert.equal(room.command('a','emote',{id:'<script>'}).ok,false);
+  assert.equal(EMOTES.length,17);assert.equal(new Set(EMOTES.map(e=>e.id)).size,17);assert.equal(new Set(EMOTES.map(e=>e.emoji)).size,17);
+  assert.deepEqual(EMOTES.slice(10).map(e=>e.emoji),['😆','😁','😪','❌','👻','💤','🤔']);assert.equal(room.command('a','emote',{id:'<script>'}).ok,false);
   for(const {id} of EMOTES){
     assert.equal(room.command('a','emote',{id}).ok,true,'penalized people can express emotion');
     const actor=actorFromPacket(room.snapshot(true).people.find(p=>p[0]==='a'));

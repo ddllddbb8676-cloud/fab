@@ -34,7 +34,7 @@ for (const name of ['locomotion.js', 'touch-joystick.js', 'avatar-nameplate.js',
 await copyFile(new URL('node_modules/nipplejs/dist/index.mjs', root), new URL('vendor/nipplejs/index.mjs', dist));
 // The npm 1.0.4 tarball omits LICENSE; preserve the notice from its release tag.
 await copyFile(new URL('docs/licenses/nipplejs.txt', root), new URL('vendor/nipplejs/LICENSE.txt', dist));
-for(const name of ['emotes.js','emote-view.js','safety-proximity.js','npc-navigation.js']) await copyFile(new URL('src/'+name,root),new URL('src/'+name,dist));
+for(const name of ['emotes.js','emote-view.js','emote-strip.js','safety-proximity.js','npc-navigation.js']) await copyFile(new URL('src/'+name,root),new URL('src/'+name,dist));
 for(const name of ['room-population.js','safety-team.js','rest-area.js','rest-area-view.js','leaderboard.js','multiplayer.js','shared-protocol.js','shared-world-view.js','remote-people.js']) await copyFile(new URL('src/'+name,root),new URL('src/'+name,dist));
 for (const name of ['three.module.js', 'three.core.js']) await copyFile(new URL('node_modules/three/build/' + name, root), new URL('vendor/three/' + name, dist));
 for (const name of ['controls/OrbitControls.js', 'environments/RoomEnvironment.js', 'objects/Reflector.js', 'lights/RectAreaLightUniformsLib.js', 'lights/RectAreaLightTexturesLib.js']) await copyFile(new URL('node_modules/three/examples/jsm/' + name, root), new URL('vendor/addons/' + name, dist));
