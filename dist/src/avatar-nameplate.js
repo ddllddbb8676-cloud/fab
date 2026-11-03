@@ -2,7 +2,7 @@ import {findTitle} from './destruction-titles.js';
 // A transparent, camera-facing name that clears the visible head and headwear.
 export function createAvatarNameplate(THREE, scene, name, { resident = false, screenLabel = false } = {}) {
   const canvas = document.createElement('canvas'); canvas.width = 512; canvas.height = 96;
-  const context = canvas.getContext('2d');let title=null,texture=makeTexture();
+  const context = canvas.getContext('2d');let title=null,npcMarker=false,texture=makeTexture();
   function makeTexture(){const value=new THREE.CanvasTexture(canvas);value.colorSpace=THREE.SRGBColorSpace;value.minFilter=THREE.LinearFilter;value.generateMipmaps=false;return value;}
   const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: resident, depthWrite: false, toneMapped: false, fog: false });
   const sprite = new THREE.Sprite(material); sprite.name = 'visitor-nickname'; sprite.renderOrder = 20;
@@ -11,21 +11,28 @@ export function createAvatarNameplate(THREE, scene, name, { resident = false, sc
   const label=screenLabel?document.createElement('span'):null;let visible=false;
   if(label){label.className='visitor-nickname-label';label.hidden=true;label.setAttribute('aria-hidden','true');document.body.append(label);}
   function rename(next) {
-    name = next;const band=title?80:0;
-    if(canvas.height!==96+band){canvas.height=96+band;texture.dispose();texture=makeTexture();material.map=texture;material.needsUpdate=true;}
-    context.clearRect(0, 0, 512, canvas.height);
+    name = next;const band=title?80:0,width=npcMarker?768:512;
+    if(canvas.height!==96+band||canvas.width!==width){canvas.width=width;canvas.height=96+band;texture.dispose();texture=makeTexture();material.map=texture;material.needsUpdate=true;}
+    context.clearRect(0, 0, canvas.width, canvas.height);
     if(label){label.textContent=name;label.setAttribute('data-title',title?`〈${title.name}〉`:'');label.style.setProperty('--title-color',title?.color||'#204e55');}
     context.textAlign = 'center'; context.textBaseline = 'middle';
     context.lineJoin = 'round'; context.lineWidth = 5; context.strokeStyle = '#f4fbf8';
-    if(title){context.font='700 38px "Noto Sans KR", system-ui, sans-serif';context.strokeText(`〈${title.name}〉`,256,36,480);context.fillStyle=title.color;context.fillText(`〈${title.name}〉`,256,36,480);}
+    if(title){context.font='700 38px "Noto Sans KR", system-ui, sans-serif';context.strokeText(`〈${title.name}〉`,width/2,36,480);context.fillStyle=title.color;context.fillText(`〈${title.name}〉`,width/2,36,480);}
     context.font = '700 48px "Noto Sans KR", system-ui, sans-serif';
-    context.strokeText(name, 256, 48+band, 480);
-    context.fillStyle = '#204e55'; context.fillText(name, 256, 48+band, 480);
+    context.strokeText(name, width/2, 48+band, 480);
+    context.fillStyle = '#204e55'; context.fillText(name, width/2, 48+band, 480);
+    if(npcMarker){
+      // Extra transparent space keeps the name/title centered at their original size.
+      const x=width/2+Math.min(480,context.measureText(name).width)/2+12;
+      context.beginPath();context.roundRect(x,24+band,100,48,12);context.fillStyle='#e1ebf5';context.fill();
+      context.font='700 32px system-ui, sans-serif';context.fillStyle='#315c84';context.fillText('NPC',x+50,49+band,88);
+    }
     texture.needsUpdate = true;
   }
   rename(name);
   return { rename, sprite,
     setTitle(id){const next=findTitle(id);if(next===title)return;title=next;rename(name);},
+    setNpcMarker(enabled){const next=enabled===true&&!label;if(next===npcMarker)return;npcMarker=next;rename(name);},
     update(avatar, posture, { headwear = [], camera = null, viewportHeight = globalThis.innerHeight||844 } = {}) {
       visible=avatar.root.visible;sprite.visible=visible&&!label;
       const hood = avatar.root.getObjectByName('hood');
@@ -41,7 +48,7 @@ export function createAvatarNameplate(THREE, scene, name, { resident = false, sc
         height=Math.min(36*perPixel,Math.max(.18,28*perPixel));
         sprite.position.y=Math.min(4.8,sprite.position.y+Math.max(0,(height-.18)/2));
       }
-      sprite.scale.set(height*512/96,height*canvas.height/96,1);
+      sprite.scale.set(height*canvas.width/96,height*canvas.height/96,1);
       // Keep the nickname's original size and anchor; the title extends upward.
       if(title&&!label)sprite.position.y+=height*80/96/2;
     },

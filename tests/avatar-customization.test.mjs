@@ -90,3 +90,25 @@ test('self title uses separate colored text above the nickname, follows hiding a
     globalThis.document.hidden=true;badge.updateScreen(camera);assert.equal(labels[0].hidden,true);
   }finally{badge.dispose();avatar.dispose();globalThis.document=old.document;globalThis.innerWidth=old.width;globalThis.innerHeight=old.height;}
 });
+
+test('NPC markers fit beside short and long names without shifting centered titles or reducing readable glyph size',()=>{
+  const old=globalThis.document,draws=[],pills=[];
+  globalThis.document={createElement:()=>({getContext:()=>({clearRect(){draws.length=0;pills.length=0;},strokeText(){},measureText:text=>({width:text.length*48}),beginPath(){},roundRect(x,y,width,height){pills.push({x,y,width,height});},fill(){},fillText(text,x,y,maxWidth){draws.push({text,x,y,maxWidth,color:this.fillStyle});}})})};
+  const scene=new THREE.Scene(),avatar=createAvatar(THREE),badge=createAvatarNameplate(THREE,scene,'칩',{resident:true}),camera=new THREE.PerspectiveCamera(64,390/844,.08,420);scene.add(avatar.root);
+  try{
+    for(const name of ['칩','반짝이는웨이퍼','long-name-overflow'])for(const title of ['', 'break-100'])for(const distance of [4,18]){
+      camera.position.set(0,1.6,distance);camera.lookAt(0,1.6,0);camera.updateMatrixWorld();
+      badge.setNpcMarker(false);badge.rename(name);badge.setTitle(title);badge.update(avatar,'stand',{camera,viewportHeight:844});
+      const position=badge.sprite.position.clone(),scale=badge.sprite.scale.clone();
+      badge.setNpcMarker(true);badge.update(avatar,'stand',{camera,viewportHeight:844});
+      const canvas=badge.sprite.material.map.image,nameDraw=draws.find(d=>d.text===name),marker=draws.find(d=>d.text==='NPC'),pill=pills[0];
+      assert.deepEqual(badge.sprite.position,position,'headwear/name/title anchors stay centered');
+      assert.equal(badge.sprite.scale.y,scale.y);assert.ok(Math.abs(badge.sprite.scale.x/canvas.width-scale.x/512)<1e-12,'nickname and title pixels stay unchanged');
+      assert.equal(nameDraw.x,canvas.width/2);if(title)assert.equal(draws[0].x,nameDraw.x);
+      assert.ok(pill.x>nameDraw.x+Math.min(480,name.length*48)/2);assert.ok(pill.x+pill.width<canvas.width,'marker remains inside the texture');
+      assert.equal(marker.color,'#315c84');assert.equal(badge.sprite.material.depthTest,true,'NPC badge follows ordinary equipment occlusion');
+      const texture=badge.sprite.material.map;badge.setNpcMarker(true);assert.equal(badge.sprite.material.map,texture,'stable markers do not allocate every frame');
+    }
+    badge.setNpcMarker(false);assert.equal(badge.sprite.material.map.image.width,512);assert.ok(!draws.some(d=>d.text==='NPC'));
+  }finally{badge.dispose();avatar.dispose();globalThis.document=old;}
+});

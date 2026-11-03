@@ -11,6 +11,9 @@ import {npcDestructionTitle} from './destruction-titles.js';
 
 // A shared pool of articulated bodies; distant visitors use two tiny instances.
 export function createRemotePeople({THREE,scene,store,fleet=null,maxDetailed=40}) {
+  // Only the server's welcome privilege enables this local viewing aid.
+  // Neither display names, titles nor safety-team roles establish ownership.
+  let identifyNpcs=false;
   const actors=new Map(),roster=new Map(),pool=[],groups=new Map(),zero=new THREE.Matrix4().makeScale(0,0,0),dummy=new THREE.Object3D();
   const softMaterial=new THREE.MeshStandardMaterial({color:'#c8dbdf',roughness:.8});
   const tint=new THREE.Color(),white=new THREE.Color('#ffffff');
@@ -25,6 +28,8 @@ export function createRemotePeople({THREE,scene,store,fleet=null,maxDetailed=40}
     pool.push(slot);return slot;
   }
   function setRoster(rows){roster.clear();for(const [id,name,role,outfit]of rows)roster.set(id,{name,role,outfit});for(const a of actors.values())Object.assign(a,roster.get(a.id));}
+  function updateNpcMarker(slot){slot.badge.setNpcMarker(identifyNpcs&&/^(resident|safety):\d+$/.test(slot.actor?.id??''));}
+  function setViewerPrivileges(privileges){identifyNpcs=privileges?.unlimitedChips===true;for(const slot of pool)updateNpcMarker(slot);}
   function synchronize(rows) {
     const live=new Set(rows.map(r=>r.id));for(const id of actors.keys())if(!live.has(id))actors.delete(id);
     for(const row of rows){let a=actors.get(row.id);if(!a){a={...row,...roster.get(row.id)};actors.set(row.id,a);}a.goal=row;Object.assign(a,{role:row.role,phase:row.phase,posture:row.posture,targetId:row.targetId,vehicleId:row.vehicleId,carrying:row.carrying,hidden:row.hidden,titleId:row.titleId??npcDestructionTitle(row.id,row.role)?.id??''});}
@@ -52,7 +57,7 @@ export function createRemotePeople({THREE,scene,store,fleet=null,maxDetailed=40}
     }
     const labelled=new Set(detailed.slice(0,10).map(a=>a.id));
     for(let i=0;i<pool.length;i++) {
-      const slot=pool[i],a=slot.actor;slot.badge.sprite.visible=false;slot.emote.sprite.visible=false;if(!a){slot.emote.set('');slot.appearance.update(false);continue;}
+      const slot=pool[i],a=slot.actor;slot.badge.sprite.visible=false;slot.emote.sprite.visible=false;updateNpcMarker(slot);if(!a){slot.emote.set('');slot.appearance.update(false);continue;}
       slot.appearance.setOutfit(a.outfit,a.role);
       if(slot.badge.name!==a.name)slot.badge.rename(a.name??'방문자');
       slot.badge.setTitle(a.titleId);
@@ -79,6 +84,6 @@ export function createRemotePeople({THREE,scene,store,fleet=null,maxDetailed=40}
     }
     proxy.count=n;if(n){proxy.instanceMatrix.needsUpdate=true;proxy.instanceColor.needsUpdate=true;}
   }
-  return {setRoster,synchronize,update,get safetyActors(){return [...actors.values()].filter(a=>a.role==='safety-red'||a.role==='safety-orange');},get state(){return {total:actors.size,details:pool.filter(p=>p.actor).length,people:[...actors.values()].map(a=>({id:a.id,name:a.name,role:a.role,x:a.x,y:a.y,z:a.z,phase:a.phase,posture:a.posture}))};},
+  return {setRoster,synchronize,setViewerPrivileges,update,get safetyActors(){return [...actors.values()].filter(a=>a.role==='safety-red'||a.role==='safety-orange');},get state(){return {total:actors.size,details:pool.filter(p=>p.actor).length,people:[...actors.values()].map(a=>({id:a.id,name:a.name,role:a.role,x:a.x,y:a.y,z:a.z,phase:a.phase,posture:a.posture}))};},
     dispose(){for(const g of groups.values()){g.instance.removeFromParent();g.instance.dispose();}for(const s of pool){s.badge.dispose();s.emote.dispose();s.appearance.dispose();s.avatar.dispose();}proxy.removeFromParent();proxy.dispose();ball.dispose();softMaterial.dispose();}};
 }
