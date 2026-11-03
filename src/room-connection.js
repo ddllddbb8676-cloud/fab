@@ -1,17 +1,15 @@
-import {PROTOCOL} from './shared-protocol.js';
+import {createRoomChannel,roomSocketURL} from './room-channel.js';
+export {roomSocketURL} from './room-channel.js';
 export const WELCOME_TIMEOUT_MS=8000;
-export function roomSocketURL(config,base=location.href){
-  const url=new URL(config.ws,base);url.protocol=url.protocol==='https:'?'wss:':'ws:';url.searchParams.set('v',String(PROTOCOL));return url;
-}
 
 // Start the same cookie-authenticated room connection before 3D construction.
 // Until the scene is ready, keep ordered messages in memory, with strict limits.
 // If loading fails or takes too long, release the connection and let the normal
 // client open a fresh socket/full snapshot. No credentials or profiles are saved.
-export function prepareRoomConnection(config,{Socket=globalThis.WebSocket,base=location.href,
+export function prepareRoomConnection(config,{Socket,base=location.href,
   schedule=setTimeout,cancel=clearTimeout,enqueue=queueMicrotask,now=()=>performance.now(),lifecycle=globalThis.window}={}){
   if(!config)return null;
-  let socket;try{socket=new Socket(roomSocketURL(config,base));}catch{return null;}
+  let socket;try{socket=Socket?new Socket(roomSocketURL(config,base)):createRoomChannel(config,base);}catch{return null;}
   const started=now(),listeners=new Map();let queue=[],bytes=0,used=false,active=false,expired=false,receivedWelcome=false;
   function expire(){if(active||expired)return;expired=true;queue=[];bytes=0;cancel(timer);cancel(welcomeTimer);lifecycle?.removeEventListener('pagehide',expire);try{socket.close();}catch{}}
   const timer=schedule(expire,20000),welcomeTimer=schedule(()=>{if(!receivedWelcome)expire();},WELCOME_TIMEOUT_MS);
@@ -39,6 +37,7 @@ export function prepareRoomConnection(config,{Socket=globalThis.WebSocket,base=l
   });
   const proxy={
     get readyState(){return socket.readyState;},
+    get transport(){return socket.transport??'websocket';},
     get welcomeTimeout(){return receivedWelcome?WELCOME_TIMEOUT_MS:Math.max(250,WELCOME_TIMEOUT_MS-(now()-started));},
     addEventListener(type,listener){if(!listeners.has(type))listeners.set(type,new Set());listeners.get(type).add(listener);},
     send(data){socket.send(data);},close(){socket.close();},

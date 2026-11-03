@@ -1,12 +1,9 @@
-import { PROTOCOL } from './shared-protocol.js?v=e86319ae060b';
-import {roomSocketURL,WELCOME_TIMEOUT_MS} from './room-connection.js?v=e86319ae060b';
-export {WELCOME_TIMEOUT_MS} from './room-connection.js?v=e86319ae060b';
+import { PROTOCOL } from './shared-protocol.js?v=0ce5f1ac6b3a';
+import {WELCOME_TIMEOUT_MS} from './room-connection.js?v=0ce5f1ac6b3a';
+import {createRoomChannel} from './room-channel.js?v=0ce5f1ac6b3a';
+export {multiplayerConfiguration} from './room-config.js?v=0ce5f1ac6b3a';
+export {WELCOME_TIMEOUT_MS} from './room-connection.js?v=0ce5f1ac6b3a';
 
-export async function multiplayerConfiguration() {
-  try {const r=await fetch('/api/config',{cache:'no-store',signal:AbortSignal.timeout(4000)});if(r.ok){const c=await r.json();if(c.multiplayer)return c;}}
-  catch{}
-  return location.hostname==='fab.semitoon.com'?{multiplayer:true,protocol:PROTOCOL,ws:'/api/room'}:null;
-}
 export function createMultiplayer({config,prepared=null,getPose,onWelcome,onFrame,onRoster,onStatus,onError,onCatch,onWallet,onNickname,onTitles}) {
   let socket=null,status='connecting',id=null,seq=0,retry=0,closed=false,suspended=false,lastPose='',lastSent=0,connection=0,retryTimer=null,handshakeTimer=null;
   const pending=new Map();
@@ -18,9 +15,8 @@ export function createMultiplayer({config,prepared=null,getPose,onWelcome,onFram
   function retireSocket(){++connection;clearHandshake();clearTimeout(retryTimer);clearPending();const previous=socket;socket=null;try{previous?.close();}catch{}}
   function connect() {
     if(closed||suspended)return;clearTimeout(retryTimer);clearHandshake();const generation=++connection;
-    const url=roomSocketURL(config);
     setStatus('connecting');
-    try{socket=prepared?.take()||new WebSocket(url);prepared=null;}catch{setStatus('reconnecting');reconnect();return;}
+    try{socket=prepared?.take()||createRoomChannel(config);prepared=null;}catch{setStatus('reconnecting');reconnect();return;}
     const openingSocket=socket;
     handshakeTimer=setTimeout(()=>{
       if(closed||generation!==connection||status==='connected')return;
@@ -84,7 +80,7 @@ export function createMultiplayer({config,prepared=null,getPose,onWelcome,onFram
   const hide=()=>{if(closed||['version','replaced','resetting'].includes(status))return;suspended=true;retireSocket();setStatus('suspended');};
   const show=()=>{if(!suspended||closed)return;suspended=false;connect();};
   globalThis.window?.addEventListener('pagehide',hide);globalThis.window?.addEventListener('pageshow',show);
-  return {command,sendPose,update:sendPose,get id(){return id;},get connected(){return status==='connected';},get status(){return status;},
+  return {command,sendPose,update:sendPose,get id(){return id;},get connected(){return status==='connected';},get status(){return status;},get transport(){return socket?.transport??'websocket';},
     async resetProfile(){const r=await fetch('/api/session/reset',{method:'POST',credentials:'same-origin'});if(!r.ok)throw new Error('초기화하지 못했어요. 잠시 후 다시 눌러주세요.');this.dispose();},
     dispose(){closed=true;clearInterval(heartbeat);document.removeEventListener('visibilitychange',visible);globalThis.window?.removeEventListener('pagehide',hide);globalThis.window?.removeEventListener('pageshow',show);prepared?.dispose();retireSocket();}};
 }
