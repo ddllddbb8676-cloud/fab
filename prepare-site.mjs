@@ -4,6 +4,13 @@ const root = new URL('.', import.meta.url);
 const dist = new URL('./dist/', root);
 for (const dir of ['src/', 'docs/', 'vendor/nipplejs/', 'vendor/three/', 'vendor/addons/controls/', 'vendor/addons/environments/', 'vendor/addons/objects/', 'vendor/addons/lights/']) await mkdir(new URL(dir, dist), { recursive: true });
 let html = await readFile(new URL('index.html', root), 'utf8');
+// The first screen must not wait for stylesheet requests in mobile webviews.
+// Keep each sheet in its original cascade order and use device fonts only.
+for (const match of [...html.matchAll(/<link rel="stylesheet" href="(\/src\/[^"<>]+\.css)">/g)]) {
+  const css = await readFile(new URL('.' + match[1], root), 'utf8');
+  if (/@import\b|https?:\/\//i.test(css)) throw new Error('Startup styles must not request external resources: ' + match[1]);
+  html = html.replace(match[0], `<style data-fab-stylesheet="${match[1]}">\n${css}\n</style>`);
+}
 html = html.replace('/node_modules/three/build/three.module.js', '/vendor/three/three.module.js').replace('/node_modules/three/examples/jsm/', '/vendor/addons/');
 html = html.replace('/node_modules/nipplejs/dist/index.mjs', '/vendor/nipplejs/index.mjs');
 await writeFile(new URL('index.html', dist), html);
