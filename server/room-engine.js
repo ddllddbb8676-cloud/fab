@@ -20,14 +20,15 @@ import {isRestArea,canSafetyTraverse,restAreaExit,SAFETY_CLEARANCE} from '../src
 
 const distance=(a,b)=>Math.hypot(a.x-b.x,a.z-b.z);
 const finite=(n,a,b)=>Number.isFinite(n)&&n>=a&&n<=b;
-export const SAFETY_DUTY={warmup:60,handover:15,cooldown:90,goal:SAFETY_CATCH_GOAL};
+export const SAFETY_DUTY={warmup:300,handover:15,cooldown:600,goal:SAFETY_CATCH_GOAL};
+const SAFETY_DUTY_VERSION=2,LEGACY_SAFETY_COOLDOWN=90;
 export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()=>{},onRosterChange=()=>{},getHistoricalScores=()=>[],onEquipmentChange=()=>{},onFoupChange=()=>{},claimName=(id,kind,preferred,excluded)=>(kind==='safety'?createSafetyName:createVisitorName)(random,excluded,preferred),now=Date.now,nicknameAvailable=null,replaceNickname=null,ownerId=''}={}) {
   ownerId=configuredOwnerId(ownerId);
   const players=new Map(), broken=new Map(), leases=new Map(), events=[], foupVersions=new Map();
   const fleet=createFleet(), byPort=new Map(ports.map(p=>[p.id,p]));
   let time=0, revision=0,joinOrder=0,nextSafetyAt=SAFETY_DUTY.handover,dutyColor=0,lastRanking='';
   function profile(p){return {id:p.id,name:p.name,civilianName:p.civilianName,safetyName:p.safetyName,role:p.role,brokenCount:p.brokenCount,repairedCount:p.repairedCount,penalty:p.penalty,
-    titlePreference:p.titlePreference,nicknameChoiceVersion:p.nicknameChoiceVersion,nicknameChoiceKind:p.nicknameChoiceKind,wallet:structuredClone(p.wallet),activeSeconds:p.activeSeconds,safetyTurns:p.safetyTurns,safetyCaughtIds:[...p.safetyCaughtIds],eligibleAfter:p.eligibleAfter,optOut:p.optOut,hasEntered:p.hasEntered,groundPosition:p.groundPosition,...(p.chipUnlimited?{chipUnlimited:true}:{})};}
+    titlePreference:p.titlePreference,nicknameChoiceVersion:p.nicknameChoiceVersion,nicknameChoiceKind:p.nicknameChoiceKind,wallet:structuredClone(p.wallet),activeSeconds:p.activeSeconds,safetyTurns:p.safetyTurns,safetyCaughtIds:[...p.safetyCaughtIds],eligibleAfter:p.eligibleAfter,safetyDutyVersion:SAFETY_DUTY_VERSION,optOut:p.optOut,hasEntered:p.hasEntered,groundPosition:p.groundPosition,...(p.chipUnlimited?{chipUnlimited:true}:{})};}
   function changed(p){p.lastSavedAt=time;onProfileChange(profile(p));}
   function rosterChanged(){revision++;onRosterChange();}
   function emit(kind,point) { if(events.length<100) events.push([kind,round(point.x),round(point.z)]); }
@@ -118,8 +119,12 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
     const caught=new Set(saved?.safetyCaughtIds??[]);
     const role=isSafety(saved?.role)&&caught.size<SAFETY_DUTY.goal&&![...players.values()].some(p=>isSafety(p.role))?saved.role:'visitor';
     const safetyName=(saved?.safetyName||isSafety(saved?.role))?claimName(id,'safety',saved?.safetyName||saved?.name,excluded,random):undefined;
+    // Deadlines use accumulated play time, not wall time. Convert the old
+    // 90-second deadline once; reconnects must neither erase nor restart rest.
+    let eligibleAfter=saved?.eligibleAfter||0;
+    if(eligibleAfter>0&&(saved?.safetyDutyVersion||0)<SAFETY_DUTY_VERSION)eligibleAfter+=SAFETY_DUTY.cooldown-LEGACY_SAFETY_COOLDOWN;
     const p={id,name:role==='visitor'?civilianName:safetyName,civilianName,safetyName,role,penalty:saved?.penalty||0,safeUntil:time+12,x:0,y:0,z:78.8,heading:Math.PI,speed:0,posture:'stand',phase:'idle',time:0,hidden:true,lastSeen:time,rate:0,rateAt:time,
-      activeSeconds:saved?.activeSeconds||0,safetyTurns:saved?.safetyTurns||0,safetyCaughtIds:caught,eligibleAfter:saved?.eligibleAfter||0,optOut:saved?.optOut||false,joinOrder:joinOrder++,assignAfter:time+SAFETY_DUTY.handover,hasEntered:saved?.hasEntered||false,groundPosition:saved?.groundPosition??null,lastSavedAt:time};
+      activeSeconds:saved?.activeSeconds||0,safetyTurns:saved?.safetyTurns||0,safetyCaughtIds:caught,eligibleAfter,optOut:saved?.optOut||false,joinOrder:joinOrder++,assignAfter:time+SAFETY_DUTY.handover,hasEntered:saved?.hasEntered||false,groundPosition:saved?.groundPosition??null,lastSavedAt:time};
     p.brokenCount=saved?.brokenCount||0;p.repairedCount=saved?.repairedCount||0;
     p.titlePreference=restoreTitlePreference(saved?.titlePreference,p.brokenCount);
     p.chipUnlimited=hasUnlimitedChips(id,ownerId);p.nicknameChoiceVersion=p.chipUnlimited?NICKNAME_CHOICE_VERSION:(saved?.nicknameChoiceVersion||0);p.nicknameChoiceKind=saved?.nicknameChoiceKind||(saved?'existing':'new');p.wallet=restoreWallet(saved||{});p.rideSeconds=0;

@@ -26,7 +26,7 @@ test('three distinct captures including NPCs end one duty and hand over later wi
 
 test('entry area, hidden visitors, penalties, repair, OHT and held cargo are never chosen for duty',()=>{
   for(const override of [{x:0,z:78.8},{hidden:true},{penalty:3},{phase:'repair'},{phase:'riding'},{phase:'climb'},{phase:'approach'},{carrying:true},{posture:'sit'},{posture:'lie'}]) {
-    const r=createRoom();quiet(r);const p=enter(r,'a');p.activeSeconds=100;Object.assign(p,override);
+    const r=createRoom();quiet(r);const p=enter(r,'a');p.activeSeconds=SAFETY_DUTY.warmup;Object.assign(p,override);
     if(override.carrying){const cargo=[...r.store.records.values()].find(c=>c.mode==='port');r.store.pickup(cargo.id,p.id);}
     for(let i=0;i<310;i++){p.lastSeen=r.time;r.step(.05);}
     assert.equal(p.role,'visitor',JSON.stringify(override));
@@ -48,7 +48,7 @@ test('refresh resumes an existing safety duty and progress without creating a se
   // The Worker reserves saved aliases before NPCs on restart. Independent random
   // rooms can otherwise assign a returning visitor's name to a new NPC first.
   const names=createNicknameRegistry(),makeRoom=()=>{const room=createRoom({claimName:(...args)=>names.claim(...args)});for(const npc of [...room.residents.people,...room.safety.people])npc.name=names.claim(npc.id,isSafety(npc.role)?'safety':'visitor',npc.name);return room;};
-  const r=makeRoom();quiet(r);const p=enter(r,'visitor:a',40);wait(r,61);
+  const r=makeRoom();quiet(r);const p=enter(r,'visitor:a',40);wait(r,SAFETY_DUTY.warmup+1);
   assert.equal(isSafety(p.role),true);p.safetyCaughtIds.add('resident:1');p.safetyCaughtIds.add('resident:2');
   const saved=r.profile(p.id),next=makeRoom();next.join(p.id,saved);
   assert.equal(next.players.get(p.id).name,p.name);assert.equal(next.players.get(p.id).safetyCaughtIds.size,2);

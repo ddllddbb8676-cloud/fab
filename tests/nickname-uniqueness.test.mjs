@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {VISITOR_NAMES,createVisitorName,createUniqueNickname,nicknameKey,validNickname} from '../src/visitor-name.js';
 import {createSafetyName,isSafety} from '../src/safety-team.js';
 import {createProfileStore} from '../server/player-profiles.js';
-import {createRoom} from '../server/room-engine.js';
+import {createRoom,SAFETY_DUTY} from '../server/room-engine.js';
 
 function disk(profiles=[]){
   const data=new Map(profiles.map(p=>['profile:'+p.id,structuredClone(p)])),batches=[];
@@ -69,7 +69,7 @@ test('safety duty keeps its own reserved alias and returning civilian restores t
   const storage=disk(),store=createProfileStore(storage);await store.loadRanking();const room=roomWith(store);
   room.join('visitor:guard');const p=room.players.get('visitor:guard'),civilian=p.name;
   for(const n of room.residents.people){n.hidden=true;n.wait=1e9;}for(const g of room.safety.people)g.hidden=true;
-  room.pose(p.id,{x:0,y:0,z:50,heading:0,hidden:false,posture:'stand'});p.activeSeconds=100;
+  room.pose(p.id,{x:0,y:0,z:50,heading:0,hidden:false,posture:'stand'});p.activeSeconds=SAFETY_DUTY.warmup;
   for(let i=0;i<310;i++){p.lastSeen=room.time;room.step(.05);}
   assert.ok(isSafety(p.role));const safety=p.name;unique(room.roster().map(r=>r[1]));room.remove(p.id);await store.flush();
   const store2=createProfileStore(storage);await store2.loadRanking();const next=roomWith(store2);next.join(p.id,await store2.get(p.id));

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { createRoom } from '../server/room-engine.js';
+import { createRoom, SAFETY_DUTY } from '../server/room-engine.js';
 import { canCatch, createSafetyPatrols, isSafety } from '../src/safety-team.js';
 import { machines, bays, isBlocked } from '../src/layout.js';
 import { getEmoApproach } from '../src/emo-interaction.js';
@@ -36,7 +36,7 @@ test('every new visitor enters as a civilian; safety duty starts later inside th
   for(const g of r.safety.people)g.hidden=true;
   const a=r.players.get('p0'),b=r.players.get('p1');
   move(r,a.id,{x:0,z:60});move(r,b.id,{x:0,z:30});
-  for(let n=0;n<1199;n++){if(n%100===0)for(const p of r.players.values())r.pose(p.id,{...p});r.step(.05);}
+  for(let n=0;n<SAFETY_DUTY.warmup*20-1;n++){if(n%100===0)for(const p of r.players.values())r.pose(p.id,{...p});r.step(.05);}
   assert.ok([...r.players.values()].every(p=>p.role==='visitor'));
   tick(r,.2);assert.equal(a.role,'safety-orange');assert.equal(b.role,'visitor');
   assert.equal(a.z,60);assert.equal(a.x,0);assert.match(a.name,/安全|안전팀$/u);
