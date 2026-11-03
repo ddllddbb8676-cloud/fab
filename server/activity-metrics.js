@@ -107,9 +107,13 @@ export function createActivityMetrics({now=Date.now,excludedIds=[]}={}) {
       active.set(fingerprint(id),Math.max(last,now()));return true;
     },
     snapshot() {
-      const t=advance(),today=bucket('day',dayStart(t));
+      const t=advance(),today=bucket('day',dayStart(t)),started=Date.parse(startedAt);
       return {startedAt,live:{connectedAccounts:connected.size,activeAccounts5m:[...active.keys()].filter(id=>connected.has(id)).length},
         today:{date:dayLabel(t),...publicBucket(today)},
+        // A daily unique count comes from its own deduplicated bucket. Missing
+        // days stay absent; hourly counts cannot reconstruct daily membership.
+        daily:[...buckets.values()].filter(b=>b.kind==='day'&&b.start>=today.start-RETENTION+DAY&&b.start<=today.start).sort((a,b)=>a.start-b.start)
+          .map(b=>({date:dayLabel(b.start),...publicBucket(b),partial:b.start===dayStart(started)&&started>b.start,ongoing:b.start===today.start})),
         hourly:[...buckets.values()].filter(b=>b.kind==='hour').sort((a,b)=>a.start-b.start).map(b=>({hour:new Date(b.start).toISOString(),...publicBucket(b)}))};
     },
     flush(storage) {
