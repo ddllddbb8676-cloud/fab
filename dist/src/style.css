@@ -1,5 +1,7 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;600;700&display=swap');
+
 :root {
-  font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+  font-family: 'DM Sans', 'Noto Sans KR', sans-serif;
   font-synthesis: none;
   color: #294b53;
   --ink: #294b53;
