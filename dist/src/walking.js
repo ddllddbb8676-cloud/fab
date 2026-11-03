@@ -1,5 +1,5 @@
-import { machines, bays, BAY_CENTERS, TOOL_WIDTH, isBlocked } from './layout.js?v=28968bf060dc';
-import { canTraverseRuntimeObstacles, getRuntimeObstacles } from './runtime-obstacles.js?v=28968bf060dc';
+import { machines, bays, BAY_CENTERS, TOOL_WIDTH, isBlocked } from './layout.js?v=218841553b08';
+import { canTraverseRuntimeObstacles, getRuntimeObstacles } from './runtime-obstacles.js?v=218841553b08';
 export const WALK_RADIUS = .295;
 export function canWalkSegment(a, b) {
   if (!canTraverseRuntimeObstacles(a, b, WALK_RADIUS)) return false;

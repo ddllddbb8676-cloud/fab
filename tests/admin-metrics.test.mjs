@@ -14,6 +14,10 @@ const token='a'.repeat(64),ordinaryToken='b'.repeat(64),probeToken='c'.repeat(64
 const owner=await sessionId(token),ordinary=await sessionId(ordinaryToken),probe=await sessionId(probeToken);
 const origin='https://fab.test';
 const request=(path,cookie='',method='GET')=>new Request(origin+path,{method,headers:cookie?{Cookie:'fab-session-v1='+cookie}:{}});
+const visitRequest=(value,{cookie=token,method='POST',headers={},raw}={})=>new Request(origin+'/api/admin/visit',{
+  method,headers:{Origin:origin,'Content-Type':'application/json',...(cookie?{Cookie:'fab-session-v1='+cookie}:{}),...headers},
+  ...(method==='GET'?{}:{body:raw??JSON.stringify(value)}),...(raw instanceof ReadableStream?{duplex:'half'}:{})
+});
 const peer=()=>({packets:[],send(raw){this.packets.push(JSON.parse(raw));},close(){},serializeAttachment(){}});
 async function fixture(){
   const wallet=restoreWallet({brokenCount:10});wallet.owned.push('helmet-orange');wallet.equipped.head='helmet-orange';
@@ -115,4 +119,61 @@ test('only owner sees current human nicknames, including safety original names, 
   player.civilianName='새 닉네임';assert.equal((await f.metrics()).live.users.find(row=>row.role==='safety').name,'새 닉네임');
   f.room.close(p);assert.equal((await f.metrics()).live.users.some(row=>row.name==='새 닉네임'),false);
   await Promise.all(f.pending);
+});
+
+test('visit resolver authenticates before waking room and rejects wrong method, origin, type or declared size',async()=>{
+  let calls=0;const env={FAB_OWNER_VISITOR_ID:owner,FAB_ROOM:{getByName(){calls++;throw Error('Must not wake room');}}};
+  for(const cookie of ['',ordinaryToken])assert.equal((await worker.fetch(visitRequest({name:'기록보존'},{cookie}),env)).status,403);
+  for(const [options,status] of [[{method:'GET'},405],[{headers:{Origin:'https://elsewhere.test'}},403],[{headers:{Origin:''}},403],[{headers:{'Content-Type':'text/plain'}},415],[{headers:{'Content-Length':'1025'}},413]]){
+    const response=await worker.fetch(visitRequest({name:'기록보존'},options),env);
+    assert.equal(response.status,status);assert.match(response.headers.get('Cache-Control'),/private, no-store/);
+  }
+  assert.equal(calls,0);
+  const f=await fixture();
+  for(const [options,status] of [[{cookie:ordinaryToken},403],[{method:'GET'},405],[{headers:{Origin:'https://elsewhere.test'}},403],[{headers:{'Content-Type':'text/plain'}},415]])assert.equal((await f.room.fetch(visitRequest({name:'기록보존'},options))).status,status,'Durable Object independently validates access');
+});
+
+test('visit resolver rejects invalid names and bounds both declared and streamed bodies',async()=>{
+  const f=await fixture();
+  for(const value of [null,[],{},'기록보존',{name:null},{name:4},{name:''},{name:'   '},{name:' 기록보존'},{name:'기록보존 '},{name:'가'.repeat(33)},{name:'🙂'},{name:'기록\n보존'},{name:'<script>'},{name:'기록보존',id:ordinary}]){
+    const response=await worker.fetch(visitRequest(value),f.env);assert.equal(response.status,400);assert.equal(typeof (await response.json()).message,'string');
+  }
+  assert.equal((await worker.fetch(visitRequest(undefined),f.env)).status,400);
+  assert.equal((await worker.fetch(visitRequest(null,{raw:'{broken'}),f.env)).status,400);
+  assert.equal((await worker.fetch(visitRequest({name:'가'.repeat(400)}),f.env)).status,413,'limit counts UTF-8 bytes');
+  let cancelled=false;
+  const stream=new ReadableStream({start(controller){controller.enqueue(new Uint8Array(1025));},cancel(){cancelled=true;}});
+  const response=await worker.fetch(visitRequest(null,{raw:stream}),f.env);
+  assert.equal(response.status,413);assert.equal(cancelled,true,'oversized open stream is cancelled without waiting for its end');
+});
+
+test('visit resolver handles missing, self, hidden, airborne, duplicate and excluded targets without guessing',async()=>{
+  const f=await fixture();await f.room.admit(peer(),ordinary,1);await f.room.admit(peer(),owner,1);await f.room.admit(peer(),probe,1);
+  const player=f.room.room.players.get(ordinary),visit=name=>worker.fetch(visitRequest({name}),f.env);
+  assert.equal((await visit('없는사람')).status,404);assert.equal((await visit('FAB짱 세미')).status,409);assert.equal((await visit('검증')).status,404);
+  assert.equal((await visit('기록보존')).status,409,'entry-hidden visitors are unavailable');
+  player.hidden=false;
+  for(const changed of [{y:.31},{phase:'climb'},{phase:'climbing'},{phase:'riding'}]){
+    Object.assign(player,{y:0,phase:'idle'},changed);const response=await visit('기록보존');assert.equal(response.status,409);assert.match((await response.json()).message,/OHT/);
+  }
+  Object.assign(player,{y:0,phase:'idle'});
+  const duplicate='visitor:'+'d'.repeat(64);f.room.room.players.set(duplicate,{...player,id:duplicate});
+  assert.equal((await visit('기록보존')).status,409);f.room.room.players.delete(duplicate);
+  f.room.room.players.set('resident:fake',{...player,id:'resident:fake',civilianName:'자동캐릭터'});assert.equal((await visit('자동캐릭터')).status,404);f.room.room.players.delete('resident:fake');
+  f.room.room.players.delete(ordinary);assert.equal((await visit('기록보존')).status,404,'stored profile is not treated as online');
+  await Promise.all(f.pending);
+});
+
+test('visit resolves human safety civilian name to a short-lived target without storage access or moving any actor',async()=>{
+  const f=await fixture();await f.room.admit(peer(),ordinary,1);
+  const player=f.room.room.players.get(ordinary);Object.assign(player,{hidden:false,y:0,role:'safety-red',name:'안전팀 임시이름'});
+  const records=structuredClone(f.records),players=structuredClone([...f.room.room.players]);
+  for(const method of ['get','put','delete','list'])f.storage[method]=()=>{throw Error('Visit resolution must not touch storage');};
+  const before=Date.now(),response=await worker.fetch(visitRequest({name:'기록보존'}),f.env),after=Date.now();
+  assert.equal(response.status,200);assert.match(response.headers.get('Cache-Control'),/private, no-store/);assert.equal(response.headers.get('Vary'),'Cookie');
+  const data=await response.json();assert.deepEqual(Object.keys(data).sort(),['expiresAt','target']);assert.deepEqual(data.target,{id:ordinary,name:'기록보존'});
+  assert.ok(data.expiresAt>=before+120000&&data.expiresAt<=after+120000);
+  assert.equal((await worker.fetch(visitRequest({name:'안전팀 임시이름'}),f.env)).status,404);
+  assert.deepEqual(f.records,records);assert.deepEqual([...f.room.room.players],players);
+  assert.equal(f.room.room.players.has(owner),false,'resolving a visit does not join the operator to the room');
 });

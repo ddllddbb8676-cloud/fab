@@ -5,6 +5,8 @@ const localDate=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Seoul',year:'num
 const localHour=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Seoul',hour:'2-digit',hourCycle:'h23'});
 const localTime=new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});
 let inFlight=false,lastData=null,lastUpdated=0,selectedDay=null;
+let activeVisit=null,visitButtons=[];
+const VISIT_KEY='fab-admin-visit-v1';
 const valid=n=>typeof n==='number'&&Number.isFinite(n)&&n>=0;
 const count=n=>valid(n)?integer.format(n):'—';
 const date=value=>{if(value===null||value===undefined||value==='')return null;const result=new Date(value);return Number.isFinite(result.getTime())?result:null;};
@@ -14,16 +16,48 @@ function cell(row,value,tag='td'){const node=document.createElement(tag);node.te
 function emptyRow(body,message,columns){const row=document.createElement('tr'),node=cell(row,message);node.colSpan=columns;node.className='empty-row';body.replaceChildren(row);}
 function showMessage(message){$('access-message').hidden=!message;text('access-message',message||'');}
 function setStatus(message,state){text('connection-status',message);$('connection-status').dataset.state=state;}
+function visitStatus(message,state='loading'){text('live-visit-status',message);$('live-visit-status').hidden=!message;$('live-visit-status').dataset.state=state;}
+function visitBusy(){for(const button of visitButtons)button.disabled=Boolean(activeVisit);}
+async function visit(user){
+  if(activeVisit||user.role==='operator')return;
+  const request={controller:new AbortController()};activeVisit=request;visitBusy();
+  visitStatus(user.name+'님의 현재 위치를 확인하고 있어요.');
+  const timeout=setTimeout(()=>request.controller.abort(),8000);
+  let navigating=false,message='이동 준비가 늦어지고 있어요. 잠시 뒤 다시 눌러 주세요.';
+  try{
+    const response=await fetch('/api/admin/visit',{method:'POST',credentials:'same-origin',cache:'no-store',signal:request.controller.signal,headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify({name:user.name})});
+    const payload=await response.json();
+    if(activeVisit!==request)return;
+    if(request.controller.signal.aborted)throw new Error('Visit timed out');
+    if(!response.ok){if(typeof payload?.message==='string'&&payload.message.trim())message=payload.message.slice(0,240);throw new Error('Visit rejected');}
+    const remaining=payload?.expiresAt-Date.now();
+    if(!payload||typeof payload!=='object'||Array.isArray(payload)||!/^visitor:[a-f0-9]{64}$/.test(payload.target?.id||'')||typeof payload.target?.name!=='string'||!payload.target.name.trim()||!Number.isSafeInteger(payload.expiresAt)||remaining<=0||remaining>150000){message='이동 요청을 확인하지 못했어요. 닉네임을 다시 눌러 주세요.';throw new Error('Invalid visit');}
+    const stored=JSON.stringify(payload);
+    try{sessionStorage.setItem(VISIT_KEY,stored);if(sessionStorage.getItem(VISIT_KEY)!==stored)throw new Error('Storage unavailable');}
+    catch{message='이 브라우저에서는 이동 요청을 저장할 수 없어요. 브라우저의 저장 공간 설정을 확인한 뒤 다시 눌러 주세요.';throw new Error('Storage unavailable');}
+    visitStatus(payload.target.name+'님에게 걸어가도록 게임을 열고 있어요.');
+    try{location.assign('/');navigating=true;}
+    catch{try{sessionStorage.removeItem(VISIT_KEY);}catch{}message='게임을 열지 못했어요. 잠시 뒤 다시 눌러 주세요.';throw new Error('Navigation failed');}
+  }catch{
+    if(activeVisit===request)visitStatus(message,'error');
+  }finally{
+    clearTimeout(timeout);
+    if(activeVisit===request&&!navigating){activeVisit=null;visitBusy();}
+  }
+}
 function liveUsers(users){
-  const list=$('live-users');list.replaceChildren();
+  const list=$('live-users');list.replaceChildren();visitButtons=[];
   const known=Array.isArray(users)&&users.every(user=>user&&typeof user.name==='string'&&user.name.trim());
   if(!known){text('live-users-count','—');text('live-users-status','닉네임 목록을 확인하지 못했어요. 다음 갱신 때 다시 확인할게요.');return;}
   text('live-users-count',count(users.length)+'계정');
-  text('live-users-status',users.length?'NPC와 검증 계정을 제외한 닉네임이에요.':'지금 접속 중인 실제 계정이 없어요.');
+  text('live-users-status',users.length?'닉네임을 누르면 게임으로 돌아가 그 계정에게 걸어가요. NPC와 검증 계정은 제외했어요.':'지금 접속 중인 실제 계정이 없어요.');
   const fragment=document.createDocumentFragment();
   for(const user of users){
-    const item=document.createElement('li'),name=document.createElement('span');
+    const item=document.createElement('li'),name=document.createElement(user.role==='operator'?'span':'button');
     name.className='live-user-name';name.textContent=user.name;item.append(name);
+    if(user.role!=='operator'){
+      name.type='button';name.className+=' live-user-visit';name.setAttribute('aria-label',user.name+'님에게 걸어가기');name.disabled=Boolean(activeVisit);name.addEventListener('click',()=>visit(user));visitButtons.push(name);
+    }
     if(user.role==='operator'||user.role==='safety'){
       const badge=document.createElement('span');badge.className='live-user-badge';badge.dataset.role=user.role;badge.textContent=user.role==='operator'?'운영자':'안전팀';item.append(badge);
     }
@@ -97,6 +131,7 @@ async function refresh(){
     const response=await fetch('/api/admin/metrics',{credentials:'same-origin',cache:'no-store',signal:controller.signal,headers:{Accept:'application/json'}});
     if(response.status===401||response.status===403){
       lastData=null;lastUpdated=0;$('report').hidden=true;
+      activeVisit?.controller.abort();activeVisit=null;visitButtons=[];visitStatus('');
       $('live-users').replaceChildren();text('live-users-count','—');text('live-users-status','');
       showMessage('운영자 계정으로만 볼 수 있어요.\nFAB짱 세미로 게임에 접속한 브라우저에서 이 주소를 열어 주세요. 인스타 앱과 Safari는 계정이 다를 수 있어요.');
       setStatus('운영자 계정 확인이 필요해요.','error');text('updated-at','계정 기록이나 칩은 변경하지 않아요.');return;

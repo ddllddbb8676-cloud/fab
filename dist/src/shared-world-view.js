@@ -1,5 +1,5 @@
-import { ports } from './layout.js?v=28968bf060dc';
-import { actorFromPacket,foupFromPacket } from './shared-protocol.js?v=28968bf060dc';
+import { ports } from './layout.js?v=218841553b08';
+import { actorFromPacket,foupFromPacket } from './shared-protocol.js?v=218841553b08';
 
 export function createSharedWorldView({fleet,store,destruction,onPeople,onCue,onCount,onSelf=()=>{}}) {
   const portMap=new Map(ports.map(p=>[p.id,p])), targets=new Map();let selfId=null,lastTime=-1,renderTime=null,totals={};

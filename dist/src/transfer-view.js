@@ -1,4 +1,4 @@
-import { VEHICLE_Y, RAIL_Y, PORT_SURFACE_Y } from './layout.js?v=28968bf060dc';
+import { VEHICLE_Y, RAIL_Y, PORT_SURFACE_Y } from './layout.js?v=218841553b08';
 
 const distance = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const activeRank = new Map([[1, 0], [7, 0], [5, 1], [0, 2], [6, 3], [2, 3], [3, 4], [4, 5]]);

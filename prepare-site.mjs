@@ -24,6 +24,7 @@ await writeFile(new URL('index.html', dist), html);
 for(const name of ['startup.js','startup-controller.js','startup-signals.js','room-connection.js','room-channel.js','room-config.js','http-room-socket.js'])await copyFile(new URL('src/'+name,root),new URL('src/'+name,dist));
 for (const name of ['main.js', 'layout.js', 'transport.js', 'rail-network.js', 'network-transport.js', 'avatar.js', 'spatial-batch.js', 'walking.js', 'posture.js', 'foup-play.js', 'play-actions.js', 'visitor-name.js', 'explorer.js', 'view-controls.js', 'tour-route.js', 'transfer-view.js', 'runtime-obstacles.js', 'ambience.js', 'equipment-visibility.js', 'emo-controls.js', 'emo-interaction.js', 'equipment-destruction.js', 'air-shower.js', 'entry-sequence.js', 'equipment-catalog.js', 'equipment-labels.js', 'equipment-directory.js', 'equipment-directory.css', 'bay-lighting.js', 'style.css']) await copyFile(new URL('src/' + name, root), new URL('src/' + name, dist));
 await copyFile(new URL('src/residents.js', root), new URL('src/residents.js', dist));
+await copyFile(new URL('src/admin-visit.js',root),new URL('src/admin-visit.js',dist));
 await copyFile(new URL('src/scene-depth.js', root), new URL('src/scene-depth.js', dist));
 await copyFile(new URL('src/playful-accessories.js', root), new URL('src/playful-accessories.js', dist));
 await copyFile(new URL('src/foup-debris.js', root), new URL('src/foup-debris.js', dist));

@@ -1,4 +1,4 @@
-import { isBlocked, machines, SEATED_FOUP_Y } from './layout.js?v=28968bf060dc';
+import { isBlocked, machines, SEATED_FOUP_Y } from './layout.js?v=218841553b08';
 export const FOUP_CLEAN_SECONDS = 3.2;
 export const FOUP_CLEAN_REWARD = 2;
 export const FOUP_RESTOCK_SECONDS = 12;

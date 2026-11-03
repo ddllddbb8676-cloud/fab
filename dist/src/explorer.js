@@ -1,12 +1,12 @@
-import { TOUR_POINTS, HALL, TOOL_WIDTH, bays, isBlocked } from './layout.js?v=28968bf060dc';
-import { findWalkPath, stepWalker, resolveWalkTap } from './walking.js?v=28968bf060dc';
-import { createTourRoute } from './tour-route.js?v=28968bf060dc';
-import { createTransferSession, updateTransferSession, transferCameraFrame, transferTransitFrame } from './transfer-view.js?v=28968bf060dc';
-import { getRuntimeObstacles } from './runtime-obstacles.js?v=28968bf060dc';
-import { planEmoApproach, emoPressCameraFrame, EMO_REACH_SECONDS, EMO_HOLD_SECONDS, EMO_CONTACT_TOLERANCE } from './emo-interaction.js?v=28968bf060dc';
-import { findRestHeading } from './posture.js?v=28968bf060dc';
-import {isRestArea,REST_AREA_MESSAGE} from './rest-area.js?v=28968bf060dc';
-import { WALK_SPEED, CHASE_CAMERA, stickVector, cameraRelativeMove } from './locomotion.js?v=28968bf060dc';
+import { TOUR_POINTS, HALL, TOOL_WIDTH, bays, isBlocked } from './layout.js?v=218841553b08';
+import { findWalkPath, stepWalker, resolveWalkTap } from './walking.js?v=218841553b08';
+import { createTourRoute } from './tour-route.js?v=218841553b08';
+import { createTransferSession, updateTransferSession, transferCameraFrame, transferTransitFrame } from './transfer-view.js?v=218841553b08';
+import { getRuntimeObstacles } from './runtime-obstacles.js?v=218841553b08';
+import { planEmoApproach, emoPressCameraFrame, EMO_REACH_SECONDS, EMO_HOLD_SECONDS, EMO_CONTACT_TOLERANCE } from './emo-interaction.js?v=218841553b08';
+import { findRestHeading } from './posture.js?v=218841553b08';
+import {isRestArea,REST_AREA_MESSAGE} from './rest-area.js?v=218841553b08';
+import { WALK_SPEED, CHASE_CAMERA, stickVector, cameraRelativeMove } from './locomotion.js?v=218841553b08';
 
 export const REPAIR_SECONDS = 5;
 
@@ -495,6 +495,7 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
     onToast(posture === 'sit' ? '여기 앉아서 잠깐 쉬어요' : posture === 'lie' ? '통로를 따라 편하게 누워요' : '다시 일어났어요'); return true;
   }
   return { state, setMode, reset, update, focusTransfer, focusDestruction, approachEmo, cancelEmo, setPosture, beginJoystick, endJoystick,
+    stopWalk() { state.path=[];clearInput();targetRing.visible=false; },
     moveJoystick(x, y) { if (state.joystickActive) state.joystick = stickVector(x, y); },
     setScriptedPose(pose) { scriptedPose = pose; if (!pose) { scriptedCameraActive=false;state.position.y = 0; cameraSnap = false; } },
     walkTo(point) {

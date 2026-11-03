@@ -17,11 +17,41 @@ import {isSafety} from '../src/safety-team.js';
 
 const PRIVATE_HEADERS = {'Cache-Control':'private, no-store','Vary':'Cookie'};
 const httpResult = (status, data = {}) => Response.json(data,{status,headers:PRIVATE_HEADERS});
+const VISIT_BODY_LIMIT=1024;
+async function visitAccess(request,env){
+  if(!await isAdmin(request,env))return httpResult(403,{message:'운영자만 이용할 수 있어요.'});
+  if(request.method!=='POST')return httpResult(405,{message:'방문할 닉네임을 선택해 주세요.'});
+  if(request.headers.get('Origin')!==new URL(request.url).origin)return httpResult(403,{message:'FAB 관리자 페이지에서 다시 선택해 주세요.'});
+  if(request.headers.get('Content-Type')?.split(';')[0].trim().toLowerCase()!=='application/json')return httpResult(415,{message:'닉네임 요청 형식을 확인해 주세요.'});
+  if(Number(request.headers.get('Content-Length'))>VISIT_BODY_LIMIT)return httpResult(413,{message:'닉네임 요청이 너무 길어요.'});
+  return null;
+}
+async function readVisitName(request){
+  const reader=request.body?.getReader();if(!reader)return {status:400};
+  let bytes=0,text='',timer,ended=false;
+  const decoder=new TextDecoder('utf-8',{fatal:true}),deadline=new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('deadline')),3000);});
+  try{
+    for(;;){
+      const {done,value}=await Promise.race([reader.read(),deadline]);
+      if(done){ended=true;break;}
+      bytes+=value.byteLength;if(bytes>VISIT_BODY_LIMIT)return {status:413};
+      text+=decoder.decode(value,{stream:true});
+    }
+    const body=JSON.parse(text+decoder.decode()),name=body?.name;
+    if(!body||Array.isArray(body)||Object.keys(body).length!==1||typeof name!=='string'||name!==name.trim()||![...name].length||[...name].length>32||!/^[가-힣ㄱ-ㅎㅏ-ㅣA-Za-z0-9 ]+$/u.test(name))return {status:400};
+    return {name};
+  }catch(error){return {status:error.message==='deadline'?408:400};}
+  finally{clearTimeout(timer);if(!ended)void reader.cancel().catch(()=>{});reader.releaseLock();}
+}
 
 export default {
   async fetch(request,env) {
     const redirect=canonicalRedirect(request);if(redirect)return redirect;
     const url=new URL(request.url);
+    if(url.pathname==='/api/admin/visit'){
+      const denied=await visitAccess(request,env);if(denied)return denied;
+      return env.FAB_ROOM.getByName('FAB-A-v20').fetch(request);
+    }
     if(['/admin','/admin/','/admin.html','/api/admin/metrics'].includes(url.pathname)){
       if(!await isAdmin(request,env))return url.pathname.startsWith('/api/')?httpResult(403):adminDenied();
       if(request.method!=='GET')return httpResult(405);
@@ -139,6 +169,18 @@ export class FabRoom extends DurableObject {
   sendWallets(){for(const [ws,s] of this.sockets){const player=this.room.players.get(s.id);if(s.ready!==false&&player&&s.walletRevision!==player.wallet.revision){const wallet=this.room.wallet(s.id);this.send(ws,{type:'wallet',wallet});s.walletRevision=wallet.revision;}}}
   broadcastRoster(){const data=JSON.stringify({type:'roster',roster:this.room.roster(),count:this.room.players.size});for(const [ws,s] of this.sockets)if(s.ready!==false)this.send(ws,data);}
   async fetch(request) {
+    if(new URL(request.url).pathname==='/api/admin/visit'){
+      const denied=await visitAccess(request,this.adminEnv);if(denied)return denied;
+      const input=await readVisitName(request);
+      if(input.status)return httpResult(input.status,{message:input.status===413?'닉네임 요청이 너무 길어요.':input.status===408?'요청이 늦어졌어요. 다시 선택해 주세요.':'올바른 닉네임을 선택해 주세요.'});
+      const matches=[...this.room.players.values()].filter(p=>/^visitor:[a-f0-9]{64}$/.test(p.id)&&!this.metricExcludedIds.has(p.id)&&(p.civilianName||p.name)===input.name);
+      if(!matches.length)return httpResult(404,{message:'지금 접속해 있지 않아요. 목록을 새로고침해 주세요.'});
+      if(matches.length!==1)return httpResult(409,{message:'같은 닉네임을 확인했어요. 목록을 새로고침해 주세요.'});
+      const target=matches[0];
+      if(target.id===this.adminEnv.FAB_OWNER_VISITOR_ID)return httpResult(409,{message:'내 캐릭터에게는 이동할 수 없어요.'});
+      if(target.hidden||!Number.isFinite(target.y)||target.y>.3||['climb','climbing','riding'].includes(target.phase))return httpResult(409,{message:'입장 중이거나 OHT에 있는 이용자예요. 바닥에 내려오면 다시 선택해 주세요.'});
+      return Response.json({target:{id:target.id,name:target.civilianName||target.name},expiresAt:Date.now()+120000},{headers:ADMIN_HEADERS});
+    }
     if(new URL(request.url).pathname==='/api/admin/metrics'){
       if(!await isAdmin(request,this.adminEnv))return httpResult(403);
       if(request.method!=='GET')return httpResult(405);

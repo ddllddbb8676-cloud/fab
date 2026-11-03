@@ -1,8 +1,8 @@
-import {items,DEFAULT_OUTFIT} from './cosmetics-catalog.js?v=28968bf060dc';
-import {itemIcon} from './icons.js?v=28968bf060dc';
-import {createWardrobeView} from './wardrobe-view.js?v=28968bf060dc';
-import {NICKNAME_TICKET_PRICE} from './nickname-policy.js?v=28968bf060dc';
-import {createTitlePicker} from './title-picker.js?v=28968bf060dc';
+import {items,DEFAULT_OUTFIT} from './cosmetics-catalog.js?v=218841553b08';
+import {itemIcon} from './icons.js?v=218841553b08';
+import {createWardrobeView} from './wardrobe-view.js?v=218841553b08';
+import {NICKNAME_TICKET_PRICE} from './nickname-policy.js?v=218841553b08';
+import {createTitlePicker} from './title-picker.js?v=218841553b08';
 export function createWardrobe({THREE,button,command,connected,getName,onOpen,onClose,onChangeName}) {
   const dialog=document.createElement('dialog');dialog.className='wardrobe';dialog.setAttribute('aria-labelledby','wardrobe-title');
   dialog.innerHTML=`<header><h2 id="wardrobe-title">꾸미기</h2><strong class="wardrobe-balance">연결 중</strong><button class="wardrobe-close" type="button" aria-label="꾸미기 닫기">×</button></header><div class="wardrobe-preview"><canvas aria-label="내 캐릭터 시착 모습"></canvas><button class="wardrobe-rotate" type="button">돌려보기 ↻</button><span class="wardrobe-trial"></span></div><nav class="wardrobe-modes" aria-label="상점과 내 옷장"><button type="button" data-mode="shop">상점</button><button type="button" data-mode="wardrobe">내 옷장</button></nav><nav class="wardrobe-slots" aria-label="꾸미기 부위">${Object.entries({head:'머리',face:'안경',bag:'가방',suit:'방진복',beauty:'눈'}).map(([id,name])=>`<button type="button" data-slot="${id}">${name}</button>`).join('')}</nav><div class="wardrobe-items"></div><footer><p class="wardrobe-message" role="status">시착은 무료예요. 구매 후 착용할 수 있어요.</p><div><button type="button" class="wardrobe-remove">벗기</button><button type="button" class="wardrobe-buy">아이템 선택</button></div><small>파괴 5 · 수리 3 · FOUP 던지기 1 · 실제 OHT 탑승 10초마다 1칩</small></footer>`;
