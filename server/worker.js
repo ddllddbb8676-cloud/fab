@@ -13,6 +13,7 @@ import {ADMIN_HEADERS,isAdmin,adminDenied,metricExclusions} from './admin-access
 import {createProfileMetrics} from './profile-metrics.js';
 import {createActivityMetrics} from './activity-metrics.js';
 import {items as cosmeticItems} from '../src/cosmetics-catalog.js';
+import {isSafety} from '../src/safety-team.js';
 
 const PRIVATE_HEADERS = {'Cache-Control':'private, no-store','Vary':'Cookie'};
 const httpResult = (status, data = {}) => Response.json(data,{status,headers:PRIVATE_HEADERS});
@@ -71,7 +72,7 @@ export default {
 export class FabRoom extends DurableObject {
   constructor(ctx,env) {
     super(ctx,env);this.adminEnv=env;this.sockets=new Map();this.rosterDirty=false;
-    const excludedIds=metricExclusions(env);
+    const excludedIds=metricExclusions(env);this.metricExcludedIds=new Set(excludedIds);
     this.activityMetrics=createActivityMetrics({excludedIds});this.profileMetrics=createProfileMetrics({ownerId:env.FAB_OWNER_VISITOR_ID,excludedIds});
     this.metricProfiles=new Map();this.paidItems=new Set(cosmeticItems.filter(item=>item.price>0).map(item=>item.id));this.lastMetricsFlush=Date.now();
     this.profiles=createProfileStore(ctx.storage,{ownerId:env.FAB_OWNER_VISITOR_ID,onProfileObserved:p=>this.observeProfile(p),onProfileRemoved:id=>{this.profileMetrics.remove(id);this.metricProfiles.delete(id);}});
@@ -128,6 +129,11 @@ export class FabRoom extends DurableObject {
     return accepted;
   }
   send(ws,data){try{ws.send(typeof data==='string'?data:JSON.stringify(data));return true;}catch{return false;}}
+  connectedUsers(){
+    return [...this.room.players.values()].filter(p=>/^visitor:[a-f0-9]{64}$/.test(p.id)&&!this.metricExcludedIds.has(p.id))
+      .map(p=>({name:p.civilianName||p.name,role:p.id===this.adminEnv.FAB_OWNER_VISITOR_ID?'operator':isSafety(p.role)?'safety':'visitor'}))
+      .sort((a,b)=>a.name.localeCompare(b.name,'ko'));
+  }
   async checkpoint(){do{await this.profiles.flush();}while(this.profiles.hasPending);}
   welcome(ws,id){const p=this.room.players.get(id);this.send(ws,{type:'welcome',v:PROTOCOL,id,name:p.name,privileges:{unlimitedChips:Boolean(p.chipUnlimited)},wallet:this.room.wallet(id),nickname:this.room.nicknameState(id),titles:this.room.titleState(id),resume:p.hasEntered?p.groundPosition:null,roster:this.room.roster(),frame:this.room.snapshot(true)});}
   sendWallets(){for(const [ws,s] of this.sockets){const player=this.room.players.get(s.id);if(s.ready!==false&&player&&s.walletRevision!==player.wallet.revision){const wallet=this.room.wallet(s.id);this.send(ws,{type:'wallet',wallet});s.walletRevision=wallet.revision;}}}
@@ -140,7 +146,7 @@ export class FabRoom extends DurableObject {
       if(this.metricsUnavailable)return httpResult(503,{error:'통계를 준비하지 못했어요. 게임은 계속 이용할 수 있어요.'});
       const activity=this.activityMetrics.snapshot();
       this.ctx.waitUntil(this.flushMetrics());
-      return Response.json({...activity,generatedAt:Date.now(),timezone:'Asia/Seoul',live:{...activity.live,npcs:AUTOMATED_COUNT},profiles:this.profileMetricsUnavailable?null:this.profileMetrics.snapshot(),notes:['평균 동시 접속은 서버가 관측한 시간 기준이에요. 수집 공백과 수집 이전 시간은 포함하지 않아요.',...(this.metricsWriteDelayed?['최근 통계 저장이 지연되어 서버 재시작 시 일부 수집값이 누락될 수 있어요.']:[])]},{headers:ADMIN_HEADERS});
+      return Response.json({...activity,generatedAt:Date.now(),timezone:'Asia/Seoul',live:{...activity.live,npcs:AUTOMATED_COUNT,users:this.connectedUsers()},profiles:this.profileMetricsUnavailable?null:this.profileMetrics.snapshot(),notes:['평균 동시 접속은 서버가 관측한 시간 기준이에요. 수집 공백과 수집 이전 시간은 포함하지 않아요.',...(this.metricsWriteDelayed?['최근 통계 저장이 지연되어 서버 재시작 시 일부 수집값이 누락될 수 있어요.']:[])]},{headers:ADMIN_HEADERS});
     }
     if(new URL(request.url).pathname==='/api/room-http')return this.httpRoom(request);
     if(new URL(request.url).pathname==='/api/leaderboard')return Response.json({scope:'all-time',rows:this.room.ranking(),recordedVisitors:this.profiles.rankedVisitorCount,highestVisitorScore:this.profiles.ranking()[0]?.brokenCount??0},{headers:{'Cache-Control':'no-store'}});

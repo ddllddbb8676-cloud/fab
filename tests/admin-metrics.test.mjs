@@ -99,3 +99,20 @@ test('last forced flush follows an in-flight write and final frame-send failure 
   assert.equal(f.room.room.players.size,0);assert.equal(f.room.activityMetrics.snapshot().live.connectedAccounts,0);
   await Promise.all(f.pending);
 });
+
+test('only owner sees current human nicknames, including safety original names, without identifiers or database scans',async()=>{
+  const f=await fixture(),p=peer(),o=peer(),v=peer();
+  assert.deepEqual((await f.metrics()).live.users,[]);
+  await f.room.admit(p,ordinary,1);await f.room.admit(o,owner,1);await f.room.admit(v,probe,1);
+  const player=f.room.room.players.get(ordinary);player.role='safety-orange';player.name='안전팀 임시이름';player.chipUnlimited=true;
+  const reads=f.reads(),data=await f.metrics();
+  assert.equal(f.reads(),reads);assert.equal(data.live.users.length,data.live.connectedAccounts);assert.equal(data.live.users.length,2);
+  assert.deepEqual(data.live.users.find(row=>row.role==='safety'),{name:'기록보존',role:'safety'});
+  assert.deepEqual(data.live.users.find(row=>row.role==='operator'),{name:'FAB짱 세미',role:'operator'});
+  for(const value of [ordinary,owner,probe,token,ordinaryToken,'검증','안전팀 임시이름'])assert.equal(JSON.stringify(data.live.users).includes(value),false);
+  assert.ok(data.live.users.every(row=>Object.keys(row).sort().join(',')==='name,role'));
+  assert.equal((await worker.fetch(request('/api/admin/metrics',ordinaryToken),f.env)).status,403);
+  player.civilianName='새 닉네임';assert.equal((await f.metrics()).live.users.find(row=>row.role==='safety').name,'새 닉네임');
+  f.room.close(p);assert.equal((await f.metrics()).live.users.some(row=>row.name==='새 닉네임'),false);
+  await Promise.all(f.pending);
+});

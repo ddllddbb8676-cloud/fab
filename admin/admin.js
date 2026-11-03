@@ -14,6 +14,23 @@ function cell(row,value,tag='td'){const node=document.createElement(tag);node.te
 function emptyRow(body,message,columns){const row=document.createElement('tr'),node=cell(row,message);node.colSpan=columns;node.className='empty-row';body.replaceChildren(row);}
 function showMessage(message){$('access-message').hidden=!message;text('access-message',message||'');}
 function setStatus(message,state){text('connection-status',message);$('connection-status').dataset.state=state;}
+function liveUsers(users){
+  const list=$('live-users');list.replaceChildren();
+  const known=Array.isArray(users)&&users.every(user=>user&&typeof user.name==='string'&&user.name.trim());
+  if(!known){text('live-users-count','—');text('live-users-status','닉네임 목록을 확인하지 못했어요. 다음 갱신 때 다시 확인할게요.');return;}
+  text('live-users-count',count(users.length)+'계정');
+  text('live-users-status',users.length?'NPC와 검증 계정을 제외한 닉네임이에요.':'지금 접속 중인 실제 계정이 없어요.');
+  const fragment=document.createDocumentFragment();
+  for(const user of users){
+    const item=document.createElement('li'),name=document.createElement('span');
+    name.className='live-user-name';name.textContent=user.name;item.append(name);
+    if(user.role==='operator'||user.role==='safety'){
+      const badge=document.createElement('span');badge.className='live-user-badge';badge.dataset.role=user.role;badge.textContent=user.role==='operator'?'운영자':'안전팀';item.append(badge);
+    }
+    fragment.append(item);
+  }
+  list.append(fragment);
+}
 function hourly(data){
   const now=date(data.generatedAt)||new Date(),today=data.today?.date||localDate.format(now),currentHour=Number(localHour.format(now));
   const records=Array.isArray(data.hourly)?data.hourly:[],days=new Set([today]);
@@ -65,7 +82,7 @@ function render(data){
   text('lifetime-actions',count(profiles?.totalBroken)+' / '+count(profiles?.totalRepaired)+'대');
   text('connections',count(today?.connections)+'회');text('https-connections',count(today?.httpsConnections)+'회');
   text('collection-start','시간별 통계 수집 시작 · '+stamp(data.startedAt)+' (한국 시간)');
-  hourly(data);purchases(profiles);
+  liveUsers(live.users);hourly(data);purchases(profiles);
   const notes=$('server-notes');notes.replaceChildren();
   for(const value of Array.isArray(data.notes)?data.notes:[]){if(typeof value!=='string')continue;const item=document.createElement('li');item.textContent=value;notes.append(item);}
   notes.hidden=!notes.childElementCount;
@@ -80,6 +97,7 @@ async function refresh(){
     const response=await fetch('/api/admin/metrics',{credentials:'same-origin',cache:'no-store',signal:controller.signal,headers:{Accept:'application/json'}});
     if(response.status===401||response.status===403){
       lastData=null;lastUpdated=0;$('report').hidden=true;
+      $('live-users').replaceChildren();text('live-users-count','—');text('live-users-status','');
       showMessage('운영자 계정으로만 볼 수 있어요.\nFAB짱 세미로 게임에 접속한 브라우저에서 이 주소를 열어 주세요. 인스타 앱과 Safari는 계정이 다를 수 있어요.');
       setStatus('운영자 계정 확인이 필요해요.','error');text('updated-at','계정 기록이나 칩은 변경하지 않아요.');return;
     }
