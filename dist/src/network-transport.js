@@ -1,5 +1,5 @@
-import { bays, ports, CARRIED_FOUP_Y, SEATED_FOUP_Y } from './layout.js';
-import { network, findRoute, sampleRoute, joinRoutes } from './rail-network.js';
+import { bays, ports, CARRIED_FOUP_Y, SEATED_FOUP_Y } from './layout.js?v=e86319ae060b';
+import { network, findRoute, sampleRoute, joinRoutes } from './rail-network.js?v=e86319ae060b';
 
 const smooth = t => t * t * (3 - 2 * t);
 const half = bays.length / 2;

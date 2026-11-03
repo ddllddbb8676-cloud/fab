@@ -1,10 +1,10 @@
-import { bays } from './layout.js';
-import { NPC_SAFETY_SPEED } from './locomotion.js';
-import { canWalkSegment, findWalkPath } from './walking.js';
-import {stepNpc,rerouteNpc} from './npc-navigation.js';
-import { VISITOR_ADJECTIVES, createUniqueNickname } from './visitor-name.js';
-import { SAFETY_PATROL_ROLES } from './room-population.js';
-import {isRestArea,canSafetyTraverse,restAreaExit,SAFETY_CLEARANCE} from './rest-area.js';
+import { bays } from './layout.js?v=e86319ae060b';
+import { NPC_SAFETY_SPEED } from './locomotion.js?v=e86319ae060b';
+import { canWalkSegment, findWalkPath } from './walking.js?v=e86319ae060b';
+import {stepNpc,rerouteNpc} from './npc-navigation.js?v=e86319ae060b';
+import { VISITOR_ADJECTIVES, createUniqueNickname } from './visitor-name.js?v=e86319ae060b';
+import { SAFETY_PATROL_ROLES } from './room-population.js?v=e86319ae060b';
+import {isRestArea,canSafetyTraverse,restAreaExit,SAFETY_CLEARANCE} from './rest-area.js?v=e86319ae060b';
 
 export const PENALTY_MESSAGE = '안전팀에게 걸려 패널티를 부여받았습니다. 장비를 3대 고쳐야 다시 팹뿌를 하실 수 있습니다.';
 export const SAFETY_CATCH_GOAL=3;

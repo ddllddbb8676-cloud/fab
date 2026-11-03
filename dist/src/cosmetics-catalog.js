@@ -28,7 +28,9 @@ export const items = [
   { id: 'bag-gamepad', name: '게임패드 가방', slot: 'bag', price: null },
   { id: 'bag-whale', name: '아기 고래 가방', slot: 'bag', price: null },
   { id: 'suit-default', name: '기본 방진복', slot: 'suit', price: 0 },
-  { id: 'suit-pink', name: '협력사 방진복', slot: 'suit', price: null },
+  { id: 'suit-pink', name: '분홍 방진복', slot: 'suit', price: null },
+  { id: 'suit-blue', name: '파랑 방진복', slot: 'suit', price: null },
+  { id: 'suit-green', name: '초록 방진복', slot: 'suit', price: null },
   { id: 'suit-black', name: '검정 방진복', slot: 'suit', price: null, proposedPrice: 10000 },
   { id: 'eyes-default', name: '기본 눈', slot: 'beauty', price: 0 },
   { id: 'eyes-round', name: '큰 동그란 눈', slot: 'beauty', price: null },
@@ -45,7 +47,7 @@ const PRICES = {
   'helmet-white': 150, 'helmet-orange': 150, 'helmet-red': 200, 'helmet-blue': 200, sprout: 50, crown: 7000,
   glasses: 200, goggles: 400, sunglasses: 1200,
   'bag-turtle': 1800, 'bag-wings': 5000, 'bag-bear': 3000, 'bag-basic': 600,
-  'suit-pink': 50, 'suit-black': 10000, 'eyes-round': 100, 'eyes-smile': 150,
+  'suit-pink': 50, 'suit-blue': 50, 'suit-green': 50, 'suit-black': 10000, 'eyes-round': 100, 'eyes-smile': 150,
   'eyes-sparkle': 1500, 'eyes-squeeze': 300, 'eyes-angry': 400,
   'eyes-cry': 800, 'eyes-sideeye': 500, 'eyes-flat': 100, 'eyes-wink': 600,
   'bunny-ears':300,'heart-glasses':600,'baby-chick':900,'bag-star':2200,
@@ -58,4 +60,7 @@ for (const item of items) if (item.price !== 0) item.price = PRICES[item.id];
 
 export const DEFAULT_OUTFIT = Object.freeze({head:null,face:null,bag:null,suit:'suit-default',beauty:'eyes-default'});
 export const findItem = id => items.find(item => item.id === id);
-export const suitColor = outfit => outfit?.suit === 'suit-pink' ? '#f6d1dc' : outfit?.suit === 'suit-black' ? '#35434f' : '#ffffff';
+const SUIT_COLORS = Object.freeze({
+  'suit-pink': '#f6d1dc', 'suit-blue': '#9ecde3', 'suit-green': '#a7d5bd', 'suit-black': '#35434f'
+});
+export const suitColor = outfit => SUIT_COLORS[outfit?.suit] ?? '#ffffff';

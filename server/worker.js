@@ -6,6 +6,7 @@ import { ROOM_CAPACITY, AUTOMATED_COUNT } from '../src/room-population.js';
 import {sessionToken,newSessionToken,sessionCookie,sessionId,createProfileStore} from './player-profiles.js';
 import equipmentBootstrap from './equipment-bootstrap.json';
 import {canonicalRedirect} from './canonical-url.js';
+import {rejectOutdatedRoom} from './room-version.js';
 
 export default {
   async fetch(request,env) {
@@ -30,10 +31,15 @@ export default {
       if(request.method!=='GET'||request.headers.get('Upgrade')?.toLowerCase()!=='websocket')return new Response('WebSocket required',{status:426});
       const origin=request.headers.get('Origin');
       if(origin!==url.origin)return new Response('Origin not allowed',{status:403});
+      const outdated=rejectOutdatedRoom(request);if(outdated)return outdated;
       return env.FAB_ROOM.getByName('FAB-A-v20').fetch(request);
     }
     if(url.pathname.startsWith('/api/'))return new Response('Not found',{status:404});
-    return env.ASSETS.fetch(request);
+    const asset=await env.ASSETS.fetch(request);
+    if(asset.headers.get('Content-Type')?.includes('text/html')){
+      const fresh=new Response(asset.body,asset);fresh.headers.set('Cache-Control','no-store');return fresh;
+    }
+    return asset;
   }
 };
 

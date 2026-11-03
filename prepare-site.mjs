@@ -1,6 +1,6 @@
-import { mkdir, readFile, writeFile, copyFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, copyFile, readdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import {createHash} from 'node:crypto';
+import {moduleRevision,versionLocalModules} from './scripts/versioned-modules.mjs';
 import {build} from 'esbuild';
 const root = new URL('.', import.meta.url);
 const dist = new URL('./dist/', root);
@@ -16,7 +16,8 @@ for(const name of ['style.css','equipment-directory.css','wardrobe.css','nicknam
   html=html.replace(`<link rel="stylesheet" href="/src/${name}">`,`<style data-source="${name}">${css}</style>`);
 }
 const bootstrap=await build({entryPoints:[fileURLToPath(new URL('src/startup.js',root))],bundle:true,format:'iife',platform:'browser',target:'safari15',write:false,minify:true,legalComments:'none'});
-const revision=createHash('sha256').update(await readFile(new URL('src/main.js',root))).digest('hex').slice(0,12);
+const sources=await Promise.all((await readdir(new URL('src/',root))).filter(name=>name.endsWith('.js')).map(async name=>[name,await readFile(new URL('src/'+name,root),'utf8')]));
+const revision=moduleRevision(sources,await readFile(new URL('prepare-site.mjs',root),'utf8')+await readFile(new URL('scripts/versioned-modules.mjs',root),'utf8'));
 const startupCode=bootstrap.outputFiles[0].text.replace(/<\/script/gi,'<\\/script');
 html=html.replace('<script type="module" src="/src/startup.js" data-fab-entry="/src/main.js"></script>',`<script data-fab-entry="/src/main.js?v=${revision}">${startupCode}</script>`);
 await writeFile(new URL('index.html', dist), html);
@@ -39,4 +40,7 @@ for (const name of ['controls/OrbitControls.js', 'environments/RoomEnvironment.j
 await copyFile(new URL('node_modules/three/LICENSE', root), new URL('vendor/three/LICENSE.txt', dist));
 await copyFile(new URL('docs/capacity-plan.html', root), new URL('docs/capacity-plan.html', dist));
 await copyFile(new URL('connection-check.html', root), new URL('connection-check.html', dist));
+for(const name of (await readdir(new URL('src/',dist))).filter(name=>name.endsWith('.js'))){
+  const file=new URL('src/'+name,dist);await writeFile(file,versionLocalModules(await readFile(file,'utf8'),revision));
+}
 console.log('Static Site ready: ' + fileURLToPath(dist));

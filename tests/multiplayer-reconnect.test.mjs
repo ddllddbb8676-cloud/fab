@@ -4,11 +4,11 @@ import {createMultiplayer,WELCOME_TIMEOUT_MS} from '../src/multiplayer.js';
 import {PROTOCOL} from '../src/shared-protocol.js';
 
 function harness({throwConstructor=false}={}){
-  const saved=new Map(['WebSocket','location','document','setTimeout','clearTimeout','setInterval','clearInterval'].map(k=>[k,globalThis[k]]));
+  const saved=new Map(['WebSocket','location','document','window','setTimeout','clearTimeout','setInterval','clearInterval'].map(k=>[k,globalThis[k]]));
   let time=0;const timers=new Map(),sockets=[],statuses=[],welcomes=[];let next=1;
   globalThis.setTimeout=(fn,ms)=>{const id=next++;timers.set(id,{fn,at:time+ms});return id;};globalThis.clearTimeout=id=>timers.delete(id);
   globalThis.setInterval=()=>0;globalThis.clearInterval=()=>{};
-  globalThis.location={href:'https://fab.semitoon.com/'};globalThis.document=new EventTarget();
+  globalThis.location={href:'https://fab.semitoon.com/'};globalThis.document=new EventTarget();globalThis.window=new EventTarget();
   class Socket extends EventTarget{
     constructor(url){super();if(throwConstructor)throw Error('connection unavailable');this.url=url.href;this.readyState=0;this.sent=[];sockets.push(this);}
     close(){this.closed=true;this.readyState=3;this.dispatchEvent(Object.assign(new Event('close'),{code:1000}));}
@@ -19,7 +19,7 @@ function harness({throwConstructor=false}={}){
   const client=createMultiplayer({config:{ws:'/api/room'},getPose:()=>({x:0,z:80}),onStatus:value=>statuses.push(value),onWelcome:value=>welcomes.push(value)});
   function advance(ms){const end=time+ms;while(true){const nextEntry=[...timers].filter(([,t])=>t.at<=end).sort((a,b)=>a[1].at-b[1].at)[0];if(!nextEntry)break;timers.delete(nextEntry[0]);time=nextEntry[1].at;nextEntry[1].fn();}time=end;}
   function welcome(socket=sockets.at(-1)){socket.readyState=1;socket.message({type:'welcome',v:PROTOCOL,id:'same-account',name:'same-name',wallet:{chips:1234},frame:{}});}
-  return {client,sockets,statuses,welcomes,advance,welcome,close(){client.dispose();for(const[k,v]of saved)globalThis[k]=v;}};
+  return {client,sockets,statuses,welcomes,window:globalThis.window,advance,welcome,close(){client.dispose();for(const[k,v]of saved)globalThis[k]=v;}};
 }
 test('an indefinitely CONNECTING socket retries with the same origin and no account reset',()=>{
   const h=harness();try{
@@ -51,4 +51,29 @@ test('replaced sessions and incompatible protocol do not reconnect automatically
 });
 test('synchronous WebSocket constructor failures do not crash game initialization',()=>{
   const h=harness({throwConstructor:true});try{assert.equal(h.client.status,'reconnecting');h.advance(1500);assert.equal(h.client.status,'reconnecting');}finally{h.close();}
+});
+
+test('a browser error without close does not wait for the entire handshake timeout',()=>{
+  const h=harness();try{
+    h.sockets[0].dispatchEvent(new Event('error'));assert.equal(h.sockets[0].closed,true);h.advance(250);
+    assert.equal(h.sockets.length,2);h.welcome();assert.equal(h.client.connected,true);
+    h.sockets[0].close();h.advance(WELCOME_TIMEOUT_MS);assert.equal(h.sockets.length,2,'retired callbacks cannot restart a healthy session');
+  }finally{h.close();}
+});
+
+test('pagehide closes the previous socket and pageshow restores the same account with one fresh connection',()=>{
+  const h=harness();try{
+    h.welcome();h.window.dispatchEvent(new Event('pagehide'));assert.equal(h.sockets[0].closed,true);assert.equal(h.client.connected,false);
+    h.advance(30000);assert.equal(h.sockets.length,1,'no hidden page reconnect loop');
+    h.window.dispatchEvent(new Event('pageshow'));assert.equal(h.sockets.length,2);h.welcome();assert.equal(h.client.id,'same-account');
+    h.window.dispatchEvent(new Event('pageshow'));assert.equal(h.sockets.length,2);h.client.dispose();
+    h.window.dispatchEvent(new Event('pagehide'));h.window.dispatchEvent(new Event('pageshow'));h.advance(30000);assert.equal(h.sockets.length,2);
+  }finally{h.close();}
+});
+
+test('a replaced tab never takes the active account back merely because it is shown again',()=>{
+  const h=harness();try{
+    h.sockets[0].message({type:'replaced'});h.window.dispatchEvent(new Event('pagehide'));h.window.dispatchEvent(new Event('pageshow'));h.advance(30000);
+    assert.equal(h.sockets.length,1);assert.equal(h.client.status,'replaced');
+  }finally{h.close();}
 });
