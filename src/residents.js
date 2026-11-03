@@ -14,6 +14,7 @@ import { reservedPortIds } from './network-transport.js';
 
 import { RESIDENT_ROLES } from './room-population.js';
 export { RESIDENT_ROLES };
+export const REPAIR_STOCK=Object.freeze({minimum:50,target:60,repairGraceSeconds:45});
 const distance = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const clamp = n => Math.max(0, Math.min(1, n));
 
@@ -22,6 +23,7 @@ export function createResidentSimulation({ fleet, store, destruction, detachCarg
   const reservedNames = [...excludedNames];
   const people = [], claims = new Map(), portMap = new Map(ports.map(p => [p.id, p]));
   const totals = { throws: 0, repairs: 0, breaks: 0, pickups: 0, placements: 0 };
+  const recentRepairs=new Map();let previousDamage=new Set(destruction.state.destroyedIds);
   let elapsed = 0, planner = 0;
   const choose = items => items[Math.min(items.length - 1, Math.floor(random() * items.length))];
   for (const [role, count] of Object.entries(RESIDENT_ROLES)) for (let i = 0; i < count; i++) {
@@ -97,11 +99,20 @@ export function createResidentSimulation({ fleet, store, destruction, detachCarg
   }
   function selectWork(actor) {
     const repairing = actor.role === 'repairer';
-    const damaged = destruction.state.destroyedIds;
-    const candidates = machines.filter(m => !reserved(m.id) && !claims.has(m.id) && (repairing ? damaged.includes(m.id) : !damaged.includes(m.id)));
-    if (!repairing && damaged.length >= 18) { patrol(actor); return; }
-    candidates.sort((a, b) => distance(actor, a) - distance(actor, b));
-    const nearby = candidates.slice(0, repairing ? 5 : 16), machine = choose(nearby);
+    const damaged = new Set(destruction.state.destroyedIds),pressure=new Array(bays.length).fill(0);
+    let repairingCount=0,breakingCount=0;
+    for(const id of damaged)pressure[machines[id].bayId]++;
+    for(const person of people)if(person.targetId!==null){
+      if(person.role==='repairer'&&damaged.has(person.targetId))repairingCount++;
+      if(person.role==='breaker'&&!damaged.has(person.targetId)){breakingCount++;pressure[machines[person.targetId].bayId]++;}
+    }
+    if(repairing?damaged.size-repairingCount<=REPAIR_STOCK.minimum:damaged.size+breakingCount>=REPAIR_STOCK.target){patrol(actor);return;}
+    const candidates = machines.filter(m => !reserved(m.id) && !claims.has(m.id) && (repairing ? damaged.has(m.id) : !damaged.has(m.id)&&!recentRepairs.has(m.id)));
+    // Count both broken tools and other breakers' destinations before assigning
+    // the least damaged bay. Claims stop all thirteen NPCs picking the same bay.
+    const preferred=repairing?Math.max(...candidates.map(m=>pressure[m.bayId])):Math.min(...candidates.map(m=>pressure[m.bayId]));
+    const balanced=candidates.filter(m=>pressure[m.bayId]===preferred).sort((a,b)=>distance(actor,a)-distance(actor,b));
+    const nearby = balanced.slice(0, repairing ? 5 : 8), machine = choose(nearby);
     if (!machine) { patrol(actor); return; }
     const plan = getEmoApproach(machine);
     if (!go(actor, plan.destination, 'work-walk')) { actor.wait = 1; return; }
@@ -154,13 +165,18 @@ export function createResidentSimulation({ fleet, store, destruction, detachCarg
     }
     if (actor.wait > 0 || actor.role === 'rider' || actor.role === 'resting') return;
     if (actor.phase === 'return-plan') { returnFoup(actor); return; }
-    if (actor.phase === 'patrol' && actor.role === 'repairer' && destruction.state.destroyedIds.length && actor.time > 3) release(actor);
+    const damagedCount=destruction.state.destroyedIds.length;
+    if(actor.phase==='patrol'&&actor.time>1&&((actor.role==='repairer'&&damagedCount>REPAIR_STOCK.minimum)||(actor.role==='breaker'&&damagedCount<REPAIR_STOCK.target)))release(actor);
     if (actor.phase !== 'idle') return;
     if (actor.role === 'thrower') pickTarget(actor); else selectWork(actor);
   }
   function update(dt) {
     if (!Number.isFinite(dt) || dt <= 0) return;
     dt = Math.min(dt, .1); elapsed += dt;
+    const damage=new Set(destruction.state.destroyedIds);
+    for(const id of previousDamage)if(!damage.has(id))recentRepairs.set(id,elapsed+REPAIR_STOCK.repairGraceSeconds);
+    previousDamage=damage;
+    for(const [id,until]of recentRepairs)if(elapsed>=until)recentRepairs.delete(id);
     const neighbors=[...people,...getNeighbors()];
     for (const actor of people) {
       actor.time += dt; actor.wait = Math.max(0, actor.wait - dt); actor.speed = 0;
@@ -193,17 +209,26 @@ export function createResidentSimulation({ fleet, store, destruction, detachCarg
       } else if (actor.phase === 'align' && actor.time >= .65) {
         actor.time = 0;
         if (actor.role === 'repairer') {
-          if (destruction.beginRepair(actor.targetId, actor.id)) { actor.phase = 'repair'; actor.lastHammer = -1; }
+          if (destruction.state.destroyedIds.length>REPAIR_STOCK.minimum&&destruction.beginRepair(actor.targetId, actor.id)) { actor.phase = 'repair'; actor.lastHammer = -1; }
           else { release(actor); actor.wait = 2; }
-        } else actor.phase = 'press';
+        } else if(destruction.state.destroyedIds.length<REPAIR_STOCK.target)actor.phase = 'press';
+        else{release(actor);actor.wait=2;}
       } else if (actor.phase === 'repair') {
         destruction.setRepairProgress(actor.targetId, actor.time / 7);
         const hammer = Math.floor(actor.time * 15 / (Math.PI * 2));
         if (hammer !== actor.lastHammer) { actor.lastHammer = hammer; cue(actor,'repair'); }
-        if (actor.time >= 7) { destruction.reset(actor.targetId); totals.repairs++; actor.repairedCount++; actor.actions++; cue(actor,'complete'); release(actor); actor.wait = 2; }
+        if (actor.time >= 7) {
+          if(destruction.state.destroyedIds.length>REPAIR_STOCK.minimum&&destruction.reset(actor.targetId)){
+            recentRepairs.set(actor.targetId,elapsed+REPAIR_STOCK.repairGraceSeconds);totals.repairs++;actor.repairedCount++;actor.actions++;cue(actor,'complete');
+          }
+          release(actor);actor.wait=2;
+        }
       } else if (actor.phase === 'press') {
         if (actor.time >= .5 && !actor.pressed) { actor.pressed = true; cue(actor,'press'); }
-        if (actor.time >= 1.35) { if (destruction.trigger(actor.targetId)) { totals.breaks++; actor.brokenCount++; actor.actions++; } actor.pressed = false; release(actor); actor.wait = 12 + random() * 10; }
+        if (actor.time >= 1.35) {
+          if(destruction.state.destroyedIds.length<REPAIR_STOCK.target&&destruction.trigger(actor.targetId)){totals.breaks++;actor.brokenCount++;actor.actions++;}
+          actor.pressed=false;release(actor);actor.wait=destruction.state.destroyedIds.length<REPAIR_STOCK.target?1+random():12+random()*10;
+        }
       } else if (actor.phase === 'carry' && actor.time >= .8) {
         const record = store.getCarried(actor.id), p = portMap.get(actor.homePortId);
         if (record) {

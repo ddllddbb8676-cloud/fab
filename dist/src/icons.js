@@ -15,7 +15,7 @@ export function itemIcon(id) {
       if (id === 'eyes-sparkle') drawing += '<path d="m8 7 1.5 3L13 11l-3.5 1L8 15l-1-3-3-1 3-1z" fill="#f6d68e"/><g fill="#fff9e9"><circle cx="16" cy="23" r="1"/><circle cx="34" cy="23" r="1"/></g>';
     }
   } else if (id.startsWith('suit')) {
-    const color = id === 'suit-black' ? '#38454f' : '#b4cbd3';
+    const color = id === 'suit-pink' ? '#f6d1dc' : id === 'suit-black' ? '#38454f' : '#b4cbd3';
     drawing = `<path d="m15 17-8 7 4 12 5-4v10h16V32l5 4 4-12-8-7" fill="${color}" stroke="#718790" stroke-width="1.5"/><ellipse cx="24" cy="12" rx="10" ry="10" fill="${color}" stroke="#718790"/><ellipse cx="24" cy="13" rx="6" ry="5" fill="#e8c8b4"/><path d="M24 23v18" stroke="#91a6ad"/>`;
   } else if (id.startsWith('helmet')) {
     const color = id.endsWith('white') ? '#f2f6f3' : '#ef9b45';
