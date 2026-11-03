@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#edf2f2"><title>FAB 접속 점검</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#edf2f2;color:#294b53;font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo',sans-serif;line-height:1.6}
+    main{max-width:480px;margin:auto;padding:28px 20px 44px}h1{font-size:24px;margin:0 0 8px}p{font-size:14px;color:#617b83;margin:8px 0 20px}
+    ol{list-style:none;padding:0;margin:0}li{background:#fff;border-radius:16px;padding:15px 16px;margin:10px 0;border:1px solid #dce6e6}
+    b{display:block;font-size:15px}li span{display:block;margin-top:4px;font-size:13px;overflow-wrap:anywhere;color:#637e85}
+    li[data-state="ok"]{border-left:5px solid #4e9b75}li[data-state="error"]{border-left:5px solid #cb6c62}li[data-state="working"]{border-left:5px solid #d4ae55}
+    button,a{font:inherit;display:block;width:100%;padding:13px 16px;text-align:center;border:0;border-radius:14px;margin-top:12px;min-height:46px;text-decoration:none;cursor:pointer}
+    button{background:#2e747c;color:white}a{background:#dfe9e8;color:#294b53}button:disabled{opacity:.5}small{display:block;color:#70898f;font-size:12px;margin-top:14px}textarea{width:100%;min-height:160px;font-size:12px;margin-top:12px}
+  </style>
+  <script type="importmap">{"imports":{"three":"/vendor/three/three.module.js","three/addons/":"/vendor/addons/","nipplejs":"/vendor/nipplejs/index.mjs"}}</script>
+</head>
+<body><main>
+  <h1>FAB 접속 점검</h1><p>인스타 안에서 이 화면을 열어 주세요.<br>캐릭터나 기록을 바꾸지 않고 연결을 확인해요.</p>
+  <ol>
+    <li data-step="page" data-state="ok"><b>1 · 페이지 받기</b><span>정상 · 이 안내가 보이면 페이지는 도착했어요.</span></li>
+    <li data-step="script"><b>2 · 스크립트 실행</b><span>실행을 기다리는 중</span></li>
+    <li data-step="server"><b>3 · 게임 서버 연결</b><span>대기 중</span></li>
+    <li data-step="files"><b>4 · 게임 파일 읽기</b><span>대기 중</span></li>
+    <li data-step="font"><b>5 · 외부 글꼴 연결</b><span>대기 중</span></li>
+    <li data-step="graphics"><b>6 · 기본 3D 화면</b><span>대기 중</span></li>
+  </ol>
+  <p id="summary">점검하는 동안 이 화면을 열어 두세요.</p>
+  <button id="copy" type="button" disabled>점검 결과 복사</button>
+  <textarea id="result" readonly hidden aria-label="복사할 점검 결과"></textarea>
+  <a href="/?after-connection-check=20261103">게임으로 돌아가기</a>
+  <small>계정·칩·구매 정보를 읽거나 초기화하지 않아요. 진단 결과는 이 화면에만 표시돼요.</small>
+</main>
+<script>
+(function(){
+  var results={page:'정상'},hiddenDuringCheck=false,started=Date.now();
+  function row(id,state,message){var el=document.querySelector('[data-step="'+id+'"]');el.dataset.state=state;el.querySelector('span').textContent=message;results[id]=message;}
+  function message(error){return String(error&&error.message||error||'연결 실패').slice(0,220);}
+  function deadline(promise,ms){return new Promise(function(resolve,reject){var timer=setTimeout(function(){reject(new Error(Math.round(ms/1000)+'초 안에 응답하지 않았어요'));},ms);promise.then(function(value){clearTimeout(timer);resolve(value);},function(error){clearTimeout(timer);reject(error);});});}
+  async function get(path){var controller=new AbortController(),timer=setTimeout(function(){controller.abort();},10000);try{var response=await fetch(path,{cache:'no-store',credentials:'same-origin',signal:controller.signal});if(!response.ok)throw new Error(path+' · HTTP '+response.status);return await response.text();}finally{clearTimeout(timer);}}
+  async function check(id,action){var start=performance.now();row(id,'working','확인 중');try{var note=await action();row(id,'ok','정상 · '+Math.round(performance.now()-start)+'ms'+(note?' · '+note:''));return true;}catch(error){row(id,'error',message(error));return false;}}
+  row('script','ok','정상 · 스크립트가 실행됐어요');
+  document.addEventListener('visibilitychange',function(){if(document.hidden)hiddenDuringCheck=true;});
+  window.addEventListener('error',function(event){if(event.filename&&event.filename.indexOf('connection-check')!==-1){row('script','error',event.message);document.getElementById('summary').textContent='점검 스크립트 오류가 표시됐어요. 이 화면을 보여 주세요.';}});
+  document.getElementById('copy').addEventListener('click',async function(){
+    var text='FAB 접속 점검 20261103\n'+Object.keys(results).map(function(key){return key+': '+results[key];}).join('\n')+'\n점검 중 화면 전환: '+hiddenDuringCheck+'\n'+navigator.userAgent;
+    var result=document.getElementById('result');result.value=text;result.hidden=false;
+    try{await navigator.clipboard.writeText(text);this.textContent='복사했어요';}catch(error){result.focus();result.select();this.textContent='아래 내용을 길게 눌러 복사해 주세요';}
+  });
+  (async function(){
+    var three=null;
+    var server=check('server',async function(){var config=JSON.parse(await get('/api/config'));if(config.protocol!==20)throw new Error('서버 버전 확인 필요');await get('/api/leaderboard');return '설정·방 응답';});
+    var font=check('font',function(){return new Promise(function(resolve,reject){
+      var link=document.createElement('link'),timer=setTimeout(function(){finish(new Error('외부 글꼴 서버가 10초 안에 응답하지 않았어요'));},10000);
+      function finish(error){clearTimeout(timer);link.remove();error?reject(error):resolve('글꼴 스타일 응답');}
+      link.rel='stylesheet';link.media='print';link.href='https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;600;700&display=swap';
+      link.onload=function(){finish();};link.onerror=function(){finish(new Error('외부 글꼴 연결 실패'));};document.head.appendChild(link);
+    });});
+    var files=await check('files',async function(){
+      if(!HTMLScriptElement.supports||!HTMLScriptElement.supports('importmap'))throw new Error('이 브라우저에서 게임의 모듈 연결 방식을 지원하지 않아요');
+      var source=await get('/src/main.js'),imports=Array.from(source.matchAll(/\bimport\s+[^;\n]*?\sfrom\s*['"]([^'"]+)['"]/g),function(match){return match[1];});
+      if(!imports.length)throw new Error('게임 파일 내용을 확인하지 못했어요');
+      var position=0,loaded=0,failed=false;
+      function url(spec){if(spec==='three')return '/vendor/three/three.module.js';if(spec==='nipplejs')return '/vendor/nipplejs/index.mjs';if(spec.indexOf('three/addons/')===0)return '/vendor/addons/'+spec.slice(13);return new URL(spec,new URL('/src/main.js',location.href)).href;}
+      await Promise.all(Array.from({length:4},async function(){while(position<imports.length&&!failed){var spec=imports[position++];try{var module=await deadline(import(url(spec)),12000);if(spec==='three')three=module;loaded++;if(!failed)document.querySelector('[data-step="files"] span').textContent='확인 중 · '+loaded+' / '+imports.length;}catch(error){failed=true;throw new Error(spec+' · '+message(error));}}}));
+      return imports.length+'개 진입 모듈';
+    });
+    if(files&&three){await check('graphics',async function(){
+      await new Promise(function(resolve){requestAnimationFrame(function(){setTimeout(resolve,0);});});
+      var canvas=document.createElement('canvas'),renderer,geometry,material;
+      try{renderer=new three.WebGLRenderer({canvas:canvas,antialias:false});renderer.setSize(64,64);var scene=new three.Scene(),camera=new three.PerspectiveCamera(50,1,.1,10);camera.position.z=3;geometry=new three.BoxGeometry(1,1,1);material=new three.MeshBasicMaterial({color:'#4e9b75'});scene.add(new three.Mesh(geometry,material));renderer.render(scene,camera);return 'WebGL 기본 렌더링';}
+      finally{if(geometry)geometry.dispose();if(material)material.dispose();if(renderer){renderer.dispose();renderer.forceContextLoss();}}
+    });}else row('graphics','error','게임 파일 확인 후 검사할 수 있어요');
+    await Promise.all([server,font]);
+    document.getElementById('summary').textContent='점검 완료 · '+Math.round((Date.now()-started)/1000)+'초. 결과를 복사하거나 이 화면을 보여 주세요.';
+    document.getElementById('copy').disabled=false;
+  })().catch(function(error){document.getElementById('summary').textContent='점검 오류: '+message(error);document.getElementById('copy').disabled=false;});
+})();
+</script></body></html>

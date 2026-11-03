@@ -24,4 +24,5 @@ for (const name of ['three.module.js', 'three.core.js']) await copyFile(new URL(
 for (const name of ['controls/OrbitControls.js', 'environments/RoomEnvironment.js', 'objects/Reflector.js', 'lights/RectAreaLightUniformsLib.js', 'lights/RectAreaLightTexturesLib.js']) await copyFile(new URL('node_modules/three/examples/jsm/' + name, root), new URL('vendor/addons/' + name, dist));
 await copyFile(new URL('node_modules/three/LICENSE', root), new URL('vendor/three/LICENSE.txt', dist));
 await copyFile(new URL('docs/capacity-plan.html', root), new URL('docs/capacity-plan.html', dist));
+await copyFile(new URL('connection-check.html', root), new URL('connection-check.html', dist));
 console.log('Static Site ready: ' + fileURLToPath(dist));
