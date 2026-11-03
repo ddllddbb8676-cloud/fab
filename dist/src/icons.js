@@ -18,7 +18,7 @@ export function itemIcon(id) {
     const color = id === 'suit-pink' ? '#f6d1dc' : id === 'suit-black' ? '#38454f' : '#b4cbd3';
     drawing = `<path d="m15 17-8 7 4 12 5-4v10h16V32l5 4 4-12-8-7" fill="${color}" stroke="#718790" stroke-width="1.5"/><ellipse cx="24" cy="12" rx="10" ry="10" fill="${color}" stroke="#718790"/><ellipse cx="24" cy="13" rx="6" ry="5" fill="#e8c8b4"/><path d="M24 23v18" stroke="#91a6ad"/>`;
   } else if (id.startsWith('helmet')) {
-    const color = id.endsWith('white') ? '#f2f6f3' : '#ef9b45';
+    const color = {'helmet-red':'#e65350','helmet-blue':'#4c88db'}[id] ?? (id.endsWith('white') ? '#f2f6f3' : '#ef9b45');
     drawing = `<path d="M9 30v-6a15 15 0 0 1 30 0v6z" fill="${color}" stroke="#8a9da5" stroke-width="1.5"/><path d="M21 10v19h6V10" fill="${color}" stroke="#a9b9bd"/><path d="M5 29h38v5H5z" fill="${color}" stroke="#8a9da5" stroke-width="1.5"/>`;
   } else if (id === 'cat-ears') {
     drawing='<path d="M5 37 8 5q1-3 4 0l14 23M43 37 40 5q-1-3-4 0L22 28" fill="#463e4c" stroke="#463e4c" stroke-width="4" stroke-linejoin="round"/><path d="m10 28 2-17 9 17m17 0-2-17-9 17" fill="#f995b5"/>';

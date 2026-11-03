@@ -16,6 +16,12 @@ export function createExtraAccessories(THREE, attachment) {
     tube([[0, 1.30, -.276], [0, 1.47, -.17], [0, 1.54, 0], [0, 1.47, .17], [0, 1.30, .276]], .014, shellMat, g);
     for (const x of [-.135, .135]) tube([[x, 1.33, -.20], [x, 1.47, 0], [x, 1.33, .20]], .007, shellMat, g);
   }
+  // Color variants share the existing helmet geometry; only the shell material changes.
+  for (const [id,color] of [['helmet-red','#e65350'],['helmet-blue','#4c88db']]) {
+    const g=result['helmet-orange'].clone(true),shellMat=material(color,{roughness:.32});g.name=id;
+    g.traverse(object=>{if(object.isMesh&&object.material!==white)object.material=shellMat;});
+    result[id]=g;attachment.add(g);
+  }
   for (const id of ['glasses', 'sunglasses']) {
     const g = group(id), isSun = id === 'sunglasses';
     const frame = material(isSun ? '#26333b' : '#657d87', { roughness: .28, metalness: .2 });

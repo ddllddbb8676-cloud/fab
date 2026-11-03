@@ -1,6 +1,8 @@
 export const items = [
   { id: 'helmet-white', name: '흰색 헬멧', slot: 'head', price: null },
   { id: 'helmet-orange', name: '주황 헬멧', slot: 'head', price: null },
+  { id: 'helmet-red', name: '빨강 헬멧', slot: 'head', price: null },
+  { id: 'helmet-blue', name: '파랑 헬멧', slot: 'head', price: null },
   { id: 'sprout', name: '작은 새싹', slot: 'head', price: null },
   { id: 'crown', name: '작은 왕관', slot: 'head', price: null },
   { id: 'glasses', name: '안경', slot: 'face', price: null },
@@ -40,7 +42,7 @@ export const items = [
   { id: 'eyes-wink', name: '윙크', slot: 'beauty', price: null }
 ];
 const PRICES = {
-  'helmet-white': 150, 'helmet-orange': 150, sprout: 50, crown: 7000,
+  'helmet-white': 150, 'helmet-orange': 150, 'helmet-red': 200, 'helmet-blue': 200, sprout: 50, crown: 7000,
   glasses: 200, goggles: 400, sunglasses: 1200,
   'bag-turtle': 1800, 'bag-wings': 5000, 'bag-bear': 3000, 'bag-basic': 600,
   'suit-pink': 50, 'suit-black': 10000, 'eyes-round': 100, 'eyes-smile': 150,
