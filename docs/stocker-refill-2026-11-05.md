@@ -24,3 +24,11 @@
 ## 운영 반영
 
 배포 전 기준은 소스 `9392db73fe0c72c15eb4dc648fb42b19eb46e409`, 운영 `a25dcf33-4710-40b7-b55d-9b2c19db1cea`다. `outputs/stocker-refill-release/deploy-and-verify.mjs`는 이 기준과 현재 운영이 같은지 먼저 확인하며 독립적인 배포를 덮어쓰지 않는다. 두 DO namespace, 기존 secret, `v2-growth-analytics` migration을 유지한다. 실제 완료 결과는 같은 폴더의 `completed.json`, `verification.json`, `recovery.json`과 이 문서 후속 기록을 따른다.
+
+11/5 00:08 KST 운영 배포·검증 완료.
+
+- 기능 소스 `4d9c5596b85d389ef71cc602e721e1cd2391e4de`, 운영 버전 `4209dc97-49c8-48ab-8251-2f4acbc1a6c4`, 공개 모듈 `f4d57efc026d`(77개).
+- 공개 모듈 및 관리자 자산 일치, 익명/일반 계정의 관리자 GET·이벤트 POST 거부, 로컬 검수 경로 404를 확인했다.
+- 기존 검증 계정의 ID·닉네임·지갑·구매품·파괴/수리 기록 해시가 동일했다. 두 DO namespace·secret·migration을 보존했다. 운영에 새 계정을 만들거나 시험 이벤트를 실행하지 않았다.
+- 기존 카메라 롤백 파일은 `b1bd6fd:src/explorer.js`와 동일하며 조이스틱·이벤트 코드는 바꾸지 않았다.
+- `outputs/stocker-refill-release/{completed,verification,recovery}.json`을 저장했다. recovery는 complete이고 실행 잠금은 해제했다. 완료 실행기를 다시 실행하지 않는다.
