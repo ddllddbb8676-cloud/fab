@@ -931,7 +931,8 @@ function animate(now) {
   requestAnimationFrame(animate);
   if (document.hidden) { lastTime = 0; return; }
   const frameMs = lastTime ? now - lastTime : 0;
-  const dt = frameMs ? Math.min(frameMs / 1000, .05) : .016; lastTime = now; elapsed += dt;
+  const frameSeconds = frameMs ? frameMs / 1000 : .016;
+  const dt = Math.min(frameSeconds, .05); lastTime = now; elapsed += dt;
   updateFrameBudget(now, frameMs);
   if(connectionConfig)sharedWorld.update(dt);else fleet.step(dt);
   for (const v of vehicles) {
@@ -943,7 +944,9 @@ function animate(now) {
     const upper = .32, bottom = v.gripper.position.y + .0275;
     for (const belt of v.belts) { belt.position.y = (upper + bottom) / 2; belt.scale.y = Math.max(.02, upper - bottom); }
   }
-  updateEntry(dt); playActions.update(dt);
+  // The entry cinematic follows visible time even on slow PCs; movement and
+  // game effects retain their bounded simulation step. Hidden tabs pause above.
+  updateEntry(frameSeconds); playActions.update(dt);
   if(photoMode.isOpen&&(entry.active||nicknameUI.isOpen||wardrobe.isOpen))photoMode.close();
   adminVisit.update(dt,{connected:Boolean(multiplayer?.connected),ready:!entry.active&&!nicknameUI.isOpen&&!captureTime?.isOpen&&!document.hidden});
   joystick.setEnabled(movementStyle === 'joystick' && !photoMode.isOpen && !entry.active && !document.hidden && !explorer.state.locked && (!playActions.busy||playActions.state.phase==='cleaning') && $('help').classList.contains('hidden') && $('tool-card').classList.contains('hidden') && ['walk','tour','blast'].includes(mode));
