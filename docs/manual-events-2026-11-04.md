@@ -28,4 +28,11 @@
 - 전체 검사 510개 중 509개 통과, 기존 선택 스트레스 검사 1개 생략. 관련 검사 65개, 마지막 무작위 베이 검증 4개, 구문 검사·빌드 통과.
 - 격리한 실제 Worker 핸들러에서 운영자 권한, 잘못된 Origin/형식/크기, 조회 시 프로필 불변, 동시 중복 시작과 저장 완료를 검증했다.
 - Chrome 390×844에서 실제 관리자 버튼 모듈과 모의 응답으로 두 시작 상태·중복 비활성화·가로 넘침 없음을 확인했다. 이는 실제 iPhone 또는 운영자 세션의 실서비스 버튼 실행 검증은 아니다.
-- 배포 전 기준은 `f993eb44-eb3d-41bf-80c6-4e81eba1888f`, Git `31aef7407de284922e724b1c58e0cc8ddd81413d`다. 운영 반영 상태는 `outputs/admin-event-controls-release/{completed,verification,recovery}.json`으로 확인한다. 아래 완료 기록이 추가되기 전까지는 미배포다.
+- 배포 전 기준은 `f993eb44-eb3d-41bf-80c6-4e81eba1888f`, Git `31aef7407de284922e724b1c58e0cc8ddd81413d`다. 운영 반영 상태는 `outputs/admin-event-controls-release/{completed,verification,recovery}.json`으로 확인한다.
+
+## 20:39 KST 운영 반영 완료
+
+- 운영 버전 `131e3875-5829-4253-a45b-afbd7e8c7a6f`, 기능 소스 `279055761287f4f93dbec69037a23fc13b4a03d8`, 공개 모듈 `2956557327b1` 77개. 기능 커밋은 GitHub main에 push했다.
+- 공개 게임 모듈·관리자 JS/CSS가 최종 빌드와 같고, 익명 및 기존 일반 검증 계정의 관리자 GET과 이벤트 POST가 모두 403임을 확인했다. 운영자 권한의 실제 시작 검증은 격리한 Worker에서 수행했으며 운영 이벤트를 추가로 시작하지 않았다.
+- 기존 검증 계정의 ID·닉네임·지갑/보유품·파괴/수리 기록 해시가 배포 전후 같다. `v2-growth-analytics`, 두 DO 네임스페이스, 소유자/제외 계정 secret을 유지했다. 평상시 카메라 원복과 조이스틱 코드도 유지했다.
+- `completed.json`/`verification.json` 완료, `recovery.json`은 `complete`다. 완료 실행기를 다시 실행하지 않는다. 검수 화면은 `mobile-buttons.png`, `mobile-bay.png`, `mobile-golden.png`, 상세 조건은 `local-qa.json`이다. 실제 iPhone은 미검증이다.
