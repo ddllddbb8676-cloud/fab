@@ -16,7 +16,6 @@ export function createPhotoMode({button,onToggle=()=>{},canOpen=()=>true,documen
 export function createViewControls({ onLock = () => {}, onOpen = () => {} } = {}) {
   const $ = id => document.getElementById(id);
   const toggle = $('controls-toggle'), panel = $('controls-panel'), map = $('map-panel');
-  connectInstagramLink({link:document.querySelector('.semitoon-link')});
   let active = null;
   function show(next, returnFocus = true) {
     const wasOpen = active !== null;
@@ -65,27 +64,4 @@ export function createViewControls({ onLock = () => {}, onOpen = () => {} } = {}
     get isOpen() { return active !== null; },
     get mapVisible() { return active === 'map'; }
   };
-}
-
-// Start an app hand-off only from the user's tap. Never navigate again after
-// they return from the app, leave the page, or resume interacting with the game.
-export function connectInstagramLink({link,window=globalThis.window,document=globalThis.document,navigator=globalThis.navigator,now=()=>Date.now()}={}){
-  if(!link)return;
-  const ua=navigator?.userAgent||'',android=/Android/i.test(ua),ios=/iPhone|iPad|iPod/i.test(ua)||(/Macintosh/i.test(ua)&&navigator?.maxTouchPoints>1);
-  if(!android&&!ios)return;
-  const web=link.href,profile='semi.toon';
-  const app=android?`intent://instagram.com/_u/${profile}/#Intent;scheme=https;package=com.instagram.android;S.browser_fallback_url=${encodeURIComponent(web)};end`:`instagram://user?username=${profile}`;
-  let cancel=()=>{};
-  link.addEventListener('click',event=>{
-    if(event.defaultPrevented||event.ctrlKey||event.metaKey||event.shiftKey||event.altKey||(event.button!=null&&event.button!==0))return;
-    event.preventDefault();cancel();
-    const started=now();let timer;
-    const hidden=()=>{if(document.hidden)cleanup();};
-    const cleanup=()=>{clearTimeout(timer);document.removeEventListener('visibilitychange',hidden);document.removeEventListener('pointerdown',cleanup);document.removeEventListener('keydown',cleanup);window.removeEventListener('pagehide',cleanup);};
-    cancel=cleanup;
-    const fallback=()=>{cleanup();if(!document.hidden&&now()-started<4000)window.location.assign(web);};
-    document.addEventListener('visibilitychange',hidden);document.addEventListener('pointerdown',cleanup);document.addEventListener('keydown',cleanup);window.addEventListener('pagehide',cleanup);
-    timer=setTimeout(fallback,1600);
-    try{window.location.assign(app);}catch{fallback();}
-  });
 }
