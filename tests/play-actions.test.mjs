@@ -9,6 +9,8 @@ import { machines, ports, isBlocked, SEATED_FOUP_Y } from '../src/layout.js';
 import { createFoupStore } from '../src/foup-play.js';
 import { VISITOR_NAMES, createVisitorName } from '../src/visitor-name.js';
 import {stockers,stockerPoint} from '../src/stocker-layout.js';
+import {AIR_SHOWER} from '../src/air-shower.js';
+import {setRuntimeObstacles} from '../src/runtime-obstacles.js';
 
 function harness({ destroyed = false,networkFactory=null } = {}) {
   const previousDocument = globalThis.document, previousWindow = globalThis.window;
@@ -96,6 +98,34 @@ test('a real canvas pointer tap retains the FOUP approach path until pickup',()=
     assert.equal(h.play.state.phase,'approach');assert.ok(h.explorer.state.path.length>0);
     h.step(5);assert.equal(h.play.state.carriedId,`port:${p.id}`);
   }finally{h.dispose();}
+});
+
+test('FOUPs at both reported entrance positions can be tapped and picked up from outside the closed air shower',()=>{
+  for(const gold of [null,{eventId:'gold:1793796000000',expiresAt:1793796600000}])for(const [x,z] of [[-.795,85.004],[.551,84.974]]){
+    const h=harness();try{
+      setRuntimeObstacles(AIR_SHOWER.closedDoorBounds);
+      h.explorer.state.position.set(AIR_SHOWER.exit.x,0,AIR_SHOWER.exit.z);
+      const r=h.play.store.adopt('vehicle:55',{x,y:.225,z,yaw:0,gold});
+      h.camera.position.set(0,2.2,80);h.camera.lookAt(r.x,r.y,r.z);h.camera.updateMatrixWorld();
+      const pointer={pointerId:1,clientX:195,clientY:422};h.listeners.get('pointerdown')(pointer);h.listeners.get('pointerup')(pointer);
+      assert.equal(h.play.state.phase,'approach');assert.ok(h.explorer.state.path.every(p=>p.z<AIR_SHOWER.doorZ));
+      h.step(4);assert.equal(h.play.state.carriedId,r.id);assert.equal(h.explorer.state.carrying,true);
+      assert.ok(h.explorer.state.position.z<AIR_SHOWER.doorZ);assert.deepEqual(r.gold,gold);
+      assert.ok(!h.toasts.includes('앞쪽 통로에서 다시 눌러주세요'));
+    }finally{setRuntimeObstacles([]);h.dispose();}
+  }
+});
+
+test('ground pickup cannot walk or reach through a closed air-shower door and works once it opens',()=>{
+  const h=harness();try{
+    setRuntimeObstacles(AIR_SHOWER.closedDoorBounds);h.explorer.state.position.set(0,0,83);
+    const r=h.play.store.adopt('vehicle:55',{x:0,y:.225,z:86.2,yaw:0});
+    const origin=new THREE.Vector3(0,2,82),direction=new THREE.Vector3(r.x,r.y,r.z).sub(origin).normalize();
+    assert.equal(h.play.tap(new THREE.Ray(origin,direction)),false);assert.equal(h.play.state.carriedId,null);
+    assert.equal(h.play.state.phase,'idle');assert.equal(h.explorer.state.path.length,0);
+    setRuntimeObstacles([]);assert.equal(h.play.tap(new THREE.Ray(origin,direction)),true);
+    h.step(4);assert.equal(h.play.state.carriedId,r.id);
+  }finally{setRuntimeObstacles([]);h.dispose();}
 });
 
 test('a canvas tap on a passing OHT retains its path, climbs and boards',()=>{

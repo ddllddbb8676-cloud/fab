@@ -3,6 +3,7 @@ import { reservedPortIds } from './network-transport.js';
 import { floorSpot, supportHeight, createFoupStore, createFoupRenderer, FOUP_CLEAN_SECONDS } from './foup-play.js';
 import { createFoupDebris } from './foup-debris.js';
 import {stockerPorts,stockers,stockerById,stockerPoint} from './stocker-layout.js';
+import {canTraverseRuntimeObstacles} from './runtime-obstacles.js';
 
 const smooth = t => { const p = Math.max(0, Math.min(1, t)); return p * p * (3 - 2 * p); };
 export function boardingMachine(car) {
@@ -11,6 +12,16 @@ export function boardingMachine(car) {
 export const NO_LOADPORT_MESSAGE='로드포트가 있는 곳에서 타야 해요';
 export function boardingApproach(car,machine=boardingMachine(car)) {
   return machine?{x:car.x,z:machine.z+machine.sign*(TOOL_FRONT+.43)}:null;
+}
+
+export function groundPickupCandidates(record,from){
+  const angle=Math.atan2(from.x-record.x,from.z-record.z);
+  // Approach from the visitor's side first. A fixed +Z offset could put the
+  // destination inside the closed air shower, even when the FOUP was outside.
+  const turns=[0,1,-1,2,-2,3,-3,4,-4,5,-5,6,-6,7,-7,8];
+  return [...turns.map(n=>({x:record.x+Math.sin(angle+n*Math.PI/8)*.55,z:record.z+Math.cos(angle+n*Math.PI/8)*.55})),{x:record.x,z:record.z}]
+    .filter(p=>!isBlocked(p.x,p.z,.295)&&canTraverseRuntimeObstacles(p,record,.08)&&
+      Array.from({length:7},(_,i)=>i/6).every(t=>!isBlocked(p.x+(record.x-p.x)*t,p.z+(record.z-p.z)*t,.08)));
 }
 
 export function createPlayActions({ THREE, scene, materials, fleet, explorer, avatar, initialPortIds, hideOriginal, showOriginal, isDestroyed, toast, onCue = () => {}, network = null, isRestricted = () => false, reducedMotion = false, seedStockers=false }) {
@@ -78,9 +89,13 @@ export function createPlayActions({ THREE, scene, materials, fleet, explorer, av
     if (!onFoot()) return false;
     if (store.carried) { toast('이미 FOUP을 들고 있어요. 빈 로드포트에 내려놓거나 던져보세요'); return true; }
     if (port && isDestroyed(port.machineId)) return false;
-    const destination = port ? { x: port.x, z: port.z + port.sign * .96 } : floorSpot({ x: record.x, z: record.z + .55 });
-    if (!destination) return false;
-    return startWalk(destination, { kind: 'pickup', recordId: record?.id, portId: port?.id, vehicleId: v?.id });
+    const task={kind:'pickup',recordId:record?.id,portId:port?.id,vehicleId:v?.id};
+    if(port)return startWalk({x:port.x,z:port.z+port.sign*.96},task);
+    clearPending();
+    for(const destination of groundPickupCandidates(record,pose()))if(explorer.walkTo(destination)){
+      pending={...task,destination};return true;
+    }
+    toast('앞쪽 통로에서 다시 눌러주세요');return false;
   }
   function requestPlace(port) {
     if (!onFoot() || !store.carried) return false;

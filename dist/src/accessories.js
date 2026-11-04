@@ -1,5 +1,5 @@
-import {createCuteAccessories} from './cute-accessories.js?v=9de751eb80da';
-import {createPlayfulAccessories} from './playful-accessories.js?v=9de751eb80da';
+import {createCuteAccessories} from './cute-accessories.js?v=fc4534498d97';
+import {createPlayfulAccessories} from './playful-accessories.js?v=fc4534498d97';
 export function createExtraAccessories(THREE, attachment) {
   const result = {};
   const material = (color, options = {}) => new THREE.MeshStandardMaterial({ color, roughness: .45, ...options });
