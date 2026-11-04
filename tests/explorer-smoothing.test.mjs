@@ -7,6 +7,7 @@ import { bays, machines, isBlocked, HALL } from '../src/layout.js';
 import { stockers, stockerBounds } from '../src/stocker-layout.js';
 import { setRuntimeObstacles } from '../src/runtime-obstacles.js';
 import { findWalkPath } from '../src/walking.js';
+import { createEmoteView } from '../src/emote-view.js';
 
 function setup({ colliders = [] } = {}) {
   const priorDocument = globalThis.document, priorWindow = globalThis.window;
@@ -92,12 +93,12 @@ test('both stocker IN and OUT approaches keep space even when the orbit points i
   }
 });
 
-test('leaving a cabinet lowers the lifted camera smoothly and restores the original orbit', () => {
+test('leaving a cabinet returns the side correction smoothly to the original orbit', () => {
   const colliders = [{ minX: -27.2, maxX: -27, minZ: -3, maxZ: 3, minY: 0, maxY: 3.4 }], h = setup({ colliders });
   try {
     for (let i = 0; i < 180; i++) h.explorer.update(1 / 60);
     const lifted = h.camera.position.clone();
-    assert.ok(lifted.y > 3, 'view lifts beside the cabinet');
+    assert.ok(lifted.y > 3, 'camera retains room at the chosen elevation');
     h.explorer.state.path = [{ x: -28.7, z: 8 }];
     let previous = lifted;
     for (let i = 0; i < 480; i++) {
@@ -136,19 +137,79 @@ test('stocker framing eases out of a close orbit and includes the loading port o
   }
 });
 
-test('lifting the view in a narrow gap does not steer a held joystick toward the neighbouring cabinet', () => {
+test('side avoidance in a narrow gap does not steer an already held joystick toward the neighbouring cabinet', () => {
   const row = bays[4].machines.filter(m => m.sign === 1), x = (row[3].x + row[4].x) / 2;
   const h = setup({ colliders: actualColliders() });
   try {
     h.explorer.state.position.set(x, 0, row[3].z); h.explorer.state.yaw = Math.PI / 2;
     for (let i = 0; i < 120; i++) h.explorer.update(1 / 60);
-    assert.ok(h.explorer.beginJoystick()); h.explorer.moveJoystick(-1, 0);
+    const yaw = Math.atan2(h.camera.position.x - x, h.camera.position.z - row[3].z);
+    assert.ok(h.explorer.beginJoystick()); h.explorer.moveJoystick(-Math.sin(yaw), -Math.cos(yaw));
     for (let i = 0; i < 60; i++) h.explorer.update(1 / 60);
-    assert.ok(Math.abs(h.explorer.state.position.x - x) < .015, 'camera lift must not turn the joystick direction');
+    assert.ok(Math.abs(h.explorer.state.position.x - x) < .015, 'automatic camera motion must not turn a held joystick');
     assert.ok(h.explorer.state.position.z > row[3].z + 2.9);
     h.explorer.endJoystick(); const stopped = h.explorer.state.position.clone(); h.explorer.update(1 / 60);
     assert.ok(h.explorer.state.position.equals(stopped));
   } finally { h.dispose(); }
+});
+
+test('obstacle corrections turn slowly at 30/60/120 Hz, never pitch into a top view or alternate sides at rest', () => {
+  const colliders = actualColliders(), row = bays[4].machines.filter(m => m.sign === 1);
+  for (const hz of [30, 60, 120]) {
+    const h = setup({ colliders });
+    try {
+      h.explorer.state.position.set((row[3].x + row[4].x) / 2, 0, row[3].z);
+      h.explorer.update(0); let previous = h.camera.quaternion.clone(), previousYaw = Math.PI / 2, direction = 0;
+      const focus = h.explorer.state.position.clone(); focus.y = 1.02;
+      for (let i = 0; i < hz * 8; i++) {
+        h.explorer.update(1 / hz);
+        const offset = h.camera.position.clone().sub(focus), yaw = Math.atan2(offset.x, offset.z);
+        const turn = Math.atan2(Math.sin(yaw - previousYaw), Math.cos(yaw - previousYaw));
+        assert.ok(previous.angleTo(h.camera.quaternion) <= .7 / hz + 1e-6, 'automatic turn is limited to about 37 degrees per second');
+        assert.ok(Math.atan2(offset.y, Math.hypot(offset.x, offset.z)) < .73, 'no automatic overhead tilt');
+        if (Math.abs(turn) > .0001) { if (direction) assert.equal(Math.sign(turn), direction); else direction = Math.sign(turn); }
+        previous.copy(h.camera.quaternion); previousYaw = yaw;
+      }
+      assertClearCamera(h, colliders);
+      assert.ok(h.camera.position.distanceTo(focus) > 4.6, 'camera finds room farther down the passage');
+    } finally { h.dispose(); }
+  }
+});
+
+test('stocker pullback preserves the user angle and eases distance rather than forcing a front view', () => {
+  const h = setup();
+  try {
+    h.explorer.state.yaw = .8; h.explorer.state.elevation = .22; h.explorer.state.distance = 2;
+    for (let i = 0; i < 180; i++) h.explorer.update(1 / 60);
+    const position = h.camera.position.clone(); h.explorer.frameStocker(stockers[0].ports[1]);
+    assert.equal(h.explorer.state.yaw, .8); assert.equal(h.explorer.state.elevation, .22);
+    h.explorer.update(1 / 60);
+    assert.ok(h.camera.position.distanceTo(position) < .15, 'first pullback frame stays gentle');
+    for (let i = 0; i < 240; i++) h.explorer.update(1 / 60);
+    const focus = h.explorer.state.position.clone(); focus.y = 1.02;
+    assert.ok(h.camera.position.distanceTo(focus) > 5.75);
+  } finally { h.dispose(); }
+});
+
+test('heart expression rendering preserves the walking camera pose, zoom and mode', () => {
+  const h = setup({ colliders: actualColliders() }), priorPath = globalThis.Path2D;
+  globalThis.document.createElement = () => ({ getContext: () => ({ clearRect() {}, beginPath() {}, roundRect() {}, fill() {} }) });
+  globalThis.Path2D = class {};
+  const view = createEmoteView(THREE, new THREE.Scene(), { self: true }), root = new THREE.Object3D();
+  try {
+    h.explorer.state.position.copy(new THREE.Vector3(stockers[0].ports[1].approach.x, 0, stockers[0].ports[1].approach.z));
+    for (let i = 0; i < 120; i++) h.explorer.update(1 / 60);
+    view.play('heart');
+    for (let i = 0; i < 90; i++) {
+      h.explorer.update(1 / 60);
+      const before = { p: h.camera.position.clone(), q: h.camera.quaternion.clone(), fov: h.camera.fov };
+      root.position.copy(h.explorer.state.position);
+      view.update({ root }, 'stand', 1 / 60, true, { camera: h.camera });
+      assert.ok(h.camera.position.equals(before.p)); assert.ok(h.camera.quaternion.equals(before.q));
+      assert.equal(h.camera.fov, before.fov); assert.equal(h.explorer.state.mode, 'walk');
+    }
+    assert.equal(view.sprite.visible, true);
+  } finally { view.dispose(); globalThis.Path2D = priorPath; h.dispose(); }
 });
 
 test('floor clicks and touch taps accelerate smoothly with equal travel at 30, 60 and 120 Hz', () => {
