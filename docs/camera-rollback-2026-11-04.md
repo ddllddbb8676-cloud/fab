@@ -10,3 +10,10 @@
 기존 카메라 동작에 맞는 검사와 OUT 터치/이벤트 검사를 포함한 77개, 구문 검사, 빌드가 통과했다. 원복 기준과 Explorer Git blob 일치를 검증한다. 이번 원복은 실제 iPhone이나 새 브라우저 시각 검수를 수행했다고 주장하지 않는다.
 
 직전 운영은 `ca075ab7-09a6-47fe-a39f-a26988048a2d`. 배포 결과는 `outputs/camera-rollback-release/{completed,verification,recovery}.json`과 아래 완료 기록을 확인한다.
+
+## 19:55 KST 완료
+
+- 운영 `f993eb44-eb3d-41bf-80c6-4e81eba1888f`, 기능 소스 `5a678e2b40b98f57543fd5ac2743f6d9b227c198`, 공개 모듈 revision `9bdc2d7c0a08`(77개).
+- Explorer Git blob이 `b1bd6fd:src/explorer.js`와 동일하고, 운영 모듈 77개가 현재 빌드와 정확히 일치함을 확인했다.
+- 검증 계정의 ID·닉네임·지갑/보유품·파괴/수리 기록 해시, 두 DO namespace, 기존 secret을 유지했다. 익명/일반 계정의 관리자 접근 거부도 확인했다. 완료 및 검증 파일이 있고 `recovery.json`은 `complete`다. 완료 실행기를 다시 실행하지 않는다.
+- 첫 활성화 직후 모듈 하나에서 이전 revision이 읽혀 검증을 중단하고 직전 운영으로 복원했다. 기록은 `attempt-1/`에 보존했다. 같은 업로드 버전을 재활성화하고 반영 대기 및 제한된 파일 재확인 후 전체 일치를 확인했다. 앱 소스나 이벤트 규칙을 추가 변경하지 않았다.
