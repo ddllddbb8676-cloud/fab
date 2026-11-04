@@ -1,0 +1,41 @@
+{
+  "files": [
+    {
+      "file": "fab-entertainer-piano.mp3",
+      "seconds": 184.282,
+      "peakDb": -6.03,
+      "finite": true,
+      "clippedSamples": 0,
+      "decodePassed": true
+    },
+    {
+      "file": "fab-entertainer-piano-game.mp3",
+      "seconds": 184.282,
+      "peakDb": -6.04,
+      "finite": true,
+      "clippedSamples": 0,
+      "decodePassed": true
+    },
+    {
+      "file": "fab-entertainer-piano-game.ogg",
+      "seconds": 184.282,
+      "peakDb": -5.73,
+      "finite": true,
+      "clippedSamples": 0,
+      "decodePassed": true
+    },
+    {
+      "file": "fab-entertainer-piano-master.wav",
+      "seconds": 184.282,
+      "peakDb": -5.57,
+      "finite": true,
+      "clippedSamples": 0,
+      "decodePassed": true
+    }
+  ],
+  "mp3LoudnessLufs": -19.45,
+  "mp3TruePeakDb": -6.02,
+  "mp3LoudnessRange": 2.0,
+  "auditoryReviewByAgent": false,
+  "physicalMobilePlaybackVerified": false
+}

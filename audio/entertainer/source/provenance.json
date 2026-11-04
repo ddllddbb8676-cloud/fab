@@ -1,0 +1,20 @@
+[
+  {
+    "file": "entertainer.ly",
+    "url": "https://www.mutopiaproject.org/ftp/JoplinS/entertainer/entertainer.ly",
+    "bytes": 11100,
+    "sha256": "3a07fcf4f47b6000ced3e6579ef74bebb3c15af82d542a3aa42271f797544f7d"
+  },
+  {
+    "file": "entertainer.mid",
+    "url": "https://www.mutopiaproject.org/ftp/JoplinS/entertainer/entertainer.mid",
+    "bytes": 22084,
+    "sha256": "33e4e81ee64ffb2edf90d1c6a1ddee7276507296bfb915c2bb775231a467f066"
+  },
+  {
+    "file": "entertainer-a4.pdf",
+    "url": "https://www.mutopiaproject.org/ftp/JoplinS/entertainer/entertainer-a4.pdf",
+    "bytes": 255142,
+    "sha256": "c1371e0827ee8ec5df5f1a56483bc826035c2608e2f3e5f35cd43fc12fe292f7"
+  }
+]
