@@ -6,7 +6,9 @@ export function stockerPoint(s,x,y,z){const c=Math.cos(s.yaw),n=Math.sin(s.yaw);
 function bounds(s,x,z,w,d){const a=stockerPoint(s,x-w/2,0,z-d/2),b=stockerPoint(s,x+w/2,0,z+d/2);return {minX:Math.min(a.x,b.x),maxX:Math.max(a.x,b.x),minZ:Math.min(a.z,b.z),maxZ:Math.max(a.z,b.z)};}
 export const stockers=Object.freeze([
   [-9.9,83.5,Math.PI/2],[9.9,83.5,-Math.PI/2],
-  [-57.8,0,0],[57.8,0,0],[-7.7,-84,Math.PI/2],[7.7,-84,-Math.PI/2]
+  // Rear faces meet the far wall; the loading fronts face the end cross-aisle.
+  // Leave the middle outer aisles clear instead of placing isolated towers.
+  [-57.3,-86.7,0],[57.3,-86.7,0],[-7.7,-84,Math.PI/2],[7.7,-84,-Math.PI/2]
 ].map(([x,z,yaw],index)=>{
   const s={id:`STK${String(index+1).padStart(2,'0')}`,index,x,z,yaw};
   s.bounds={...bounds(s,0,0,2.6,6.2),minY:0,maxY:STOCKER_SIZE.height};

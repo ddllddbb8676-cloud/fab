@@ -5,7 +5,7 @@ import {createFoupStore} from '../src/foup-play.js';
 import {createRoom} from '../server/room-engine.js';
 import {ports,machines,columns,isBlocked,TOUR_POINTS} from '../src/layout.js';
 import {findWalkPath,canWalkSegment} from '../src/walking.js';
-import {stockers,stockerPorts,STOCKER_SIZE} from '../src/stocker-layout.js';
+import {stockers,stockerPorts,STOCKER_SIZE,stockerRecordPose} from '../src/stocker-layout.js';
 import {initialSharedPorts,foupPacket,foupFromPacket} from '../src/shared-protocol.js';
 import {createStockerView} from '../src/stocker-view.js';
 
@@ -54,6 +54,26 @@ test('stocker restart settles transfers silently and preserves identity and empt
   assert.equal(legacy.records.get(outgoing.id).mode,'ground');assert.equal(legacy.records.size,store.records.size);
   const empty={...saved,stockers:{version:1,initialized:true,entries:[]}};restored.restore(empty);
   assert.equal(restored.stockerState('STK01').count,0);assert.equal(restored.checkpoint().stockers.entries.length,0);
+});
+
+test('relocated corner stockers keep stored identities and restore pending OUT at the new port',()=>{
+  const store=make(),ids=[...store.records.keys()].sort();
+  store.stockerGet('STK03','a');step(store,.5);
+  const beforeCounts=['STK03','STK04'].map(id=>store.stockerState(id).items.length);
+  const saved=store.checkpoint(),oldStock=new Map(saved.stockers.entries.filter(e=>['STK03','STK04'].includes(e[1])).map(e=>[e[0],e[1]]));
+  // The previous release saved these same carriers beside the middle bays.
+  for(const row of saved.records)if(oldStock.has(row[0])){row[3]=oldStock.get(row[0])==='STK03'?-57.8:57.8;row[5]=4.7;}
+  const restored=make();restored.restore(saved);
+  assert.deepEqual([...restored.records.keys()].sort(),ids);
+  assert.deepEqual(['STK03','STK04'].map(id=>restored.stockerState(id).items.length),beforeCounts);
+  for(const s of stockers.slice(2,4)){
+    assert.ok(s.bounds.minZ>-90&&s.bounds.minZ< -89.5,'back sits against far wall');
+    for(const r of restored.stockerState(s.id).items){
+      assert.ok(r.z< -80,'old middle coordinates are replaced');
+      assert.deepEqual({x:r.x,y:r.y,z:r.z,yaw:r.yaw},stockerRecordPose(r));
+    }
+  }
+  assert.ok(restored.stockerState('STK03').out,'interrupted OUT is ready at the new loading port');
 });
 
 test('invalid stocker checkpoints fail before changing world state and full shelves reject IN',()=>{
