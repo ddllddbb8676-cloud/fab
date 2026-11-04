@@ -1,4 +1,4 @@
-import { createFacePixels, EYE_STYLES } from "./face-styles.js?v=1c3714050106";
+import { createFacePixels, EYE_STYLES } from "./face-styles.js?v=468b75afb7f9";
 // A round, small cleanroom visitor with shared clothing and an inset face.
 // Feet are the local origin; +Z is forward. The caller owns root.position/visibility.
 const resourcePools = new WeakMap();
