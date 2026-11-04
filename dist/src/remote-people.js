@@ -1,13 +1,13 @@
-import {createAvatarAppearance} from './avatar-appearance.js?v=4b21b3c206ef';
-import {suitColor} from './cosmetics-catalog.js?v=4b21b3c206ef';
-import {isSafety} from './safety-team.js?v=4b21b3c206ef';
-import { createAvatar } from './avatar.js?v=4b21b3c206ef';
-import { createVisitorBadge } from './visitor-name.js?v=4b21b3c206ef';
-import { getEmoApproach } from './emo-interaction.js?v=4b21b3c206ef';
-import { machines } from './layout.js?v=4b21b3c206ef';
-import { safetyColor, isSuitMesh } from './safety-team.js?v=4b21b3c206ef';
-import {createEmoteView} from './emote-view.js?v=4b21b3c206ef';
-import {npcDestructionTitle} from './destruction-titles.js?v=4b21b3c206ef';
+import {createAvatarAppearance} from './avatar-appearance.js?v=2628ec24ca43';
+import {suitColor} from './cosmetics-catalog.js?v=2628ec24ca43';
+import {isSafety} from './safety-team.js?v=2628ec24ca43';
+import { createAvatar } from './avatar.js?v=2628ec24ca43';
+import { createVisitorBadge } from './visitor-name.js?v=2628ec24ca43';
+import { getEmoApproach } from './emo-interaction.js?v=2628ec24ca43';
+import { machines } from './layout.js?v=2628ec24ca43';
+import { safetyColor, isSuitMesh } from './safety-team.js?v=2628ec24ca43';
+import {createEmoteView} from './emote-view.js?v=2628ec24ca43';
+import {npcDestructionTitle} from './destruction-titles.js?v=2628ec24ca43';
 
 // A shared pool of articulated bodies; distant visitors use two tiny instances.
 export function createRemotePeople({THREE,scene,store,fleet=null,maxDetailed=40}) {

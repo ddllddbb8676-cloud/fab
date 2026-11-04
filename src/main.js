@@ -42,7 +42,7 @@ import { ROOM_CAPACITY, MAX_VISITORS, AUTOMATED_COUNT } from './room-population.
 import {REST_AREAS,isRestArea,canSafetyTraverse,restAreaExit,SAFETY_CLEARANCE} from './rest-area.js';
 import {createRestAreaView} from './rest-area-view.js';
 import {createLeaderboard} from './leaderboard.js';
-import {EMOTES,HEART_PATH,HEART_COLOR} from './emotes.js';
+import {EMOTE_MENU,HEART_PATH,HEART_COLOR} from './emotes.js';
 import {bindEmoteStrip} from './emote-strip.js';
 import {createEmoteView} from './emote-view.js';
 import {safetyProximity} from './safety-proximity.js';
@@ -445,7 +445,7 @@ function showChipReward(amount){if(amount>0&&!document.hidden){chipRewards.show(
 function clearChipRewards(){chipRewards.clear();destructionRewards.clear();}
 const visitorEmote=createEmoteView(THREE,scene,{self:true});
 let lastEmoteClick=-Infinity,nearSafety=false,nextSafetyCheck=0;
-for(const emote of EMOTES){
+for(const emote of EMOTE_MENU){
   const button=document.createElement('button');button.type='button';button.textContent=emote.emoji;
   if(emote.id==='heart'){
     const icon=document.createElementNS('http://www.w3.org/2000/svg','svg'),path=document.createElementNS('http://www.w3.org/2000/svg','path');

@@ -7,8 +7,19 @@ export const EMOTES = [
   {id:'excited',emoji:'😆',label:'신남'}, {id:'grin',emoji:'😁',label:'활짝'},
   {id:'sleepy',emoji:'😪',label:'졸려'}, {id:'no',emoji:'❌',label:'안 돼'},
   {id:'ghost',emoji:'👻',label:'유령'}, {id:'sleep',emoji:'💤',label:'쿨쿨'},
-  {id:'think',emoji:'🤔',label:'고민'}
+  {id:'think',emoji:'🤔',label:'고민'},
+  {id:'question',emoji:'❓',label:'물음표'}, {id:'love',emoji:'🥰',label:'사랑해'},
+  {id:'pray',emoji:'🙏',label:'고마워'}, {id:'steam',emoji:'😤',label:'흥'},
+  {id:'distorted',emoji:'🫪',label:'당황'}, {id:'ogre',emoji:'👹',label:'버럭'},
+  {id:'asleep',emoji:'😴',label:'잠듦'}, {id:'yawn',emoji:'🥱',label:'하품'}
 ];
+// Older IDs remain valid for already-open clients. The picker is curated:
+// frequent reactions first, then anger, surprise/questions, and sleep.
+const menuIds=[
+  'wave','excited','grin','cry','heart','love','thumbs-up','clap','pray','plead',
+  'cool','angry','steam','ogre','no','surprise','distorted','think','question','ghost','yawn','asleep'
+];
+export const EMOTE_MENU=menuIds.map(id=>EMOTES.find(emote=>emote.id===id));
 export const EMOTE_SECONDS = 3;
 export const isEmote = id => EMOTES.some(emote => emote.id === id);
 // One font-independent silhouette for both the small button and head bubble.
