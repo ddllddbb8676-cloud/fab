@@ -19,21 +19,20 @@ class Target {
     return event;
   }
 }
-function fixture({width=386,count=22}={}){
+function fixture({width=386,count=27}={}){
   const document=new Target(),strip=new Target(),window=new Target();document.defaultView=window;document.hidden=false;strip.ownerDocument=document;strip.clientWidth=width;
   document.createElement=()=>{const el=new Target();el.ownerDocument=document;return el;};
   const buttons=Array.from({length:count},(_,i)=>{const b=document.createElement();b.dataset.emote='emote-'+i;return b;});strip.append(...buttons);
-  let time=0,resize,disconnected=false;
-  class Observer{constructor(callback){resize=callback;}observe(){}disconnect(){disconnected=true;}}
-  const dispose=bindEmoteStrip(strip,{now:()=>time,ResizeObserver:Observer});
+  let time=0;
+  const dispose=bindEmoteStrip(strip,{now:()=>time});
   const next=strip.children.find(el=>el.className==='emote-next');
-  return {strip,document,window,buttons,next,dispose,visible:()=>buttons.filter(b=>!b.hidden).map(b=>b.dataset.emote),advance:ms=>{time+=ms;},resize:width=>{strip.clientWidth=width;resize?.();},disconnected:()=>disconnected,down:data=>strip.emit('pointerdown',data),move:data=>document.emit('pointermove',data),up:data=>document.emit('pointerup',data),click:data=>strip.emit('click',data)};
+  return {strip,document,window,buttons,next,dispose,visible:()=>buttons.filter(b=>!b.hidden).map(b=>b.dataset.emote),advance:ms=>{time+=ms;},resize:width=>{strip.clientWidth=width;window.emit('resize');},down:data=>strip.emit('pointerdown',data),move:data=>document.emit('pointermove',data),up:data=>document.emit('pointerup',data),click:data=>strip.emit('click',data)};
 }
 const ids=(start,count)=>Array.from({length:count},(_,i)=>'emote-'+(start+i));
 
-test('available width fills a single row while keeping emoji targets at least 36px wide',()=>{
-  for(const [width,count] of [[304,7],[344,8],[374,9],[386,9],[414,10],[426,10]]){
-    const f=fixture({width});assert.deepEqual(f.visible(),ids(0,count));assert.ok((width-39)/count>=36);f.dispose();
+test('every supported width keeps the same nine choices per row',()=>{
+  for(const width of [304,344,374,386,414,426]){
+    const f=fixture({width});assert.deepEqual(f.visible(),ids(0,9));f.dispose();
   }
 });
 test('one short down swipe advances exactly one whole row and up returns to the previous row',()=>{
@@ -55,7 +54,7 @@ test('a deliberate new tap is allowed immediately after a swipe or cancellation'
 test('next-row button reaches every emoji and wraps, with only one row in the tab order',()=>{
   const f=fixture(),seen=[];
   for(let i=0;i<3;i++){seen.push(...f.visible());f.next.emit('click');}
-  assert.deepEqual(seen,ids(0,22));assert.deepEqual(f.visible(),ids(0,9));assert.match(f.next.getAttribute('aria-label'),/1\/3/);f.dispose();
+  assert.deepEqual(seen,ids(0,27));assert.deepEqual(f.visible(),ids(0,9));assert.match(f.next.getAttribute('aria-label'),/1\/3/);f.dispose();
 });
 test('keyboard paging keeps focus visible, stops game keys, and permits assistive clicks',()=>{
   const f=fixture();f.buttons[0].focus();const event=f.strip.emit('keydown',{key:'ArrowDown'});assert.equal(event.defaultPrevented,true);assert.equal(event.stopped,true);assert.equal(f.document.activeElement,f.buttons[9]);
@@ -75,8 +74,8 @@ test('wheel advances by one row per burst while pinch and horizontal movement ar
   f.advance(250);f.strip.emit('wheel',{deltaY:-40});assert.deepEqual(f.visible(),ids(0,9));assert.equal(f.strip.emit('wheel',{deltaY:40,ctrlKey:true}).defaultPrevented,false);assert.equal(f.strip.emit('wheel',{deltaX:40,deltaY:0}).defaultPrevented,false);f.dispose();
 });
 test('resize keeps the current focused emoji available and disposal restores original buttons',()=>{
-  const f=fixture();f.next.emit('click');f.buttons[10].focus();f.resize(304);assert.ok(!f.buttons[10].hidden);assert.equal(f.visible().length,7);
-  f.dispose();assert.equal(f.disconnected(),true);assert.deepEqual(f.strip.children,f.buttons);assert.ok(f.buttons.every(b=>!b.hidden));assert.ok([...f.strip.listeners.values(),...f.document.listeners.values(),...f.window.listeners.values(),...f.next.listeners.values()].every(set=>set.size===0));
+  const f=fixture();f.next.emit('click');f.buttons[10].focus();f.resize(304);assert.ok(!f.buttons[10].hidden);assert.equal(f.visible().length,9);
+  f.dispose();assert.deepEqual(f.strip.children,f.buttons);assert.ok(f.buttons.every(b=>!b.hidden));assert.ok([...f.strip.listeners.values(),...f.document.listeners.values(),...f.window.listeners.values(),...f.next.listeners.values()].every(set=>set.size===0));
 });
 test('a single row hides the page button and empty strips need no listeners',()=>{
   const f=fixture({count:3});assert.equal(f.next.hidden,true);assert.equal(f.strip.emit('wheel',{deltaY:10}).defaultPrevented,false);f.dispose();const empty=fixture({count:0});assert.equal(empty.next,undefined);empty.dispose();

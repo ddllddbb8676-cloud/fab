@@ -11,13 +11,17 @@ export const EMOTES = [
   {id:'question',emoji:'❓',label:'물음표'}, {id:'love',emoji:'🥰',label:'사랑해'},
   {id:'pray',emoji:'🙏',label:'고마워'}, {id:'steam',emoji:'😤',label:'흥'},
   {id:'distorted',emoji:'🫪',label:'당황'}, {id:'ogre',emoji:'👹',label:'버럭'},
-  {id:'asleep',emoji:'😴',label:'잠듦'}, {id:'yawn',emoji:'🥱',label:'하품'}
+  {id:'asleep',emoji:'😴',label:'잠듦'}, {id:'yawn',emoji:'🥱',label:'하품'},
+  {id:'party',emoji:'🥳',label:'축하'}, {id:'awkward',emoji:'😅',label:'머쓱'},
+  {id:'shy',emoji:'😳',label:'부끄러워'}, {id:'sad',emoji:'😔',label:'시무룩'},
+  {id:'unimpressed',emoji:'😑',label:'무표정'}, {id:'quiet',emoji:'🤫',label:'쉿'}
 ];
 // Older IDs remain valid for already-open clients. The picker is curated:
-// frequent reactions first, then anger, surprise/questions, and sleep.
+// exactly three rows of nine, with the user's chosen first row preserved.
 const menuIds=[
-  'wave','excited','grin','cry','heart','love','thumbs-up','clap','pray','plead',
-  'cool','angry','steam','ogre','no','surprise','distorted','think','question','ghost','yawn','asleep'
+  'wave','excited','heart','cry','surprise','ghost','thumbs-up','angry','cool',
+  'grin','party','clap','pray','plead','awkward','shy','sad','unimpressed',
+  'think','question','distorted','steam','ogre','no','quiet','yawn','asleep'
 ];
 export const EMOTE_MENU=menuIds.map(id=>EMOTES.find(emote=>emote.id===id));
 export const EMOTE_SECONDS = 3;

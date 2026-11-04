@@ -1,6 +1,6 @@
 // One short downward swipe advances one complete row. Existing emoji buttons
 // keep their handlers; paging sends no game command and stores nothing.
-export function bindEmoteStrip(element,{now=()=>performance.now(),ResizeObserver=globalThis.ResizeObserver}={}) {
+export function bindEmoteStrip(element,{now=()=>performance.now()}={}) {
   const root=element.ownerDocument,buttons=[...element.querySelectorAll('button[data-emote]')];
   if(!buttons.length)return ()=>{};
   const items=root.createElement('div'),next=root.createElement('button'),number=root.createElement('span'),arrow=root.createElement('span');
@@ -9,7 +9,8 @@ export function bindEmoteStrip(element,{now=()=>performance.now(),ResizeObserver
   arrow.textContent='⌄';arrow.setAttribute('aria-hidden','true');number.className='emote-page-number';number.setAttribute('aria-hidden','true');
   next.append(arrow,number);element.append(items,next);
   const pointers=new Set(),listeners=[];
-  let size=9,page=0,gesture=null,blockedUntil=-Infinity,lastWheel=-Infinity;
+  const size=9;
+  let page=0,gesture=null,blockedUntil=-Infinity,lastWheel=-Infinity;
   const pageCount=()=>Math.ceil(buttons.length/size);
   const block=()=>{blockedUntil=now()+750;if(gesture)gesture.dragged=true;};
   function show(){
@@ -22,14 +23,6 @@ export function bindEmoteStrip(element,{now=()=>performance.now(),ResizeObserver
     if(focused>=0&&buttons[focused].hidden)buttons[Math.min(start+focused%size,buttons.length-1)].focus({preventScroll:true});
   }
   function turn(direction){if(pageCount()<2)return;page=(page+direction+pageCount())%pageCount();show();}
-  function layout(){
-    if(!(element.clientWidth>0))return;
-    // Border/padding 8px + next button 28px + gap 3px. Targets are >=36x44px.
-    const columns=Math.max(1,Math.min(buttons.length,Math.floor((element.clientWidth-39)/36)));
-    if(columns===size)return;
-    const focused=buttons.indexOf(root.activeElement),anchor=focused>=0?focused:page*size;
-    size=columns;page=Math.floor(anchor/size);reset();show();
-  }
   function down(event){
     if(event.button!==undefined&&event.button!==0)return;
     if(pointers.size&&!pointers.has(event.pointerId)){pointers.add(event.pointerId);if(gesture)gesture.cancelled=true;block();return;}
@@ -73,8 +66,7 @@ export function bindEmoteStrip(element,{now=()=>performance.now(),ResizeObserver
   listen(root,'pointermove',moved,{passive:true});listen(root,'pointerup',up,{passive:true});listen(root,'pointercancel',cancel,{passive:true});
   listen(element,'click',click,{capture:true});listen(element,'wheel',wheel,{passive:false});listen(element,'keydown',key);
   listen(next,'click',()=>turn(1));listen(root,'visibilitychange',visibility);
-  if(root.defaultView){listen(root.defaultView,'blur',reset);listen(root.defaultView,'resize',layout);}
-  const observer=typeof ResizeObserver==='function'?new ResizeObserver(layout):null;observer?.observe(element);
-  layout();show();
-  return ()=>{for(const remove of listeners)remove();observer?.disconnect();pointers.clear();gesture=null;buttons.forEach(button=>{button.hidden=false;});element.append(...buttons);items.remove();next.remove();};
+  if(root.defaultView)listen(root.defaultView,'blur',reset);
+  show();
+  return ()=>{for(const remove of listeners)remove();pointers.clear();gesture=null;buttons.forEach(button=>{button.hidden=false;});element.append(...buttons);items.remove();next.remove();};
 }
