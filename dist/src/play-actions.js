@@ -1,9 +1,9 @@
-import { machines, ports, TOOL_WIDTH, TOOL_FRONT, PORT_Z, VEHICLE_Y, SEATED_FOUP_Y, isBlocked } from './layout.js?v=fc4534498d97';
-import { reservedPortIds } from './network-transport.js?v=fc4534498d97';
-import { floorSpot, supportHeight, createFoupStore, createFoupRenderer, FOUP_CLEAN_SECONDS } from './foup-play.js?v=fc4534498d97';
-import { createFoupDebris } from './foup-debris.js?v=fc4534498d97';
-import {stockerPorts,stockers,stockerById,stockerPoint} from './stocker-layout.js?v=fc4534498d97';
-import {canTraverseRuntimeObstacles} from './runtime-obstacles.js?v=fc4534498d97';
+import { machines, ports, TOOL_WIDTH, TOOL_FRONT, PORT_Z, VEHICLE_Y, SEATED_FOUP_Y, isBlocked } from './layout.js?v=f4d57efc026d';
+import { reservedPortIds } from './network-transport.js?v=f4d57efc026d';
+import { floorSpot, supportHeight, createFoupStore, createFoupRenderer, FOUP_CLEAN_SECONDS } from './foup-play.js?v=f4d57efc026d';
+import { createFoupDebris } from './foup-debris.js?v=f4d57efc026d';
+import {stockerPorts,stockers,stockerById,stockerPoint} from './stocker-layout.js?v=f4d57efc026d';
+import {canTraverseRuntimeObstacles} from './runtime-obstacles.js?v=f4d57efc026d';
 
 const smooth = t => { const p = Math.max(0, Math.min(1, t)); return p * p * (3 - 2 * p); };
 export function boardingMachine(car) {

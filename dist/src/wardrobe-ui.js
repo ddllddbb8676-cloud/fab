@@ -1,8 +1,8 @@
-import {items,DEFAULT_OUTFIT} from './cosmetics-catalog.js?v=fc4534498d97';
-import {itemIcon} from './icons.js?v=fc4534498d97';
-import {createWardrobeView} from './wardrobe-view.js?v=fc4534498d97';
-import {NICKNAME_TICKET_PRICE} from './nickname-policy.js?v=fc4534498d97';
-import {createTitlePicker} from './title-picker.js?v=fc4534498d97';
+import {items,DEFAULT_OUTFIT} from './cosmetics-catalog.js?v=f4d57efc026d';
+import {itemIcon} from './icons.js?v=f4d57efc026d';
+import {createWardrobeView} from './wardrobe-view.js?v=f4d57efc026d';
+import {NICKNAME_TICKET_PRICE} from './nickname-policy.js?v=f4d57efc026d';
+import {createTitlePicker} from './title-picker.js?v=f4d57efc026d';
 function recordUsageEvent(kind, details) {
   try { window.__fabTelemetry?.record(kind, details); } catch {}
 }

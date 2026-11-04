@@ -65,7 +65,14 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
     reset(id){const changed=broken.delete(id);if(changed)onEquipmentChange(equipmentState());return changed;}
   };
   let foupReady=false;
-  const store=createFoupStore({ports,initialPortIds:initialSharedPorts,seedStockers:true,isDestroyed:destruction.isDestroyed,onImpact:r=>emit('bounce',r),onShatter:r=>emit('shatter',r),onStockerOut:p=>emit('stocker-out',p),onChange:()=>{if(foupReady)onFoupChange(store.checkpoint());}});
+  const store=createFoupStore({ports,initialPortIds:initialSharedPorts,seedStockers:true,isDestroyed:destruction.isDestroyed,
+    canSupplyStocker:r=>{
+      if(r.mode==='cleared')return true;
+      if(leases.has(byPort.get(r.portId)?.machineId)||residents.people.some(p=>p.recordId===r.id))return false;
+      for(const p of players.values())if(!p.hidden&&distance(p,r)<=20)return false;
+      return true;
+    },
+    onImpact:r=>emit('bounce',r),onShatter:r=>emit('shatter',r),onStockerOut:p=>emit('stocker-out',p),onChange:()=>{if(foupReady)onFoupChange(store.checkpoint());}});
   function restoreFoups(saved){
     if(time!==0||players.size)throw new Error('FOUP restore is only allowed before the room starts');
     store.restore(saved);

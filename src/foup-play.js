@@ -7,6 +7,7 @@ const retiredStockers=new Set(['STK03','STK04','STK05','STK06']);
 export const FOUP_CLEAN_SECONDS = 3.2;
 export const FOUP_CLEAN_REWARD = 2;
 export const FOUP_RESTOCK_SECONDS = 12;
+export const STOCKER_REFILL_COUNT = 12;
 
 export function floorSpot(point, radius = .295) {
   if (!isBlocked(point.x, point.z, radius)) return { x: point.x, z: point.z };
@@ -28,7 +29,7 @@ export function supportHeight(x, z) {
 }
 
 // A FOUP keeps the same identity across port, hands, throw and ground states.
-export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () => {}, showOriginal = () => {}, isDestroyed = () => false, onImpact = () => {}, onShatter = () => {}, onChange = () => {}, seedStockers=false, onStockerOut=()=>{} }) {
+export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () => {}, showOriginal = () => {}, isDestroyed = () => false, onImpact = () => {}, onShatter = () => {}, onChange = () => {}, seedStockers=false, canSupplyStocker=()=>true, onStockerOut=()=>{} }) {
   const byPort = new Map(ports.map(p => [p.id, p])), records = new Map(), occupancy = new Map();
   const hands = new Map();
   let stockersSeeded=false;
@@ -65,6 +66,17 @@ export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () 
       available.forEach((r,i)=>stow(r,s,Math.floor(i/2)*8+(i%2)*3,'stored'));
     }
   }
+  function refillStocker(s){
+    if(!seedStockers||stockerState(s.id).items.length)return 0;
+    // Reuse idle port stock or fully cleaned carriers. Never take something
+    // from hands, the floor, debris, a transfer, or the golden hunt.
+    const rank=r=>r.mode==='cleared'?0:isDestroyed(byPort.get(r.portId)?.machineId)?1:r.original?2:3;
+    const available=[...records.values()].filter(r=>!r.gold&&!r.owner&&!r.cleaner&&
+      (r.mode==='port'&&byPort.has(r.portId)&&occupancy.get(r.portId)===r.id||r.mode==='cleared'&&r.refillIn<=0)&&canSupplyStocker(r))
+      .sort((a,b)=>rank(a)-rank(b)||Math.hypot(a.x-s.x,a.z-s.z)-Math.hypot(b.x-s.x,b.z-s.z)).slice(0,STOCKER_REFILL_COUNT);
+    available.forEach((r,i)=>stow(r,s,Math.floor(i/2)*8+(i%2)*3,'stored'));
+    return available.length;
+  }
   function stockerPut(id,owner='player',expectedId){
     const s=stockerById.get(id),r=records.get(hands.get(owner)),state=stockerState(id);
     if(!s||!r||expectedId&&r.id!==expectedId)return {ok:false,message:'들고 있는 FOUP으로 IN을 눌러주세요'};
@@ -82,8 +94,9 @@ export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () 
     }
     if(state.out)return {ok:false,message:'OUT에 나온 FOUP을 눌러 가져가세요'};
     if(state.busy)return {ok:false,message:'스토커가 움직이고 있어요. 잠시만 기다려주세요'};
-    const r=state.items.find(r=>r.mode==='stored');
-    if(!r)return {ok:false,message:'보관 중인 FOUP이 없어요. IN으로 넣을 수 있어요'};
+    let r=state.items.find(r=>r.mode==='stored');
+    if(!r&&refillStocker(s))r=stockerState(id).items.find(r=>r.mode==='stored');
+    if(!r)return {ok:false,message:'지금 보충할 FOUP이 없어요. 바닥 잔해를 청소하거나 IN으로 넣어주세요'};
     Object.assign(r,{mode:'retrieving',stockAge:0,stockCue:false});Object.assign(r,stockerRecordPose(r));onChange();
     return {ok:true,phase:'retrieving'};
   }
@@ -98,11 +111,14 @@ export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () 
     if(record?.gold&&owner.startsWith('resident:'))return false;
     if (hands.has(owner) || !record || !['port', 'ground','stocker-out'].includes(record.mode)) return false;
     if (record.portId && atPort(record.portId) !== record) return false;
+    const sourceStocker=record.mode==='stocker-out'?stockerById.get(record.stockerId):null;
     if (record.original) { hideOriginal(record.portId); record.original = false; }
     if (record.portId) occupancy.delete(record.portId);
     record.homePortId ??= record.portId;
     delete record.stockerId;delete record.stockSlot;delete record.stockAge;delete record.stockCue;
-    record.portId = null; record.mode = 'carried'; record.owner = owner; hands.set(owner, id); onChange(); return true;
+    record.portId = null; record.mode = 'carried'; record.owner = owner; hands.set(owner, id);
+    if(sourceStocker)refillStocker(sourceStocker);
+    onChange();return true;
   }
   function place(portId, owner = 'player') {
     const record = records.get(hands.get(owner)), p = byPort.get(portId);
