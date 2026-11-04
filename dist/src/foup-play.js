@@ -1,6 +1,6 @@
-import { isBlocked, machines, bays, SEATED_FOUP_Y } from './layout.js?v=9d9367db83f5';
-import {entranceBounds} from './entrance-layout.js?v=9d9367db83f5';
-import {stockers,stockerById,stockerBounds,stockerSlot,stockerRecordPose,STOCKER_CAPACITY,STOCKER_TRANSFER_SECONDS,STOCKER_OUT_CUE_AT} from './stocker-layout.js?v=9d9367db83f5';
+import { isBlocked, machines, bays, SEATED_FOUP_Y } from './layout.js?v=1c3714050106';
+import {entranceBounds} from './entrance-layout.js?v=1c3714050106';
+import {stockers,stockerById,stockerBounds,stockerSlot,stockerRecordPose,STOCKER_CAPACITY,STOCKER_TRANSFER_SECONDS,STOCKER_OUT_CUE_AT} from './stocker-layout.js?v=1c3714050106';
 const stockModes=new Set(['stored','stocking','retrieving','stocker-out']);
 // Accept the retired units only while reading older saved worlds.
 const retiredStockers=new Set(['STK03','STK04','STK05','STK06']);
@@ -237,6 +237,11 @@ export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () 
     for(const r of records.values())if(['ground','broken','cleared','flying','carried'].includes(r.mode)){
       const wing=entranceBounds.find(b=>r.x>b.minX-.3&&r.x<b.maxX+.3&&r.z>b.minZ-.3&&r.z<b.maxZ+.3);
       if(wing)r.z=wing.minZ-.4;
+      // Moving a stocker forward must not bury existing floor carriers/debris.
+      // Keep the identity, broken state and any event reward metadata intact.
+      if(['ground','broken','cleared'].includes(r.mode)&&stockerBounds.some(b=>r.x>b.minX-.3&&r.x<b.maxX+.3&&r.z>b.minZ-.3&&r.z<b.maxZ+.3&&r.y<b.maxY+.225)){
+        Object.assign(r,floorSpot(r,.48)??floorSpot(r,.24)??{x:0,z:70},{y:r.mode==='broken'?.035:.225});
+      }
     }
     for(const r of records.values())if(['flying','carried'].includes(r.mode)){
       // An interrupted throw cannot return a fresh, reward-eligible FOUP. Restore

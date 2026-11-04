@@ -237,6 +237,11 @@ export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () 
     for(const r of records.values())if(['ground','broken','cleared','flying','carried'].includes(r.mode)){
       const wing=entranceBounds.find(b=>r.x>b.minX-.3&&r.x<b.maxX+.3&&r.z>b.minZ-.3&&r.z<b.maxZ+.3);
       if(wing)r.z=wing.minZ-.4;
+      // Moving a stocker forward must not bury existing floor carriers/debris.
+      // Keep the identity, broken state and any event reward metadata intact.
+      if(['ground','broken','cleared'].includes(r.mode)&&stockerBounds.some(b=>r.x>b.minX-.3&&r.x<b.maxX+.3&&r.z>b.minZ-.3&&r.z<b.maxZ+.3&&r.y<b.maxY+.225)){
+        Object.assign(r,floorSpot(r,.48)??floorSpot(r,.24)??{x:0,z:70},{y:r.mode==='broken'?.035:.225});
+      }
     }
     for(const r of records.values())if(['flying','carried'].includes(r.mode)){
       // An interrupted throw cannot return a fresh, reward-eligible FOUP. Restore

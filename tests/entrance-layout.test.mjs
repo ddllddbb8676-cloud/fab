@@ -68,3 +68,20 @@ test('returning profiles retain identity and records, and old rear-strip FOUPs r
   const unchanged={...saved,groundPosition:{x:0,y:0,z:20,heading:1}};room.join('valid-resume',unchanged);
   assert.equal(room.players.get('valid-resume').z,20,'valid saved positions do not move to entrance');
 });
+
+test('bringing stockers forward preserves loose FOUPs, debris, event metadata and returning accounts',()=>{
+  const room=createRoom(),saved={civilianName:'위치검증',name:'위치검증',brokenCount:21,repairedCount:8,hasEntered:true,groundPosition:{x:-5.2,y:0,z:84.12,heading:1}};
+  assert.ok(isBlocked(saved.groundPosition.x,saved.groundPosition.z,WALK_RADIUS),'old loading approach is now inside the moved body');
+  room.join('stocker-front-test',saved);const person=room.players.get('stocker-front-test');
+  assert.equal(person.name,saved.name);assert.equal(person.brokenCount,21);assert.equal(person.repairedCount,8);
+  assert.equal(isBlocked(person.x,person.z,WALK_RADIUS),false);
+  const store=createFoupStore({ports,initialPortIds:ports.slice(0,4).map(p=>p.id)});
+  const checkpoint={version:1,records:[...store.records.values()].map((r,i)=>[r.id,i===1?'broken':i===2?'cleared':'ground',null,i===3?0:-5.2,i===1?.035:.225,i===3?70:84.12,0,3,false,r.homePortId])};
+  checkpoint.golden={version:1,entries:[[checkpoint.records[1][0],'gold:1793782800000',1793783400000,true]]};
+  const untouched=checkpoint.records[3].slice();store.restore(checkpoint);
+  assert.equal(store.records.size,4);
+  for(const row of checkpoint.records){const r=store.records.get(row[0]);assert.equal(r.mode,row[1]);assert.equal(r.breakSeq,3);assert.equal(isBlocked(r.x,r.z,WALK_RADIUS),false);}
+  assert.deepEqual(store.checkpoint().golden,checkpoint.golden,'no new reward or lost golden state');
+  assert.deepEqual(store.checkpoint().records.find(r=>r[0]===untouched[0]),untouched,'unobstructed floor carrier stays in place');
+  const once=store.checkpoint();store.restore(once);assert.deepEqual(store.checkpoint(),once,'subsequent restart does not shift or duplicate carriers');
+});

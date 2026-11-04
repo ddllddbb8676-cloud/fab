@@ -1,4 +1,4 @@
-import {DEFAULT_OUTFIT} from './cosmetics-catalog.js?v=9d9367db83f5';
+import {DEFAULT_OUTFIT} from './cosmetics-catalog.js?v=1c3714050106';
 
 // Fixed by NPC identity so every visitor sees the same modest outfit.
 const residentItems=[null,['head','helmet-white'],null,['face','glasses'],null,['bag','bag-basic'],null,['head','helmet-orange'],null,['face','goggles'],null,['head','sprout']];

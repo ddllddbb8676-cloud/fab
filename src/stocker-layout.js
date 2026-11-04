@@ -5,8 +5,8 @@ export const STOCKER_CAPACITY=48, STOCKER_TRANSFER_SECONDS=3, STOCKER_OUT_CUE_AT
 export function stockerPoint(s,x,y,z){const c=Math.cos(s.yaw),n=Math.sin(s.yaw);return {x:s.x+c*x+n*z,y,z:s.z-n*x+c*z};}
 function bounds(s,x,z,w,d){const a=stockerPoint(s,x-w/2,0,z-d/2),b=stockerPoint(s,x+w/2,0,z+d/2);return {minX:Math.min(a.x,b.x),maxX:Math.max(a.x,b.x),minZ:Math.min(a.z,b.z),maxZ:Math.max(a.z,b.z)};}
 export const stockers=Object.freeze([
-  // Keep only the two corners beside the air-shower entrance.
-  [-9.9,83.5,Math.PI/2],[9.9,83.5,-Math.PI/2]
+  // Bring the two loading faces beside the entrance rest area, out of the recess.
+  [-7.5,83.5,Math.PI/2],[7.5,83.5,-Math.PI/2]
 ].map(([x,z,yaw],index)=>{
   const s={id:`STK${String(index+1).padStart(2,'0')}`,index,x,z,yaw};
   s.bounds={...bounds(s,0,0,2.6,6.2),minY:0,maxY:STOCKER_SIZE.height};
