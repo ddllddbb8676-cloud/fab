@@ -21,3 +21,13 @@
 ## 배포
 
 이 변경 직전 운영 버전은 `f16f5677-dd3f-4ee7-b933-ef835a87eb70`, 소스 기준은 `6094f76`이다. 배포 결과는 `outputs/entrance-courtyard-release/{completed,verification,recovery}.json`으로 확인한다. DO migration `v2-growth-analytics`와 FabRoom/FabAnalytics 네임스페이스를 유지한다. 이전 스토커 재고를 다시 초기화하지 않는다.
+
+
+2026-11-04 14:27 KST 운영 반영 및 검증 완료.
+
+- 기능 소스: `65a2f8a6b0cd6b088fd3848f3bed1302d0b1b512`.
+- 운영 버전: `271a6eb8-0183-476f-9a0f-e5668b175b3b`, 공개 모듈 리비전 `2f7b71c7919c`(75개).
+- 기존 검증 계정의 ID·닉네임·지갑·구매품·파괴/수리 기록 해시가 배포 전후 동일했다. 관리자 익명/일반 접근 403, 두 DO 네임스페이스 및 소유자 secret 유지 확인.
+- 공개 모듈과 로컬 배포 빌드 일치, 공유 스토커 보유 FOUP 45개 관찰. 이용자 활동 중인 수량이므로 초기 재고와 다를 수 있다. 재고 재초기화는 하지 않았다.
+- `completed.json`과 `verification.json` 일치, `recovery.json`은 complete, 실행 잠금 해제 확인.
+- 이전 운영 버전 `f16f5677-dd3f-4ee7-b933-ef835a87eb70`이 이 변경의 복원 기준이다. 다른 변경이 추가되면 이 버전으로 임의 복원하지 않는다.
