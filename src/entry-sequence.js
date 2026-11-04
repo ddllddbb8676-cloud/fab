@@ -9,7 +9,7 @@ export const ENTRY_TIMES = { shower: .8, settle: 4.8, opening: 5.45, walking: 7.
 // changing ordinary chase controls or forcing a view on a resumed session.
 export function entryCamera(walk) {
   const progress = clamp(walk);
-  return { yaw: 1.79 * smooth((progress - .6) / .4), elevation: .3,
+  return { yaw: 1.70 * smooth((progress - .6) / .4), elevation: .3,
     distance: 1.5 + (CHASE_CAMERA.distance - 1.5) * progress };
 }
 

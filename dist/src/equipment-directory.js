@@ -1,5 +1,5 @@
-import { pendingRepairEquipment, startRepairRanking } from './repair-ranking.js?v=b91769ddb660';
-export { rankRepairEquipment } from './repair-ranking.js?v=b91769ddb660';
+import { pendingRepairEquipment, startRepairRanking } from './repair-ranking.js?v=2f7b71c7919c';
+export { rankRepairEquipment } from './repair-ranking.js?v=2f7b71c7919c';
 
 const normalize = value => String(value ?? '').normalize('NFKC').toLocaleLowerCase('ko-KR').replace(/[^\p{L}\p{N}]/gu, '');
 
