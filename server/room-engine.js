@@ -22,7 +22,7 @@ const distance=(a,b)=>Math.hypot(a.x-b.x,a.z-b.z);
 const finite=(n,a,b)=>Number.isFinite(n)&&n>=a&&n<=b;
 export const SAFETY_DUTY={warmup:300,handover:15,cooldown:600,goal:SAFETY_CATCH_GOAL};
 const SAFETY_DUTY_VERSION=2,LEGACY_SAFETY_COOLDOWN=90;
-export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()=>{},onRosterChange=()=>{},getHistoricalScores=()=>[],onEquipmentChange=()=>{},onFoupChange=()=>{},claimName=(id,kind,preferred,excluded)=>(kind==='safety'?createSafetyName:createVisitorName)(random,excluded,preferred),now=Date.now,nicknameAvailable=null,replaceNickname=null,ownerId=''}={}) {
+export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()=>{},onReward=()=>{},onRosterChange=()=>{},getHistoricalScores=()=>[],onEquipmentChange=()=>{},onFoupChange=()=>{},claimName=(id,kind,preferred,excluded)=>(kind==='safety'?createSafetyName:createVisitorName)(random,excluded,preferred),now=Date.now,nicknameAvailable=null,replaceNickname=null,ownerId=''}={}) {
   ownerId=configuredOwnerId(ownerId);
   const players=new Map(), broken=new Map(), leases=new Map(), events=[], foupVersions=new Map();
   const fleet=createFleet(), byPort=new Map(ports.map(p=>[p.id,p]));
@@ -30,6 +30,11 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
   function profile(p){return {id:p.id,name:p.name,civilianName:p.civilianName,safetyName:p.safetyName,role:p.role,brokenCount:p.brokenCount,repairedCount:p.repairedCount,penalty:p.penalty,
     titlePreference:p.titlePreference,nicknameChoiceVersion:p.nicknameChoiceVersion,nicknameChoiceKind:p.nicknameChoiceKind,wallet:structuredClone(p.wallet),activeSeconds:p.activeSeconds,safetyTurns:p.safetyTurns,safetyCaughtIds:[...p.safetyCaughtIds],eligibleAfter:p.eligibleAfter,safetyDutyVersion:SAFETY_DUTY_VERSION,optOut:p.optOut,hasEntered:p.hasEntered,groundPosition:p.groundPosition,...(p.chipUnlimited?{chipUnlimited:true}:{})};}
   function changed(p){p.lastSavedAt=time;onProfileChange(profile(p));}
+  function credit(p,amount,kind,options){
+    const before=p.wallet.chips,credited=grantChips(p,amount,options);
+    if(credited)try{onReward({id:p.id,kind,amount:p.wallet.chips-before});}catch{}
+    return credited;
+  }
   function rosterChanged(){revision++;onRosterChange();}
   function emit(kind,point) { if(events.length<100) events.push([kind,round(point.x),round(point.z)]); }
   function equipmentState(){return {version:1,broken:[...broken.values()].map(r=>({id:r.id,destroyedAt:r.destroyedAt})).sort((a,b)=>a.id-b.id)};}
@@ -261,9 +266,9 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
       const m=machines[data.id],l=leases.get(data.id);
       if(!m||l?.owner!==id||distance(p,getEmoApproach(m).destination)>1.2)return fail('장비 앞으로 가까이 다가가 주세요');
       if(kind==='press'&&l.kind==='emo'){if(l.started===undefined)l.started=time;p.phase='press';p.time=0;emit('press',p);return {ok:true};}
-      if(kind==='explode'&&l.kind==='emo'&&l.started!==undefined&&time-l.started>=.55){const ok=destruction.trigger(m.id);if(ok){p.brokenCount++;grantChips(p,5,{destructionId:m.id});}release(p);if(ok)changed(p);return {ok};}
+      if(kind==='explode'&&l.kind==='emo'&&l.started!==undefined&&time-l.started>=.55){const ok=destruction.trigger(m.id);if(ok){p.brokenCount++;credit(p,5,'destroy',{destructionId:m.id});}release(p);if(ok)changed(p);return {ok};}
       if(kind==='repair'&&l.kind==='repair'){if(!destruction.beginRepair(m.id,id))return fail();l.started=time;p.phase='repair';p.time=0;return {ok:true};}
-      if(kind==='finish'&&l.kind==='repair'&&l.started!==undefined&&time-l.started>=4.7){if(!destruction.reset(m.id))return fail();p.repairedCount++;grantChips(p,3);p.penalty=Math.max(0,p.penalty-1);if(!p.penalty)p.safeUntil=time+12;emit('complete',p);release(p);changed(p);return {ok:true};}
+      if(kind==='finish'&&l.kind==='repair'&&l.started!==undefined&&time-l.started>=4.7){if(!destruction.reset(m.id))return fail();p.repairedCount++;credit(p,3,'repair');p.penalty=Math.max(0,p.penalty-1);if(!p.penalty)p.safeUntil=time+12;emit('complete',p);release(p);changed(p);return {ok:true};}
       return fail('동작이 끝난 뒤 다시 눌러주세요');
     }
     if(kind==='pickup') {
@@ -283,7 +288,7 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
       const r=store.getCarried(id);if(!r||p.vehicleId!==null&&p.vehicleId!==undefined)return fail();
       const drop=Boolean(data.drop),speed=drop?.8:4.7;
       store.launch(r,{x:p.x+Math.sin(p.heading)*.34,y:Math.max(.4,p.y+.82),z:p.z+Math.cos(p.heading)*.34,yaw:p.heading+Math.PI},
-        {x:Math.sin(p.heading)*speed,y:drop?.2:3.1,z:Math.cos(p.heading)*speed},{shatter:!drop});p.carrying=false;emit(drop?'place':'throw',p);if(!drop){grantChips(p,1);changed(p);}return {ok:true};
+        {x:Math.sin(p.heading)*speed,y:drop?.2:3.1,z:Math.cos(p.heading)*speed},{shatter:!drop});p.carrying=false;emit(drop?'place':'throw',p);if(!drop){credit(p,1,'throw');changed(p);}return {ok:true};
     }
     if(kind==='board') {
       const v=fleet.vehicles[data.id],m=v&&boardingMachine(v.state.car);
@@ -321,7 +326,7 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
         else {
           r.cleanProgress=Math.min(1,p.time/FOUP_CLEAN_SECONDS);
           if(p.time>=(p.nextSweep||0)){emit('sweep',p);p.nextSweep=p.time+.52;}
-          if(p.time+1e-8>=FOUP_CLEAN_SECONDS){r.cleanProgress=1;if(store.finishCleanup(r.id,p.id,p.cleanBreakSeq)){grantChips(p,FOUP_CLEAN_REWARD);changed(p);}release(p);}
+          if(p.time+1e-8>=FOUP_CLEAN_SECONDS){r.cleanProgress=1;if(store.finishCleanup(r.id,p.id,p.cleanBreakSeq)){credit(p,FOUP_CLEAN_REWARD,'clean');changed(p);}release(p);}
         }
       }
       p.emoteLeft=Math.max(0,(p.emoteUntil||0)-time);if(!p.emoteLeft)p.emote='';
@@ -330,7 +335,7 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
       if(p.phase==='repair'){const l=leases.get(p.targetId);if(l?.owner===p.id)destruction.setRepairProgress(p.targetId,Math.min(.99,(time-l.started)/5));}
       const held=store.getCarried(p.id);p.carrying=Boolean(held);
       if(held)Object.assign(held,{x:p.x+Math.sin(p.heading)*.34,y:p.y+(p.posture==='sit'?.48:p.posture==='lie'?.62:.82),z:p.z+Math.cos(p.heading)*.34,yaw:p.heading+Math.PI});
-      if(p.phase==='riding'){const v=fleet.vehicles[p.vehicleId];if(v?.playerId===p.id&&v.passenger){Object.assign(p,{x:v.state.car.x,y:2.16,z:v.state.car.z,heading:v.state.car.yaw});p.rideSeconds+=dt;const earned=Math.floor((p.rideSeconds+1e-8)/10);if(earned){p.rideSeconds=Math.max(0,p.rideSeconds-earned*10);grantChips(p,earned);changed(p);}}else p.rideSeconds=0;}else p.rideSeconds=0;
+      if(p.phase==='riding'){const v=fleet.vehicles[p.vehicleId];if(v?.playerId===p.id&&v.passenger){Object.assign(p,{x:v.state.car.x,y:2.16,z:v.state.car.z,heading:v.state.car.yaw});p.rideSeconds+=dt;const earned=Math.floor((p.rideSeconds+1e-8)/10);if(earned){p.rideSeconds=Math.max(0,p.rideSeconds-earned*10);credit(p,earned,'oht');changed(p);}}else p.rideSeconds=0;}else p.rideSeconds=0;
     }
     assignSafetyDuty();
     const visitors=[...players.values()],targets=[...visitors,...residents.people];safety.update(dt,targets,time);

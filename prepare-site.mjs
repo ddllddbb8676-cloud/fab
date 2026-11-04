@@ -25,6 +25,7 @@ for(const name of ['startup.js','startup-controller.js','startup-signals.js','ro
 for (const name of ['main.js', 'layout.js', 'transport.js', 'rail-network.js', 'network-transport.js', 'avatar.js', 'spatial-batch.js', 'walking.js', 'posture.js', 'foup-play.js', 'play-actions.js', 'visitor-name.js', 'explorer.js', 'view-controls.js', 'tour-route.js', 'transfer-view.js', 'runtime-obstacles.js', 'ambience.js', 'equipment-visibility.js', 'emo-controls.js', 'emo-interaction.js', 'equipment-destruction.js', 'air-shower.js', 'entry-sequence.js', 'equipment-catalog.js', 'equipment-labels.js', 'equipment-directory.js', 'equipment-directory.css', 'bay-lighting.js', 'style.css']) await copyFile(new URL('src/' + name, root), new URL('src/' + name, dist));
 await copyFile(new URL('src/residents.js', root), new URL('src/residents.js', dist));
 await copyFile(new URL('src/admin-visit.js',root),new URL('src/admin-visit.js',dist));
+await copyFile(new URL('src/usage-telemetry.js',root),new URL('src/usage-telemetry.js',dist));
 await copyFile(new URL('src/scene-depth.js', root), new URL('src/scene-depth.js', dist));
 await copyFile(new URL('src/playful-accessories.js', root), new URL('src/playful-accessories.js', dist));
 await copyFile(new URL('src/foup-debris.js', root), new URL('src/foup-debris.js', dist));
@@ -43,7 +44,7 @@ await copyFile(new URL('docs/capacity-plan.html', root), new URL('docs/capacity-
 await copyFile(new URL('connection-check.html', root), new URL('connection-check.html', dist));
 await mkdir(new URL('admin/',dist),{recursive:true});
 await copyFile(new URL('admin.html',root),new URL('admin.html',dist));
-for(const name of ['admin.js','admin.css'])await copyFile(new URL('admin/'+name,root),new URL('admin/'+name,dist));
+for(const name of ['admin.js','admin.css','growth.js'])await copyFile(new URL('admin/'+name,root),new URL('admin/'+name,dist));
 for(const name of (await readdir(new URL('src/',dist))).filter(name=>name.endsWith('.js'))){
   const file=new URL('src/'+name,dist);await writeFile(file,versionLocalModules(await readFile(file,'utf8'),revision));
 }

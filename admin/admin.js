@@ -1,4 +1,6 @@
+import {createGrowthDashboard} from './growth.js';
 const $=id=>document.getElementById(id);
+const growthDashboard=createGrowthDashboard(document);
 const integer=new Intl.NumberFormat('ko-KR',{maximumFractionDigits:0});
 const decimal=new Intl.NumberFormat('ko-KR',{maximumFractionDigits:1});
 const localDate=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit'});
@@ -179,6 +181,7 @@ function render(data){
   text('collection-start','시간별 통계 수집 시작 · '+stamp(data.startedAt)+' (한국 시간)');
   $('report').hidden=false;
   liveUsers(live.users);daily(data);hourly(data);purchases(profiles);
+  growthDashboard.render(data.growth,{today:data.today?.date,generatedAt:data.generatedAt});
   const notes=$('server-notes');notes.replaceChildren();
   for(const value of Array.isArray(data.notes)?data.notes:[]){if(typeof value!=='string')continue;const item=document.createElement('li');item.textContent=value;notes.append(item);}
   notes.hidden=!notes.childElementCount;
@@ -193,6 +196,7 @@ async function refresh(){
     const response=await fetch('/api/admin/metrics',{credentials:'same-origin',cache:'no-store',signal:controller.signal,headers:{Accept:'application/json'}});
     if(response.status===401||response.status===403){
       lastData=null;lastUpdated=0;$('report').hidden=true;
+      growthDashboard.clear();
       activeVisit?.controller.abort();activeVisit=null;visitButtons=[];visitStatus('');
       $('live-users').replaceChildren();text('live-users-count','—');text('live-users-status','');
       showMessage('운영자 계정으로만 볼 수 있어요.\nFAB짱 세미로 게임에 접속한 브라우저에서 이 주소를 열어 주세요. 인스타 앱과 Safari는 계정이 다를 수 있어요.');

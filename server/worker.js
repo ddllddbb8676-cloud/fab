@@ -14,6 +14,9 @@ import {createProfileMetrics} from './profile-metrics.js';
 import {createActivityMetrics} from './activity-metrics.js';
 import {items as cosmeticItems} from '../src/cosmetics-catalog.js';
 import {isSafety} from '../src/safety-team.js';
+import {createGrowthRelay} from './growth-relay.js';
+import {telemetryAccess} from './telemetry-request.js';
+export {FabAnalytics} from './analytics-worker.js';
 
 const PRIVATE_HEADERS = {'Cache-Control':'private, no-store','Vary':'Cookie'};
 const httpResult = (status, data = {}) => Response.json(data,{status,headers:PRIVATE_HEADERS});
@@ -48,6 +51,11 @@ export default {
   async fetch(request,env) {
     const redirect=canonicalRedirect(request);if(redirect)return redirect;
     const url=new URL(request.url);
+    if(url.pathname==='/api/telemetry'){
+      const denied=telemetryAccess(request,Boolean(sessionToken(request)));if(denied)return httpResult(denied);
+      if(!env.FAB_ANALYTICS)return httpResult(503);
+      return env.FAB_ANALYTICS.getByName('FAB-ANALYTICS-v1').fetch(request);
+    }
     if(url.pathname==='/api/admin/visit'){
       const denied=await visitAccess(request,env);if(denied)return denied;
       return env.FAB_ROOM.getByName('FAB-A-v20').fetch(request);
@@ -55,7 +63,13 @@ export default {
     if(['/admin','/admin/','/admin.html','/api/admin/metrics'].includes(url.pathname)){
       if(!await isAdmin(request,env))return url.pathname.startsWith('/api/')?httpResult(403):adminDenied();
       if(request.method!=='GET')return httpResult(405);
-      if(url.pathname==='/api/admin/metrics')return env.FAB_ROOM.getByName('FAB-A-v20').fetch(request);
+      if(url.pathname==='/api/admin/metrics'){
+        const legacy=env.FAB_ROOM.getByName('FAB-A-v20').fetch(request);
+        let timer;
+        const analysis=env.FAB_ANALYTICS?Promise.race([env.FAB_ANALYTICS.getByName('FAB-ANALYTICS-v1').fetch(request).then(async response=>response.ok?response.json():null),new Promise(resolve=>{timer=setTimeout(()=>resolve(null),2500);})]).catch(()=>null).finally(()=>clearTimeout(timer)):Promise.resolve(null);
+        const [response,growth]=await Promise.all([legacy,analysis]);if(!response.ok)return response;
+        const data=await response.json();return Response.json({...data,growth,notes:[...(data.notes||[]),...(!growth?['이용 흐름 분석 응답이 늦어 기존 현황을 먼저 표시했어요. 다음 갱신에 다시 확인해요.']:[])]},{headers:ADMIN_HEADERS});
+      }
       if(url.pathname!=='/admin')return new Response(null,{status:302,headers:{...ADMIN_HEADERS,Location:'/admin'}});
       const asset=await env.ASSETS.fetch(request),headers=new Headers(asset.headers);
       for(const [key,value] of Object.entries(ADMIN_HEADERS))headers.set(key,value);
@@ -103,11 +117,12 @@ export class FabRoom extends DurableObject {
   constructor(ctx,env) {
     super(ctx,env);this.adminEnv=env;this.sockets=new Map();this.rosterDirty=false;
     const excludedIds=metricExclusions(env);this.metricExcludedIds=new Set(excludedIds);
+    this.growthMetrics=createGrowthRelay({binding:env.FAB_ANALYTICS,waitUntil:p=>ctx.waitUntil(p),ownerId:env.FAB_OWNER_VISITOR_ID,excludedIds});this.lastGrowthPresence=0;
     this.activityMetrics=createActivityMetrics({excludedIds});this.profileMetrics=createProfileMetrics({ownerId:env.FAB_OWNER_VISITOR_ID,excludedIds});
     this.metricProfiles=new Map();this.paidItems=new Set(cosmeticItems.filter(item=>item.price>0).map(item=>item.id));this.lastMetricsFlush=Date.now();
     this.profiles=createProfileStore(ctx.storage,{ownerId:env.FAB_OWNER_VISITOR_ID,onProfileObserved:p=>this.observeProfile(p),onProfileRemoved:id=>{this.profileMetrics.remove(id);this.metricProfiles.delete(id);}});
     this.httpPeers=new Map();this.connectionOrders=new Map();
-    this.room=createRoom({ownerId:env.FAB_OWNER_VISITOR_ID,nicknameAvailable:(...args)=>this.profiles.nicknameAvailable(...args),replaceNickname:(...args)=>this.profiles.replaceNickname(...args),claimName:(...args)=>this.profiles.claimName(...args),getHistoricalScores:()=>this.profiles.ranking(),onEquipmentChange:s=>this.profiles.saveEquipment(s),onFoupChange:s=>this.profiles.saveFoups(s),onProfileChange:p=>this.profiles.save(p),onRosterChange:()=>{this.rosterDirty=true;},onCatch:event=>{
+    this.room=createRoom({ownerId:env.FAB_OWNER_VISITOR_ID,nicknameAvailable:(...args)=>this.profiles.nicknameAvailable(...args),replaceNickname:(...args)=>this.profiles.replaceNickname(...args),claimName:(...args)=>this.profiles.claimName(...args),getHistoricalScores:()=>this.profiles.ranking(),onEquipmentChange:s=>this.profiles.saveEquipment(s),onFoupChange:s=>this.profiles.saveFoups(s),onProfileChange:p=>this.profiles.save(p),onReward:event=>this.trackGrowth(()=>this.growthMetrics.reward(event.id,event.kind,event.amount)),onRosterChange:()=>{this.rosterDirty=true;},onCatch:event=>{
       for(const [ws,s] of this.sockets)if(s.id===event.guardId)this.send(ws,{type:'safety-catch',...event});
     }});this.timer=null;this.tickCount=0;this.previous=Date.now();
     ctx.blockConcurrencyWhile(async()=>{
@@ -128,15 +143,23 @@ export class FabRoom extends DurableObject {
       await this.checkpoint();
       for(const ws of ctx.getWebSockets()) {
         const {id,order}=ws.deserializeAttachment()||{},saved=id?await this.profiles.get(id):null;
-        if(id&&this.room.join(id,saved).ok){this.sockets.set(ws,{id,rate:0,at:Date.now()});this.connectionOrders.set(id,{order:order??0,at:Date.now()});this.welcome(ws,id);}
+        if(id&&this.room.join(id,saved).ok){this.sockets.set(ws,{id,rate:0,at:Date.now()});this.connectionOrders.set(id,{order:order??0,at:Date.now()});this.welcome(ws,id);this.trackGrowth(()=>this.growthMetrics.connect(id,{existing:Boolean(saved),transport:'restored',profile:this.room.profile(id)}));}
         else try{ws.close(1012,'다시 연결해 주세요');}catch{}
       }
       await this.checkpoint();if(this.sockets.size)this.start();
       this.track(()=>this.activityMetrics.sync(this.room.players.keys()));
+      this.updateGrowthPresence(true);
+      this.trackGrowth(()=>this.growthMetrics.flush(true));
     });
   }
   track(callback){try{if(!this.metricsUnavailable)callback();}catch{this.metricsUnavailable=true;}}
+  trackGrowth(callback){try{if(!this.growthUnavailable)return callback();}catch{this.growthUnavailable=true;}}
+  updateGrowthPresence(force=false){
+    const now=Date.now();if(!force&&now-this.lastGrowthPresence<1000)return;this.lastGrowthPresence=now;
+    this.trackGrowth(()=>this.growthMetrics.presence([...this.room.players.values()].map(p=>({id:p.id,hidden:p.hidden,phase:p.phase,role:p.role,penalty:p.penalty}))));
+  }
   observeProfile(p){
+    this.trackGrowth(()=>this.growthMetrics.observeProfile(p));
     try{
       this.profileMetrics.observe(p);
       const previous=this.metricProfiles.get(p.id),owned=new Set((p.wallet?.owned||[]).filter(id=>this.paidItems.has(id)));
@@ -155,7 +178,8 @@ export class FabRoom extends DurableObject {
   pose(id,data){
     const p=this.room.players.get(id),before=p?{x:p.x,z:p.z,hidden:p.hidden}:null;
     const accepted=this.room.pose(id,data);
-    if(accepted&&before&&!p.hidden&&!before.hidden&&Math.hypot(p.x-before.x,p.z-before.z)>.03)this.track(()=>this.activityMetrics.activity(id));
+    if(accepted&&before&&before.hidden!==p.hidden)this.updateGrowthPresence(true);
+    if(accepted&&before&&!p.hidden&&!before.hidden&&Math.hypot(p.x-before.x,p.z-before.z)>.03){this.track(()=>this.activityMetrics.activity(id));this.trackGrowth(()=>this.growthMetrics.activity(id,'move'));}
     return accepted;
   }
   send(ws,data){try{ws.send(typeof data==='string'?data:JSON.stringify(data));return true;}catch{return false;}}
@@ -253,6 +277,7 @@ export class FabRoom extends DurableObject {
     if(!this.sockets.has(peer))return;
     this.welcome(peer,id);session.ready=true;session.walletRevision=this.room.players.get(id).wallet.revision;this.broadcastRoster();this.start();
     this.track(()=>{this.activityMetrics.sync(this.room.players.keys());this.activityMetrics.connect(id,peer instanceof HttpRoomPeer?'https':'websocket');});
+    this.trackGrowth(()=>this.growthMetrics.connect(id,{existing:Boolean(current),transport:peer instanceof HttpRoomPeer?'https':'websocket',profile:this.room.profile(id)}));this.updateGrowthPresence(true);
   }
   async httpRoom(request) {
     const parsed=await readRoomBody(request);
@@ -312,6 +337,8 @@ export class FabRoom extends DurableObject {
       if(changed||this.rosterDirty){this.rosterDirty=false;this.broadcastRoster();}
       if(++this.tickCount%4===0){const data=JSON.stringify(this.room.snapshot());for(const [ws,s] of this.sockets)if(s.ready!==false&&!this.send(ws,data)){this.room.remove(s.id);this.sockets.delete(ws);}}
       this.track(()=>this.activityMetrics.sync(this.room.players.keys()));this.ctx.waitUntil(this.flushMetrics(!this.sockets.size));
+      this.updateGrowthPresence();
+      this.trackGrowth(()=>this.growthMetrics.flush(!this.sockets.size));
       if(!this.sockets.size){clearInterval(this.timer);this.timer=null;}
     }finally{this.ticking=false;}
   }
@@ -324,15 +351,20 @@ export class FabRoom extends DurableObject {
     if(data.type==='pose'){this.pose(session.id,data.pose);return;}
     if(data.type==='command'&&Number.isSafeInteger(data.seq)&&typeof data.kind==='string') {
       if(data.pose)this.pose(session.id,data.pose);
+      const beforePlayer=this.room.players.get(session.id),beforeItem=cosmeticItems.find(item=>item.id===data.data?.itemId);
+      const insufficient=data.kind==='purchase'&&beforeItem&&!beforePlayer?.chipUnlimited&&!beforePlayer?.wallet?.owned?.includes(beforeItem.id)&&beforePlayer?.wallet?.chips<beforeItem.price;
       const result=data.kind==='nickname-reset'?await resetInappropriateNickname({actorId:session.id,targetName:data.data?.name,profiles:this.profiles,room:this.room}):this.room.command(session.id,data.kind,data.data);
       if(data.kind==='civilian'&&result.ok)this.broadcastRoster();
       try{await this.checkpoint();}catch{this.send(ws,{type:'ack',seq:data.seq,ok:false,message:'기록 저장이 지연되고 있어요. 잠시 후 다시 확인해 주세요.'});return;}
       if(result.ok&&['emote','press','repair','clean','pickup','place','throw','board','climb','ride','dismount','equip','unequip'].includes(data.kind))this.track(()=>this.activityMetrics.activity(session.id));
+      if(result.ok&&['emote','ride','equip','unequip','purchase'].includes(data.kind))this.trackGrowth(()=>this.growthMetrics.activity(session.id,data.kind==='ride'?'board':data.kind==='emote'?'emote':'equip'));
+      if(!result.ok&&insufficient)this.trackGrowth(()=>this.growthMetrics.purchaseRejected(session.id,beforeItem.id));
+      this.updateGrowthPresence(true);
       if(result.ok&&['nickname-confirm','nickname-reset'].includes(data.kind)){this.broadcastRoster();for(const [peer,s] of this.sockets)this.send(peer,{type:'nickname',nickname:this.room.nicknameState(s.id)});}
       this.send(ws,{type:'ack',seq:data.seq,...result,wallet:this.room.wallet(session.id),titles:this.room.titleState(session.id),frame:this.room.snapshot(true)});
     }
   }
-  close(ws){const s=this.sockets.get(ws);if(s){const ticket=this.connectionOrders.get(s.id);if(ticket)ticket.at=Date.now();this.room.remove(s.id);this.sockets.delete(ws);this.broadcastRoster();this.ctx.waitUntil(this.checkpoint());this.track(()=>this.activityMetrics.sync(this.room.players.keys()));}if(!this.sockets.size){if(this.timer){clearInterval(this.timer);this.timer=null;}this.ctx.waitUntil(this.flushMetrics(true));}}
+  close(ws){const s=this.sockets.get(ws);if(s){const ticket=this.connectionOrders.get(s.id);if(ticket)ticket.at=Date.now();this.room.remove(s.id);this.sockets.delete(ws);this.broadcastRoster();this.ctx.waitUntil(this.checkpoint());this.track(()=>this.activityMetrics.sync(this.room.players.keys()));this.updateGrowthPresence(true);}if(!this.sockets.size){if(this.timer){clearInterval(this.timer);this.timer=null;}this.ctx.waitUntil(this.flushMetrics(true));this.trackGrowth(()=>this.growthMetrics.flush(true));}}
   webSocketClose(ws,code,reason){
     // Hibernatable sockets may already have auto-replied. A peer that sends
     // an empty or abnormal close cannot have that synthetic code echoed.
