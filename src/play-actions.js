@@ -93,8 +93,10 @@ export function createPlayActions({ THREE, scene, materials, fleet, explorer, av
     if(port.kind==='IN'&&!store.carried){toast('FOUP을 들고 IN을 누르면 보관해요');return true;}
     if(port.kind==='OUT'&&store.carried){toast('들고 있는 FOUP을 먼저 내려놓아 주세요');return true;}
     onCue('stocker-prepare',port);
-    return startWalk(port.approach,{kind:'stocker',stockerId:port.stockerId,portKind:port.kind,
+    const started=startWalk(port.approach,{kind:'stocker',stockerId:port.stockerId,portKind:port.kind,
       recordId:port.kind==='IN'?store.carried.id:store.stockerState(port.stockerId).out?.id??null});
+    if(started)explorer.frameStocker(port);
+    return started;
   }
   function requestCleanup(record){
     if(!onFoot())return false;
@@ -149,7 +151,10 @@ export function createPlayActions({ THREE, scene, materials, fleet, explorer, av
     for(const port of stockerPorts){const b=port.bounds,s=stockerById.get(port.stockerId),label=stockerPoint(s,(port.index-.5)*1.24,2.3,3.145),side=Math.abs(Math.sin(s.yaw))>.5;
       const task={kind:'stocker',port};
       consider(rayDistance(ray,port.x,1.46,port.z,b.maxX-b.minX+.06,.2,b.maxZ-b.minZ+.06),task);
-      consider(rayDistance(ray,label.x,label.y,label.z,side?.06:.96,.4,side?.96:.06),task);
+      // OUT's shutter and label are one target. Keep a 22 cm gap to IN and
+      // a shallow front plane, so diagonal taps cannot hit its neighbour.
+      const out=port.kind==='OUT',width=out?1.08:.96;
+      consider(rayDistance(ray,label.x,out?1.96:label.y,label.z,side?.06:width,out?1.2:.4,side?width:.06),task);
       if(port.kind==='OUT'&&store.stockerState(port.stockerId).out)consider(rayDistance(ray,port.x,port.y+.2225,port.z,.6,.5,.55),task);
     }
     for (const port of ports) {

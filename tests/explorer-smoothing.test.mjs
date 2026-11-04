@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { WALK_SPEED } from '../src/locomotion.js';
 import { createExplorer } from '../src/explorer.js';
-import { bays, machines, isBlocked } from '../src/layout.js';
+import { bays, machines, isBlocked, HALL } from '../src/layout.js';
+import { stockers, stockerBounds } from '../src/stocker-layout.js';
 import { setRuntimeObstacles } from '../src/runtime-obstacles.js';
 import { findWalkPath } from '../src/walking.js';
 
@@ -37,6 +38,118 @@ function setup({ colliders = [] } = {}) {
     dispose() { setRuntimeObstacles([]); globalThis.document = priorDocument; globalThis.window = priorWindow; }
   };
 }
+
+const actualColliders = () => [
+  ...machines.map(m => ({ ...m.bounds, cameraBounds: m.walkBounds.map((b, i) => ({ ...b, minY: 0, maxY: i ? 1.45 : 3.4 })) })),
+  ...stockerBounds
+];
+function assertClearCamera(h, colliders) {
+  const focus = h.explorer.state.position.clone(); focus.y = 1.02;
+  const distance = focus.distanceTo(h.camera.position), ray = new THREE.Ray(focus, h.camera.position.clone().sub(focus).normalize());
+  assert.ok(distance >= 3.19, `camera has room around the avatar: ${distance}`);
+  assert.ok(h.camera.position.y <= HALL.height - .28 + 1e-8, 'camera remains under the ceiling');
+  for (const b of colliders.flatMap(c => c.cameraBounds ?? [c])) {
+    const box = new THREE.Box3(new THREE.Vector3(b.minX, b.minY ?? 0, b.minZ), new THREE.Vector3(b.maxX, b.maxY ?? 3.4, b.maxZ));
+    const hit = ray.intersectBox(box, new THREE.Vector3());
+    assert.ok(!hit || hit.distanceTo(focus) > distance, 'no cabinet between the avatar and camera');
+  }
+}
+
+test('65 cm side gaps and rear aisles keep a distant camera without changing the chosen yaw or zoom', () => {
+  const colliders = actualColliders(), row = bays[4].machines.filter(m => m.sign === 1);
+  const gapX = (row[3].x + row[4].x) / 2;
+  for (const hz of [30, 60, 120]) for (const pose of [
+    { x: gapX, z: row[3].z, yaw: Math.PI / 2 },
+    { x: row[3].x, z: (bays[3].z + bays[4].z) / 2, yaw: 0 }
+  ]) {
+    const h = setup({ colliders });
+    try {
+      h.camera.aspect = 390 / 844; h.camera.fov = 72; h.camera.updateProjectionMatrix();
+      h.explorer.state.position.set(pose.x, 0, pose.z); h.explorer.state.yaw = pose.yaw;
+      for (let i = 0; i < hz * 3; i++) h.explorer.update(1 / hz);
+      assertClearCamera(h, colliders);
+      assert.equal(h.explorer.state.yaw, pose.yaw); assert.equal(h.explorer.state.distance, 5.8);
+      h.camera.updateMatrixWorld();
+      for (const x of [-.4, .4]) for (const y of [0, 1.85]) for (const z of [-.4, .4]) {
+        const p = new THREE.Vector3(pose.x + x, y, pose.z + z).project(h.camera);
+        assert.ok(Math.abs(p.x) < .85 && Math.abs(p.y) < .85, 'avatar and headwear fit in the mobile view');
+      }
+    } finally { h.dispose(); }
+  }
+});
+
+test('both stocker IN and OUT approaches keep space even when the orbit points into the tall cabinet', () => {
+  const colliders = actualColliders();
+  for (const stocker of stockers) for (const port of stocker.ports) for (const yaw of [stocker.yaw, stocker.yaw + Math.PI]) {
+    const h = setup({ colliders });
+    try {
+      h.explorer.state.position.set(port.approach.x, 0, port.approach.z);
+      h.explorer.state.yaw = yaw; h.explorer.state.elevation = .3;
+      for (let i = 0; i < 180; i++) h.explorer.update(1 / 60);
+      assertClearCamera(h, colliders);
+      assert.equal(h.explorer.state.yaw, yaw); assert.equal(h.explorer.state.distance, 5.8);
+    } finally { h.dispose(); }
+  }
+});
+
+test('leaving a cabinet lowers the lifted camera smoothly and restores the original orbit', () => {
+  const colliders = [{ minX: -27.2, maxX: -27, minZ: -3, maxZ: 3, minY: 0, maxY: 3.4 }], h = setup({ colliders });
+  try {
+    for (let i = 0; i < 180; i++) h.explorer.update(1 / 60);
+    const lifted = h.camera.position.clone();
+    assert.ok(lifted.y > 3, 'view lifts beside the cabinet');
+    h.explorer.state.path = [{ x: -28.7, z: 8 }];
+    let previous = lifted;
+    for (let i = 0; i < 480; i++) {
+      h.explorer.update(1 / 60);
+      assert.ok(h.camera.position.distanceTo(previous) < .35, 'moving into the aisle does not snap the camera down');
+      previous = h.camera.position.clone();
+    }
+    const focus = h.explorer.state.position.clone(); focus.y = 1.02;
+    assert.ok(Math.abs(h.camera.position.distanceTo(focus) - 5.8) < .01);
+    assert.ok(Math.abs(h.camera.position.y - (1.02 + Math.sin(.56) * 5.8)) < .01);
+  } finally { h.dispose(); }
+});
+
+test('stocker framing eases out of a close orbit and includes the loading port on mobile without moving the visitor', () => {
+  const colliders = actualColliders();
+  for (const stocker of stockers) for (const port of stocker.ports) {
+    const h = setup({ colliders });
+    try {
+      h.camera.aspect = 390 / 844; h.camera.fov = 72; h.camera.updateProjectionMatrix();
+      h.explorer.state.position.set(port.approach.x, 0, port.approach.z);
+      h.explorer.state.yaw = stocker.yaw + Math.PI; h.explorer.state.distance = 2;
+      for (let i = 0; i < 180; i++) h.explorer.update(1 / 60);
+      const cameraBefore = h.camera.position.clone(), visitorBefore = h.explorer.state.position.clone();
+      h.explorer.frameStocker(port);
+      assert.ok(h.camera.position.equals(cameraBefore), 'request does not snap the camera');
+      assert.ok(h.explorer.state.position.equals(visitorBefore));
+      for (let i = 0; i < 240; i++) h.explorer.update(1 / 60);
+      assertClearCamera(h, colliders); h.camera.updateMatrixWorld();
+      for (const y of [1.46, 2.3]) {
+        const p = new THREE.Vector3(port.x, y, port.z).project(h.camera);
+        assert.ok(Math.abs(p.x) < .8 && Math.abs(p.y) < .8, 'port and sign stay in the screen');
+      }
+      const yaw = h.explorer.state.yaw; h.drag(80);
+      assert.notEqual(h.explorer.state.yaw, yaw, 'player can still adjust the view immediately');
+    } finally { h.dispose(); }
+  }
+});
+
+test('lifting the view in a narrow gap does not steer a held joystick toward the neighbouring cabinet', () => {
+  const row = bays[4].machines.filter(m => m.sign === 1), x = (row[3].x + row[4].x) / 2;
+  const h = setup({ colliders: actualColliders() });
+  try {
+    h.explorer.state.position.set(x, 0, row[3].z); h.explorer.state.yaw = Math.PI / 2;
+    for (let i = 0; i < 120; i++) h.explorer.update(1 / 60);
+    assert.ok(h.explorer.beginJoystick()); h.explorer.moveJoystick(-1, 0);
+    for (let i = 0; i < 60; i++) h.explorer.update(1 / 60);
+    assert.ok(Math.abs(h.explorer.state.position.x - x) < .015, 'camera lift must not turn the joystick direction');
+    assert.ok(h.explorer.state.position.z > row[3].z + 2.9);
+    h.explorer.endJoystick(); const stopped = h.explorer.state.position.clone(); h.explorer.update(1 / 60);
+    assert.ok(h.explorer.state.position.equals(stopped));
+  } finally { h.dispose(); }
+});
 
 test('floor clicks and touch taps accelerate smoothly with equal travel at 30, 60 and 120 Hz', () => {
   const results = [];

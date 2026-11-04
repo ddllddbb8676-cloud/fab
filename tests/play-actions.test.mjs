@@ -61,6 +61,31 @@ test('diagonal OUT label taps do not select the empty adjacent IN port',()=>{
   }finally{h.dispose();}
 });
 
+test('OUT shutter, label and outer edges accept diagonal taps while IN and the divider stay separate',()=>{
+  for(const s of stockers){
+    const h=harness(),output=s.ports[1],id=`port:${h.initial.id}`;
+    try{
+      h.play.store.pickup(id);h.play.store.stockerPut(s.id);for(let t=0;t<3.1;t+=.05)h.play.store.step(.05);
+      h.explorer.state.position.set(output.approach.x,0,output.approach.z);
+      for(const x of [.12,.62,1.12])for(const y of [1.55,1.9,2.3,2.53]){
+        h.play.clearPending();
+        const origin=stockerPoint(s,-1.8,2.8,7),target=stockerPoint(s,x,y,3.145);
+        const from=new THREE.Vector3(origin.x,origin.y,origin.z),to=new THREE.Vector3(target.x,target.y,target.z);
+        assert.equal(h.play.tap(new THREE.Ray(from,to.sub(from).normalize())),true,`${s.id} OUT (${x},${y})`);
+        assert.equal(h.play.state.phase,'approach', 'OUT creates the approach rather than an empty-IN warning');
+        assert.ok(!h.toasts.some(t=>t==='FOUP을 들고 IN을 누르면 보관해요'));
+      }
+      h.step(3.5);assert.equal(h.play.store.records.get(id).mode,'stocker-out');
+      h.play.clearPending();
+      const frontRay=(x,y)=>{const origin=stockerPoint(s,x,y,7),target=stockerPoint(s,x,y,3.145),from=new THREE.Vector3(origin.x,origin.y,origin.z);return new THREE.Ray(from,new THREE.Vector3(target.x,target.y,target.z).sub(from).normalize());};
+      assert.equal(h.play.tap(frontRay(-.62,2.3)),true);
+      assert.equal(h.toasts.at(-1),'FOUP을 들고 IN을 누르면 보관해요','IN still selects only IN');
+      assert.equal(h.play.tap(frontRay(0,2.3)),false,'central divider is not part of either target');
+      assert.equal(h.play.state.phase,'idle');
+    }finally{h.dispose();}
+  }
+});
+
 test('a real canvas pointer tap retains the FOUP approach path until pickup',()=>{
   const h=harness();
   try {

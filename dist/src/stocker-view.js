@@ -1,4 +1,4 @@
-import {stockers,stockerPoint,STOCKER_SIZE,STOCKER_TRANSFER_SECONDS} from './stocker-layout.js?v=468b75afb7f9';
+import {stockers,stockerPoint,STOCKER_SIZE,STOCKER_TRANSFER_SECONDS} from './stocker-layout.js?v=fbe44107db6e';
 
 // Shared boxes keep six tall cabinets inexpensive on mobile. The narrow front
 // and long, panelled sides follow carrier-stockers, not a tool's wide EFEM.
@@ -61,7 +61,8 @@ export function createStockerView(THREE,scene,{makeCanvas=()=>document.createEle
       box(s,'dark',x,1.474,3.45,.57,.02,.48);
       box(s,'teal',x,1.23,3.715,.42,.06,.012);
       label(s,i?'OUT':'IN',x,2.3,3.12,.76,.25);
-      const shutter=new THREE.Mesh(geometry,mats.panel),p=stockerPoint(s,x,1.81,3.122);
+      // Slide behind the upper front panel so an open door never covers IN/OUT.
+      const shutter=new THREE.Mesh(geometry,mats.panel),p=stockerPoint(s,x,1.81,3.08);
       shutter.position.set(p.x,p.y,p.z);shutter.rotation.y=s.yaw;shutter.scale.set(.84,.62,.035);root.add(shutter);shutters.push(shutter);
     }
     box(s,'light',1.08,4.57,3.12,.06,.13,.03);

@@ -1,12 +1,12 @@
-import { TOUR_POINTS, HALL, TOOL_WIDTH, bays, isBlocked } from './layout.js?v=468b75afb7f9';
-import { findWalkPath, stepWalker, resolveWalkTap } from './walking.js?v=468b75afb7f9';
-import { createTourRoute } from './tour-route.js?v=468b75afb7f9';
-import { createTransferSession, updateTransferSession, transferCameraFrame, transferTransitFrame } from './transfer-view.js?v=468b75afb7f9';
-import { getRuntimeObstacles } from './runtime-obstacles.js?v=468b75afb7f9';
-import { planEmoApproach, emoPressCameraFrame, EMO_REACH_SECONDS, EMO_HOLD_SECONDS, EMO_CONTACT_TOLERANCE } from './emo-interaction.js?v=468b75afb7f9';
-import { findRestHeading } from './posture.js?v=468b75afb7f9';
-import {isRestArea,REST_AREA_MESSAGE} from './rest-area.js?v=468b75afb7f9';
-import { WALK_SPEED, CHASE_CAMERA, stickVector, cameraRelativeMove } from './locomotion.js?v=468b75afb7f9';
+import { TOUR_POINTS, HALL, TOOL_WIDTH, bays, isBlocked } from './layout.js?v=fbe44107db6e';
+import { findWalkPath, stepWalker, resolveWalkTap } from './walking.js?v=fbe44107db6e';
+import { createTourRoute } from './tour-route.js?v=fbe44107db6e';
+import { createTransferSession, updateTransferSession, transferCameraFrame, transferTransitFrame } from './transfer-view.js?v=fbe44107db6e';
+import { getRuntimeObstacles } from './runtime-obstacles.js?v=fbe44107db6e';
+import { planEmoApproach, emoPressCameraFrame, EMO_REACH_SECONDS, EMO_HOLD_SECONDS, EMO_CONTACT_TOLERANCE } from './emo-interaction.js?v=fbe44107db6e';
+import { findRestHeading } from './posture.js?v=fbe44107db6e';
+import {isRestArea,REST_AREA_MESSAGE} from './rest-area.js?v=fbe44107db6e';
+import { WALK_SPEED, CHASE_CAMERA, stickVector, cameraRelativeMove } from './locomotion.js?v=fbe44107db6e';
 
 export const REPAIR_SECONDS = 5;
 
@@ -63,7 +63,8 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
   const cameraRay = new THREE.Ray(), cameraHit = new THREE.Vector3();
   const target = new THREE.Vector3(), desired = new THREE.Vector3(), direction = new THREE.Vector3();
   const cameraFocus = new THREE.Vector3(), previousFocus = new THREE.Vector3();
-  const cameraRig = { yaw: state.yaw, elevation: state.elevation, distance: state.distance, clearance: state.distance };
+  const cameraRig = { yaw: state.yaw, elevation: state.elevation, distance: state.distance, clearance: state.distance, lift: 0 };
+  const nearbyCameraBoxes = [], nearbyRuntimeCameraBoxes = [];
   let pathSpeed = 0, tourBlend = 0, runtimeSnapshot = null, runtimeCameraBoxes = [];
   const targetRing = new THREE.Mesh(new THREE.RingGeometry(.21, .29, 36), new THREE.MeshBasicMaterial({ color: '#3d9fa7', transparent: true, opacity: .8, side: THREE.DoubleSide, depthWrite: false }));
   targetRing.rotation.x = -Math.PI / 2; targetRing.position.y = .012; targetRing.visible = false; scene.add(targetRing);
@@ -222,30 +223,68 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
       }
       previousFocus.copy(focus);
     }
-    desired.set(cameraFocus.x + Math.sin(cameraRig.yaw) * Math.cos(cameraRig.elevation) * cameraRig.distance,
-      Math.min(HALL.height - .28, cameraFocus.y + Math.sin(cameraRig.elevation) * cameraRig.distance),
-      cameraFocus.z + Math.cos(cameraRig.yaw) * Math.cos(cameraRig.elevation) * cameraRig.distance);
-    desired.x = THREE.MathUtils.clamp(desired.x, -59.3, 59.3);
-    desired.z = THREE.MathUtils.clamp(desired.z, -89.3, 89.3);
-    direction.copy(desired).sub(focus);
-    let clearDistance = direction.length();
-    if (clearDistance < .0001) { camera.position.copy(desired); cameraSnap = false; return; }
-    direction.multiplyScalar(1 / clearDistance);
+    nearbyCameraBoxes.length = 0;
+    nearbyRuntimeCameraBoxes.length = 0;
     if (obstacles) {
       const snapshot = getRuntimeObstacles();
       if (snapshot !== runtimeSnapshot) {
         runtimeSnapshot = snapshot;
         runtimeCameraBoxes = snapshot.map(o => new THREE.Box3(new THREE.Vector3(o.minX - .12, o.minY ?? 0, o.minZ - .12), new THREE.Vector3(o.maxX + .12, o.maxY ?? HALL.height, o.maxZ + .12)));
       }
-      cameraRay.set(focus, direction);
-      const minX = Math.min(focus.x, desired.x), maxX = Math.max(focus.x, desired.x);
-      const minZ = Math.min(focus.z, desired.z), maxZ = Math.max(focus.z, desired.z);
+      // Select nearby cabinets once, then reuse them for the few upward probes.
+      const radius = cameraRig.distance + cameraFocus.distanceTo(focus);
       for (const boxes of [cameraColliderBoxes, runtimeCameraBoxes]) for (const box of boxes) {
-        if (box.max.x < minX || box.min.x > maxX || box.max.z < minZ || box.min.z > maxZ) continue;
-        const p = cameraRay.intersectBox(box, cameraHit);
-        if (p) clearDistance = Math.min(clearDistance, Math.max(.08, focus.distanceTo(p) - .15));
+        if (box.max.x < focus.x - radius || box.min.x > focus.x + radius || box.max.z < focus.z - radius || box.min.z > focus.z + radius) continue;
+        (boxes === runtimeCameraBoxes ? nearbyRuntimeCameraBoxes : nearbyCameraBoxes).push(box);
       }
     }
+    let blockedByRuntime = false;
+    const clearanceAt = elevation => {
+      blockedByRuntime = false;
+      desired.set(cameraFocus.x + Math.sin(cameraRig.yaw) * Math.cos(elevation) * cameraRig.distance,
+        Math.min(HALL.height - .28, cameraFocus.y + Math.sin(elevation) * cameraRig.distance),
+        cameraFocus.z + Math.cos(cameraRig.yaw) * Math.cos(elevation) * cameraRig.distance);
+      desired.x = THREE.MathUtils.clamp(desired.x, -59.3, 59.3);
+      desired.z = THREE.MathUtils.clamp(desired.z, -89.3, 89.3);
+      direction.copy(desired).sub(focus);
+      let clearance = direction.length();
+      if (clearance < .0001) return clearance;
+      direction.multiplyScalar(1 / clearance);
+      cameraRay.set(focus, direction);
+      for (const boxes of [nearbyCameraBoxes, nearbyRuntimeCameraBoxes]) for (const box of boxes) {
+        const p = cameraRay.intersectBox(box, cameraHit);
+        if (p) {
+          const distance = Math.max(.08, focus.distanceTo(p) - .15);
+          if (distance < clearance) { clearance = distance; blockedByRuntime = boxes === nearbyRuntimeCameraBoxes; }
+        }
+      }
+      return clearance;
+    };
+    const baseElevation = cameraRig.elevation, minDistance = Math.min(cameraRig.distance, 3.2), maxElevation = 1.54;
+    let safeElevation = baseElevation, clearDistance = clearanceAt(baseElevation);
+    if (obstacles && !blockedByRuntime && clearDistance < minDistance) {
+      let bestClearance = clearDistance, previousElevation = baseElevation;
+      for (let step = 1; step <= 12; step++) {
+        const elevation = baseElevation + (maxElevation - baseElevation) * step / 12;
+        const clearance = clearanceAt(elevation);
+        if (clearance > bestClearance) { bestClearance = clearance; safeElevation = elevation; }
+        if (clearance >= minDistance) {
+          let low = previousElevation, high = elevation;
+          for (let i = 0; i < 7; i++) {
+            const mid = (low + high) / 2;
+            if (clearanceAt(mid) >= minDistance) high = mid; else low = mid;
+          }
+          safeElevation = high; break;
+        }
+        previousElevation = elevation;
+      }
+    }
+    // Keep the user's yaw and zoom. In tight passages lift the view instead of
+    // pressing it into the avatar's head; ease back down when the aisle opens.
+    const lift = safeElevation - baseElevation;
+    cameraRig.lift = snap ? lift : Math.max(lift, damp(cameraRig.lift, lift, 2.5, dt));
+    clearDistance = clearanceAt(Math.min(maxElevation, baseElevation + cameraRig.lift));
+    if (clearDistance < .0001) { camera.position.copy(desired); cameraSnap = false; return; }
     // Collision shortening never feeds back into the ideal orbit. Move inward
     // immediately for safety, then ease outward when a cabinet/door clears.
     cameraRig.clearance = snap ? clearDistance : Math.min(clearDistance, damp(cameraRig.clearance, clearDistance, 3.2, dt));
@@ -507,6 +546,12 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
       if (state.locked) return false;
       const path = findWalkPath(state.position, point,{canTraverse}); if (!path) return false;
       setMode('walk'); state.path = path; targetRing.position.set(point.x, .012, point.z); targetRing.visible = true; return true;
+    },
+    frameStocker(port) {
+      // The loading face stays ahead of the visitor, with the camera outside
+      // the cabinet. Only set orbit targets; normal damping and dragging apply.
+      state.yaw = port.yaw + Math.PI; state.elevation = .35;
+      state.distance = Math.max(state.distance, CHASE_CAMERA.distance); state.manualLook = true;
     },
     approachRepair(machine, options = {}) { return approachEmo(machine, { ...options, kind: 'repair', onPress: options.onComplete }); },
     lock(value) { cancelEmo('locked'); if (value && state.mode === 'blast') setMode('walk'); state.locked = value; clearInput(); state.path = []; targetRing.visible = false; },
