@@ -24,3 +24,10 @@
 
 - 직전 운영 `1098fe41-9768-4600-8620-458000676963`.
 - 결과는 `outputs/camera-easing-release/{completed,verification,recovery}.json`과 아래 완료 기록을 확인한다.
+
+### 19:44 KST 완료
+
+- 운영 버전 `ca075ab7-09a6-47fe-a39f-a26988048a2d`, 기능 소스 `9ba3f42cd86087ad59aad05791ac9b4a2b6d0eea`, 공개 모듈 revision `f55723afdac4`(77개). 기능 커밋은 GitHub main과 일치함을 확인했다.
+- 공개 모듈 77개가 빌드와 일치하며, 기존 검증 계정의 ID·닉네임·지갑/보유품·파괴/수리 기록 해시가 배포 전후 동일하다. 두 Durable Object namespace·기존 secret 유지, 익명/일반 계정 관리자 접근 거부도 확인했다. `recovery.json`은 `complete`이며 완료 실행기를 다시 실행하지 않는다.
+- Chrome 390×844의 격리한 로컬 게임에서 장비 틈, 스토커 밀착 위치, 하트 표시 중 시점 유지를 확인했다. 화면 끝점은 로컬 검수 버튼으로 실제 Explorer를 60Hz 6초분 진행해 확인했고, 전환 속도는 30/60/120Hz 테스트로 검증했다. 이 검수는 실제 iPhone의 성능이나 터치 재현을 뜻하지 않는다.
+- 근거: `outputs/camera-easing-release/local-qa.json`, `gap.png`, `heart.png`, `stocker.png`, 검사/빌드 로그 및 배포 완료·검증 파일. 서버와 이벤트 규칙은 변경하지 않았다.
