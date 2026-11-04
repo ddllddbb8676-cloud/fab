@@ -111,6 +111,16 @@ test('ambiguous multi-item profile deltas do not invent per-item sale prices; re
   assert.equal(row(metrics).economy.purchases,2);
 });
 
+test('event rewards remain attributed after restoring a day written before events existed',async()=>{
+  const {metrics}=setup();metrics.connect(id(1));metrics.observeProfile(profile(1));
+  const storage=memoryStorage();await metrics.flush(storage);
+  for(const value of storage.data.values())if(value.economy)for(const kind of ['golden-deposit','golden-throw','golden-clean','bay-event'])delete value.economy.earnedBySource[kind];
+  const next=setup().metrics;next.restore(storage.data);next.connect(id(1));next.observeProfile(profile(1));
+  for(const [kind,amount]of [['golden-deposit',200],['golden-throw',50],['golden-clean',10],['bay-event',200]])assert.equal(next.reward(id(1),kind,amount),true);
+  const p=profile(1);p.wallet.chips+=460;p.wallet.earnedChips+=460;next.observeProfile(p);
+  const data=row(next);assert.equal(data.economy.earnedChips,460);assert.equal(data.economy.earnedBySource['bay-event'],200);assert.equal(data.activity.actions.throw.count,1);assert.equal(data.activity.actions.clean.count,1);
+});
+
 test('page quality accepts UUID:sequence IDs, deduplicates persisted events, and separates pages from account funnel stages',async()=>{
   const {metrics}=setup();metrics.client(id(1),event('page_start'));metrics.client(id(1),event('scene_ready',2));metrics.client(id(1),event('connected',3));
   metrics.client(id(1),event('connected',4));metrics.connect(id(1));

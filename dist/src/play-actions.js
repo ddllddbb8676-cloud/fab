@@ -1,8 +1,8 @@
-import { machines, ports, TOOL_WIDTH, TOOL_FRONT, PORT_Z, VEHICLE_Y, SEATED_FOUP_Y, isBlocked } from './layout.js?v=5c32a645ea91';
-import { reservedPortIds } from './network-transport.js?v=5c32a645ea91';
-import { floorSpot, supportHeight, createFoupStore, createFoupRenderer, FOUP_CLEAN_SECONDS } from './foup-play.js?v=5c32a645ea91';
-import { createFoupDebris } from './foup-debris.js?v=5c32a645ea91';
-import {stockerPorts,stockers,stockerById,stockerPoint} from './stocker-layout.js?v=5c32a645ea91';
+import { machines, ports, TOOL_WIDTH, TOOL_FRONT, PORT_Z, VEHICLE_Y, SEATED_FOUP_Y, isBlocked } from './layout.js?v=9d9367db83f5';
+import { reservedPortIds } from './network-transport.js?v=9d9367db83f5';
+import { floorSpot, supportHeight, createFoupStore, createFoupRenderer, FOUP_CLEAN_SECONDS } from './foup-play.js?v=9d9367db83f5';
+import { createFoupDebris } from './foup-debris.js?v=9d9367db83f5';
+import {stockerPorts,stockers,stockerById,stockerPoint} from './stocker-layout.js?v=9d9367db83f5';
 
 const smooth = t => { const p = Math.max(0, Math.min(1, t)); return p * p * (3 - 2 * p); };
 export function boardingMachine(car) {
@@ -175,7 +175,7 @@ export function createPlayActions({ THREE, scene, materials, fleet, explorer, av
     if(task.kind==='stocker'){
       const s=stockerById.get(task.stockerId),port=s.ports.find(p=>p.kind===task.portKind);
       explorer.state.heading=Math.atan2(port.x-pose().x,port.z-pose().z);
-      const complete=result=>{explorer.state.carrying=Boolean(store.carried);toast(result.phase==='stocking'?'IN · FOUP을 보관하고 있어요':result.phase==='retrieving'?'OUT · FOUP이 나오면 한 번 더 눌러 가져가세요':'FOUP을 들었어요');};
+      const complete=result=>{explorer.state.carrying=Boolean(store.carried);toast(result.phase==='golden-deposit'?'황금 FOUP 입고 완료! +200칩 적립':result.phase==='stocking'?'IN · FOUP을 보관하고 있어요':result.phase==='retrieving'?'OUT · FOUP이 나오면 한 번 더 눌러 가져가세요':'FOUP을 들었어요');};
       if(network)remote('stocker',{id:s.id,port:port.kind,recordId:task.recordId},complete);
       else {const result=port.kind==='IN'?store.stockerPut(s.id,'player',task.recordId):store.stockerGet(s.id,'player',task.recordId);if(result.ok)complete(result);else toast(result.message);}
       return;

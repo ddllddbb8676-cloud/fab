@@ -495,6 +495,11 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
     onToast(posture === 'sit' ? '여기 앉아서 잠깐 쉬어요' : posture === 'lie' ? '통로를 따라 편하게 누워요' : '다시 일어났어요'); return true;
   }
   return { state, setMode, reset, update, focusTransfer, focusDestruction, approachEmo, cancelEmo, setPosture, beginJoystick, endJoystick,
+    arriveAtEvent(point){
+      if(state.locked||!Number.isFinite(point.x)||!Number.isFinite(point.z)||isBlocked(point.x,point.z,.295))return false;
+      cancelEmo('event-travel');clearInput();setMode('walk');state.position.set(point.x,0,point.z);state.posture='stand';state.cleaningTime=null;
+      state.heading=Math.sign(point.x)*Math.PI/2;state.yaw=state.heading+Math.PI;cameraSnap=true;return true;
+    },
     stopWalk() { state.path=[];clearInput();targetRing.visible=false; },
     moveJoystick(x, y) { if (state.joystickActive) state.joystick = stickVector(x, y); },
     setScriptedPose(pose) { scriptedPose = pose; if (!pose) { scriptedCameraActive=false;state.position.y = 0; cameraSnap = false; } },

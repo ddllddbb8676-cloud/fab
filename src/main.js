@@ -1,5 +1,7 @@
 import {createNicknameUI,createNicknameModeration} from './nickname-ui.js';
 import {createAdminVisit} from './admin-visit.js';
+import {createWorldEventsUI} from './world-events-ui.js';
+import {createEventCamera} from './event-camera.js';
 import {createChipRewardTracker,createChipRewardView,createDestructionRewardQueue} from './chip-rewards.js';
 import {npcOutfit} from './npc-outfits.js';
 import {createWardrobeNotice,WARDROBE_NOTICE,WARDROBE_NOTICE_DURATION} from './wardrobe-notice.js';
@@ -60,6 +62,7 @@ delete window.__fabConnectionConfig;
 window.__fabPreparedRoom ||= prepareRoomConnection(connectionConfig);
 await startupStep('graphics');
 let multiplayer = null, sharedWorld = null, remotePeople = null, realVisitorCount = 0, totalCharacterCount = 0, adminVisit = null;
+let eventCamera=null,worldEventsUI=null;
 const personalStats = { brokenCount: 0, repairedCount: 0 };
 let personalStatsLoaded=false;
 if(connectionConfig)for(const id of ['personal-broken','personal-repaired'])document.getElementById(id).textContent='…';
@@ -509,9 +512,10 @@ const explorer = createExplorer({ THREE, camera, scene, canvas: renderer.domElem
   isEquipmentVisible: id => equipmentVisibility.isVisible(id),
   pickRepairTarget: (ray, options) => destruction?.pick(ray, options),
   onToast: toast, onInspect: showMachine,
-  onManualMove: () => {adminVisit?.cancel();playActions?.clearPending();},
-  onActionTap: ray => {adminVisit?.cancel();return playActions?.tap(ray) || emoControls.press(ray);},
+  onManualMove: () => {eventCamera?.cancel();adminVisit?.cancel();playActions?.clearPending();},
+  onActionTap: ray => {if(eventCamera?.active){eventCamera.cancel();return true;}adminVisit?.cancel();return playActions?.tap(ray) || emoControls.press(ray);},
   onMode(next) {
+    eventCamera?.cancel();
     mode = next; document.body.classList.add('exploring');
     document.body.dataset.viewMode = next;
     $('transfer-view').setAttribute('aria-pressed', String(next === 'transfer'));
@@ -693,7 +697,17 @@ $('capture-open').addEventListener('click',async()=>{
 });
 function applyNickname(nickname){wardrobe.setNickname(nickname);nicknameUI.sync(nickname);}
 function applyTitles(titles){wardrobe.setTitles(titles);visitorBadge.setTitle(titles.titleId);}
-function applyWallet(wallet){const earned=chipRewardTracker.receive(wallet),delayed=Math.min(earned,destructionRewardTracker.receive(wallet));currentWallet=wallet;appearance.setOutfit(wallet.equipped,safetyState.role);wardrobe.setWallet(wallet);if(!document.hidden){if(delayed)destructionRewards.add(delayed,wallet.lastDestructionId);showChipReward(earned-delayed);}}
+eventCamera=createEventCamera({camera,bays,onOverview:open=>{
+  const top=open||mode==='overview';roof.visible=walls.visible=!top;airShower.root.visible=!top;
+  bayLighting.setOverview(top);restAreaView.setOverview(top);bayWhiteMask.setOverview(top);railOverview.visible=top;scene.fog.density=top?.0015:.0063;
+}});
+worldEventsUI=createWorldEventsUI({command:(...args)=>onlineLink.command(...args),toast,
+  ready:()=>!entry.active&&!nicknameUI.isOpen&&!wardrobe.isOpen&&!captureTime?.isOpen&&!photoMode.isOpen&&!document.hidden,
+  canCelebrate:id=>bays[id].machines.every(m=>destruction.collapseState(m.id)===true),
+  onTravel:point=>{eventCamera.cancel();adminVisit?.cancel();viewControls.closeAll();directory.close();$('help').classList.add('hidden');$('tool-card').classList.add('hidden');playActions.resetOnline();explorer.arriveAtEvent(point);multiplayer?.sendPose(true);toast(`${point.bayId+1}번 BAY 앞에 도착했어요`);},
+  onVictory:id=>{eventCamera.start(id);audio.playChipReward();}
+});
+function applyWallet(wallet){const earned=chipRewardTracker.receive(wallet),delayed=Math.min(earned,destructionRewardTracker.receive(wallet)),eventReward=wallet.lastEventRewardId&&wallet.lastEventRewardId!==currentWallet?.lastEventRewardId?Math.min(200,earned-delayed):0;currentWallet=wallet;worldEventsUI?.wallet(wallet);appearance.setOutfit(wallet.equipped,safetyState.role);wardrobe.setWallet(wallet);if(!document.hidden){if(delayed)destructionRewards.add(delayed,wallet.lastDestructionId);showChipReward(earned-delayed-eventReward);}}
 if(!connectionConfig)residents = createResidents({ THREE, scene, fleet, store: playActions.store, destruction, detachCargo: v => playActions.detachVehicleCargo(v),
   getNeighbors:()=>safetyPatrols?.people??[],
   excludedNames: [visitorBadge.name], onCue: motionCue,
@@ -703,9 +717,9 @@ else {
   remotePeople=createRemotePeople({THREE,scene,store:playActions.store,fleet,maxDetailed:mobile?32:48});
   sharedWorld=createSharedWorldView({fleet,store:playActions.store,destruction,onPeople:rows=>remotePeople.synchronize(rows),onCue:motionCue,onCount:(n,total)=>{realVisitorCount=n;totalCharacterCount=total;updateConnectionLabel();},onSelf:updateSafetyState});
   multiplayer=createMultiplayer({config:connectionConfig,prepared:window.__fabPreparedRoom,getPose:()=>({x:+explorer.state.position.x.toFixed(3),y:+explorer.state.position.y.toFixed(3),z:+explorer.state.position.z.toFixed(3),heading:+explorer.state.heading.toFixed(3),speed:+(explorer.state.speed||0).toFixed(2),posture:explorer.state.posture,hidden:entry.active||nicknameUI.isOpen}),
-    onTitles:applyTitles,onNickname:applyNickname,onWallet:applyWallet,onWelcome:data=>{recordUsageConnection('connected',data.privileges);adminVisit.welcome(data);remotePeople.setViewerPrivileges(data.privileges);visitorEmote.reset();chipRewardTracker.reset(data.wallet);destructionRewardTracker.reset(data.wallet);clearChipRewards();sharedWorld.welcome(data.id);leaderboard.setSelf(data.id);visitorBadge.rename(data.name);if(data.resume){finishEntry({resumed:true});airShower.update(entry.state);explorer.state.path=[];explorer.state.position.set(data.resume.x,0,data.resume.z);explorer.state.heading=data.resume.heading;toast('이름과 기록을 이어서 접속했어요.');}$('nickname-admin').classList.toggle('hidden',!data.privileges?.unlimitedChips);$('operations-admin').classList.toggle('hidden',!data.privileges?.unlimitedChips);applyNickname(data.nickname);},onRoster:rows=>{remotePeople.setRoster(rows);leaderboard.setRoster(rows);const self=rows.find(row=>row[0]===multiplayer?.id);if(self)visitorBadge.rename(self[1]);},onFrame:(frame,initial)=>{adminVisit.frame(frame);sharedWorld.apply(frame,initial);leaderboard.setPeople(frame.people);leaderboard.setRanking(frame.leaderboard);},onError:toast,
+    onTitles:applyTitles,onNickname:applyNickname,onWallet:applyWallet,onWelcome:data=>{recordUsageConnection('connected',data.privileges);adminVisit.welcome(data);remotePeople.setViewerPrivileges(data.privileges);visitorEmote.reset();chipRewardTracker.reset(data.wallet);destructionRewardTracker.reset(data.wallet);clearChipRewards();sharedWorld.welcome(data.id);leaderboard.setSelf(data.id);visitorBadge.rename(data.name);if(data.resume){finishEntry({resumed:true});airShower.update(entry.state);explorer.state.path=[];explorer.state.position.set(data.resume.x,0,data.resume.z);explorer.state.heading=data.resume.heading;toast('이름과 기록을 이어서 접속했어요.');}$('nickname-admin').classList.toggle('hidden',!data.privileges?.unlimitedChips);$('operations-admin').classList.toggle('hidden',!data.privileges?.unlimitedChips);applyNickname(data.nickname);},onRoster:rows=>{remotePeople.setRoster(rows);leaderboard.setRoster(rows);const self=rows.find(row=>row[0]===multiplayer?.id);if(self)visitorBadge.rename(self[1]);},onFrame:(frame,initial)=>{adminVisit.frame(frame);worldEventsUI.frame(frame.worldEvents,initial);sharedWorld.apply(frame,initial);leaderboard.setPeople(frame.people);leaderboard.setRanking(frame.leaderboard);},onError:toast,
     onCatch:data=>toast(`${data.targetName}님을 잡았어요! 장비 3대를 고쳐야 합니다. (${data.caught??0} / ${SAFETY_CATCH_GOAL})${data.completed?` ${SAFETY_CATCH_GOAL}명 잡기 완료! 원래 방진복으로 돌아왔어요.`:''}`,5000),
-    onStatus:status=>{recordUsageConnection('connectionStatus',status);if(status!=='connected')remotePeople.setViewerPrivileges(null);updateConnectionLabel(status);wardrobe.refresh();nicknameUI.refresh();if(status==='reconnecting'){clearChipRewards();playActions.resetOnline();explorer.cancelEmo('disconnect');toast('연결이 끊겨 다시 접속하고 있어요');}}
+    onStatus:status=>{recordUsageConnection('connectionStatus',status);if(status!=='connected'){remotePeople.setViewerPrivileges(null);worldEventsUI.disconnect();eventCamera.cancel();}updateConnectionLabel(status);wardrobe.refresh();nicknameUI.refresh();if(status==='reconnecting'){clearChipRewards();playActions.resetOnline();explorer.cancelEmo('disconnect');toast('연결이 끊겨 다시 접속하고 있어요');}}
   });
   delete window.__fabPreparedRoom;
 }
@@ -970,11 +984,11 @@ function animate(now) {
   if(photoMode.isOpen&&(entry.active||nicknameUI.isOpen||wardrobe.isOpen))photoMode.close();
   adminVisit.update(dt,{connected:Boolean(multiplayer?.connected),ready:!entry.active&&!nicknameUI.isOpen&&!captureTime?.isOpen&&!document.hidden});
   joystick.setEnabled(movementStyle === 'joystick' && !photoMode.isOpen && !entry.active && !document.hidden && !explorer.state.locked && (!playActions.busy||playActions.state.phase==='cleaning') && $('help').classList.contains('hidden') && $('tool-card').classList.contains('hidden') && ['walk','tour','blast'].includes(mode));
-  explorer.update(dt);restAreaView.update(viewFocus());
+  worldEventsUI.update();eventCamera.restore();explorer.update(dt);eventCamera.apply();restAreaView.update(viewFocus());
   if(now>=nextRefreshReminder&&!nearSafety&&!entry.active&&!explorer.state.emoInteraction&&!explorer.state.repairInteraction&&!playActions.busy&&!directory.isOpen&&!$('zone-toast').classList.contains('visible')&&$('help').classList.contains('hidden')){
     toast('가끔 새로고침해 최신 업데이트를 받아보세요. 이름과 기록은 이어져요.',4500);nextRefreshReminder=now+15*60*1000;
   }
-  if(connectionConfig){remotePeople.update(dt,camera,mode==='overview');explorer.state.carrying=Boolean(playActions.store.carried);multiplayer.update();}
+  if(connectionConfig){remotePeople.update(dt,camera,mode==='overview'||eventCamera.active);explorer.state.carrying=Boolean(playActions.store.carried);multiplayer.update();}
   else if (!entry.active) {
     residents.update(dt, camera, mode === 'overview');
     const p={...explorer.state.position,role:safetyState.role,penalty:safetyState.penalty,safeUntil:safetyGrace,
@@ -1017,14 +1031,14 @@ function animate(now) {
   destruction.update(dt);
   if (burstShake > 0) {
     burstShake = Math.max(0, burstShake - dt);
-    if(!['passenger','ride','transfer'].includes(mode)) {
+    if(!eventCamera.active&&!['passenger','ride','transfer'].includes(mode)) {
       camera.position.x += Math.sin(elapsed * 83) * burstShake * .07;
       camera.position.y += Math.cos(elapsed * 71) * burstShake * .05;
     }
   }
   audio.update({ jet: entry.active ? entry.state.jet : 0, hidden: false });
   if (now >= nextMapAt) { if (viewControls.mapVisible) drawMap(); updateZone(); nextMapAt = now + 125; }
-  sceneDepth.update(mode === 'overview');
+  sceneDepth.update(mode === 'overview'||eventCamera.active);
   camera.updateMatrixWorld();
   viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); viewFrustum.setFromProjectionMatrix(viewProjection);
   for (const batch of spatialBatches) batch.update(viewFrustum, camera.position);
@@ -1034,7 +1048,7 @@ function animate(now) {
   if(captureFrame){const draw=captureFrame;captureFrame=null;draw(renderer.domElement);}
   visitorBadge.updateScreen(camera);
   destructionRewards.update({cameraBusy:mode==='blast'||mode==='overview'||!avatar.root.visible,collapseState:destruction.collapseState});
-  chipRewards.update(now,camera,visitorBadge.sprite.position,avatar.root.visible&&!entry.active&&mode!=='overview');
+  chipRewards.update(now,camera,visitorBadge.sprite.position,avatar.root.visible&&!entry.active&&mode!=='overview'&&!eventCamera.active);
   frameCount++;
   if (now - fpsStart > 1500) { displayedFPS = Math.round(frameCount * 1000 / (now - fpsStart)); frameCount = 0; fpsStart = now; }
   // Read-only diagnostics for local acceptance checks.

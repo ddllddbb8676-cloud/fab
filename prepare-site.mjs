@@ -10,7 +10,7 @@ html = html.replace('/node_modules/three/build/three.module.js', '/vendor/three/
 html = html.replace('/node_modules/nipplejs/dist/index.mjs', '/vendor/nipplejs/index.mjs');
 // The loading screen and its failure handler arrive in the HTML itself. Fonts
 // load with media=print until ready, so they cannot block this first paint.
-for(const name of ['style.css','equipment-directory.css','wardrobe.css','nickname.css','chip-rewards.css']){
+for(const name of ['style.css','equipment-directory.css','wardrobe.css','nickname.css','chip-rewards.css','world-events.css']){
   const css=await readFile(new URL('src/'+name,root),'utf8');
   if(/@import\b/i.test(css))throw new Error('Startup CSS must not import blocking styles: '+name);
   html=html.replace(`<link rel="stylesheet" href="/src/${name}">`,`<style data-source="${name}">${css}</style>`);
@@ -24,7 +24,7 @@ await writeFile(new URL('index.html', dist), html);
 for(const name of ['startup.js','startup-controller.js','startup-signals.js','room-connection.js','room-channel.js','room-config.js','http-room-socket.js'])await copyFile(new URL('src/'+name,root),new URL('src/'+name,dist));
 for (const name of ['main.js', 'layout.js', 'transport.js', 'rail-network.js', 'network-transport.js', 'avatar.js', 'spatial-batch.js', 'walking.js', 'posture.js', 'foup-play.js', 'play-actions.js', 'visitor-name.js', 'explorer.js', 'view-controls.js', 'tour-route.js', 'transfer-view.js', 'runtime-obstacles.js', 'ambience.js', 'equipment-visibility.js', 'emo-controls.js', 'emo-interaction.js', 'equipment-destruction.js', 'air-shower.js', 'entry-sequence.js', 'equipment-catalog.js', 'equipment-labels.js', 'equipment-directory.js', 'equipment-directory.css', 'bay-lighting.js', 'style.css']) await copyFile(new URL('src/' + name, root), new URL('src/' + name, dist));
 await copyFile(new URL('src/residents.js', root), new URL('src/residents.js', dist));
-for(const name of ['stocker-layout.js','stocker-view.js','entrance-layout.js'])await copyFile(new URL('src/'+name,root),new URL('src/'+name,dist));
+for(const name of ['stocker-layout.js','stocker-view.js','entrance-layout.js','world-events-ui.js','event-camera.js','world-events.css'])await copyFile(new URL('src/'+name,root),new URL('src/'+name,dist));
 await mkdir(new URL('audio/entertainer/',dist),{recursive:true});
 await copyFile(new URL('audio/entertainer/fab-entertainer-stocker.mp3',root),new URL('audio/entertainer/fab-entertainer-stocker.mp3',dist));
 await copyFile(new URL('src/admin-visit.js',root),new URL('src/admin-visit.js',dist));

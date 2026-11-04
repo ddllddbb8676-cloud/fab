@@ -1,6 +1,6 @@
-import { isBlocked, machines, SEATED_FOUP_Y } from './layout.js?v=5c32a645ea91';
-import {entranceBounds} from './entrance-layout.js?v=5c32a645ea91';
-import {stockers,stockerById,stockerBounds,stockerSlot,stockerRecordPose,STOCKER_CAPACITY,STOCKER_TRANSFER_SECONDS,STOCKER_OUT_CUE_AT} from './stocker-layout.js?v=5c32a645ea91';
+import { isBlocked, machines, bays, SEATED_FOUP_Y } from './layout.js?v=9d9367db83f5';
+import {entranceBounds} from './entrance-layout.js?v=9d9367db83f5';
+import {stockers,stockerById,stockerBounds,stockerSlot,stockerRecordPose,STOCKER_CAPACITY,STOCKER_TRANSFER_SECONDS,STOCKER_OUT_CUE_AT} from './stocker-layout.js?v=9d9367db83f5';
 const stockModes=new Set(['stored','stocking','retrieving','stocker-out']);
 // Accept the retired units only while reading older saved worlds.
 const retiredStockers=new Set(['STK03','STK04','STK05','STK06']);
@@ -95,6 +95,7 @@ export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () 
   }
   function pickup(id, owner = 'player') {
     const record = records.get(id);
+    if(record?.gold&&owner.startsWith('resident:'))return false;
     if (hands.has(owner) || !record || !['port', 'ground','stocker-out'].includes(record.mode)) return false;
     if (record.portId && atPort(record.portId) !== record) return false;
     if (record.original) { hideOriginal(record.portId); record.original = false; }
@@ -141,6 +142,32 @@ export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () 
     Object.assign(r,{mode:'port',portId:id,homePortId:id,x:p.x,y:SEATED_FOUP_Y,z:p.z,yaw:p.sign===1?Math.PI:0,damageAge:0});
     occupancy.set(id,r.id);if(notify)onChange();
   }
+  function spawnGolden(event,count=20){
+    // Reuse idle world carriers, keeping legacy checkpoint IDs and held/broken
+    // objects intact. Spread the shared hunt over every bay, on walkable aisles.
+    const available=[...records.values()].filter(r=>!r.gold&&['port','ground','cleared'].includes(r.mode));
+    const result=[],offset=Math.abs(Math.floor(event.startsAt/3600000))%bays.length;
+    for(let i=0;i<count&&available.length;i++){
+      const bay=bays[(i+offset)%bays.length],x=bay.x+(i%3-1)*15,z=bay.z+(i%2?.8:-.8);
+      const spot=floorSpot({x,z});if(!spot)continue;
+      available.sort((a,b)=>Math.hypot(a.x-x,a.z-z)-Math.hypot(b.x-x,b.z-z));
+      const r=available.shift();if(r.original){hideOriginal(r.portId);r.original=false;}
+      if(r.portId)occupancy.delete(r.portId);
+      Object.assign(r,spot,{mode:'ground',portId:null,y:.225,yaw:i*.9,shatter:false,damageAge:0,gold:{eventId:event.id,expiresAt:event.endsAt,throwPaid:false}});
+      delete r.goal;delete r.owner;result.push(r.id);
+    }
+    onChange();return result;
+  }
+  function expireGolden(currentId,at){
+    let changed=false;
+    for(const r of records.values())if(r.gold&&(r.gold.eventId!==currentId||at>=r.gold.expiresAt)){r.gold=null;changed=true;}
+    if(changed)onChange();
+  }
+  function consumeGolden(id,owner){
+    const r=records.get(id);if(!r?.gold||hands.get(owner)!==id)return false;
+    hands.delete(owner);delete r.owner;r.gold=null;
+    Object.assign(r,{mode:'cleared',portId:null,refillIn:FOUP_RESTOCK_SECONDS});onChange();return true;
+  }
   function checkpoint() {
     initializeStockers();
     const rounded=n=>Math.round(n*1000)/1000;
@@ -156,6 +183,8 @@ export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () 
       return [r.id,mode,r.portId??null,rounded(p.x),rounded(p.y),rounded(p.z),rounded(p.yaw||0),r.breakSeq||0,Boolean(r.shatter),r.homePortId??null];
     })};
     if(stockersSeeded||entries.length)result.stockers={version:1,initialized:true,entries};
+    const golden=rows.filter(r=>r.gold).map(r=>[r.id,r.gold.eventId,r.gold.expiresAt,Boolean(r.gold.throwPaid)]);
+    if(golden.length)result.golden={version:1,entries:golden};
     return result;
   }
   function restore(saved) {
@@ -178,9 +207,17 @@ export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () 
         used.add(id);cells.add(`${sid}:${slot}`);
       }
     }
+    const gold=saved.golden;
+    if(gold!==undefined){
+      if(gold?.version!==1||!Array.isArray(gold.entries)||gold.entries.length>20)throw Error('Invalid golden checkpoint');
+      const used=new Set();for(const [id,eventId,expiresAt,paid] of gold.entries){
+        if(!seen.has(id)||used.has(id)||!/^gold:\d+$/.test(eventId)||!Number.isSafeInteger(expiresAt)||expiresAt<0||typeof paid!=='boolean')throw Error('Invalid golden FOUP');used.add(id);
+      }
+    }
     reset();
     const incoming=saved.records.map(([id,mode,portId,x,y,z,yaw,breakSeq,shatter,homePortId])=>({id,mode,portId,x,y,z,yaw,breakSeq,shatter,homePortId,damageAge:2,cleaner:null,cleanProgress:0,refillIn:FOUP_RESTOCK_SECONDS}));
     synchronize(incoming,null,true);
+    for(const [id,eventId,expiresAt,throwPaid] of gold?.entries??[])records.get(id).gold={eventId,expiresAt,throwPaid};
     if(stock){
       stockersSeeded=true;
       // Restore existing entrance shelves/OUT first, regardless of saved order.
@@ -255,7 +292,7 @@ export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () 
     }
   }
   function interpolate(dt) {const f=1-Math.exp(-dt*16);for(const r of records.values()){if(r.goal){for(const k of ['x','y','z'])r[k]+=(r.goal[k]-r[k])*f;r.yaw=r.goal.yaw;}if(r.mode==='broken')r.damageAge=Math.min(2,(r.damageAge||0)+dt);if(['stocking','retrieving'].includes(r.mode)){r.stockAge=Math.min(STOCKER_TRANSFER_SECONDS,(r.stockAge||0)+Math.max(0,dt));Object.assign(r,stockerRecordPose(r));}}}
-  return { records, atPort, adopt, pickup, place, launch, step, reset, synchronize, interpolate, checkpoint, restore, beginCleanup, cancelCleanup, finishCleanup,stockerState,stockerPut,stockerGet,initializeStockers, occupied: id => occupancy.has(id),
+  return { records, atPort, adopt, pickup, place, launch, step, reset, synchronize, interpolate, checkpoint, restore, beginCleanup, cancelCleanup, finishCleanup,stockerState,stockerPut,stockerGet,initializeStockers,spawnGolden,expireGolden,consumeGolden,notifyChange:onChange, occupied: id => occupancy.has(id),
     getCarried: owner => records.get(hands.get(owner)) ?? null,
     get carried() { return records.get(hands.get('player')) ?? null; },
     get state() { return { carriedId: hands.get('player') ?? null, managed: records.size, moved: [...records.values()].filter(r => !r.original).map(r => ({ id: r.id, mode: r.mode, owner: r.owner, portId: r.portId, x: r.x, y: r.y, z: r.z })) }; }
@@ -272,22 +309,35 @@ export function createFoupRenderer(THREE, scene, materials, capacity = 1200) {
     { material: materials.foupRib, shapes: [[0, .215, 0, .19, .045, .13], ...Array.from({ length: 10 }, (_, i) => [(i % 2 ? 1 : -1) * .222, -.13 + Math.floor(i / 2) * .065, 0, .025, .024, .31])] }
   ];
   for (const group of pieces) {
+    group.baseColor=group.material.color.clone();group.material=group.material.clone();group.material.color.set('#ffffff');
+    group.goldColor=new THREE.Color(['#ffc928','#dba02b','#8b6b1a','#ffe68c'][pieces.indexOf(group)]);
+    group.lastGold=[];
     group.mesh = new THREE.InstancedMesh(geometry, group.material, capacity * group.shapes.length);
     group.mesh.name = 'Interactive FOUPs'; group.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); group.mesh.count = 0; group.mesh.frustumCulled = false; scene.add(group.mesh);
     group.locals = group.shapes.map(([x,y,z,sx,sy,sz]) => { part.position.set(x,y,z); part.scale.set(sx,sy,sz); part.updateMatrix(); return part.matrix.clone(); });
   }
+  const markerMat=new THREE.MeshBasicMaterial({color:'#ffd83b',side:THREE.DoubleSide,toneMapped:false});
+  const ring=new THREE.InstancedMesh(new THREE.RingGeometry(.44,.50,24),markerMat,20),beacon=new THREE.InstancedMesh(new THREE.OctahedronGeometry(.13),markerMat,20);
+  for(const [mesh,name]of [[ring,'Golden FOUP floor rings'],[beacon,'Golden FOUP markers']]){mesh.name=name;mesh.count=0;mesh.frustumCulled=false;mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);scene.add(mesh);}
   return {
     update(records) {
+      const marked=records.filter(r=>r.gold&&!r.hidden&&['ground','port','broken'].includes(r.mode)).slice(0,20);
+      ring.count=beacon.count=marked.length;ring.visible=beacon.visible=marked.length>0;
+      marked.forEach((r,i)=>{part.position.set(r.x,r.mode==='port'?r.y-.19:.025,r.z);part.rotation.set(-Math.PI/2,0,0);part.scale.setScalar(1);part.updateMatrix();ring.setMatrixAt(i,part.matrix);part.position.set(r.x,r.y+.74,r.z);part.rotation.set(0,0,0);part.scale.set(1,1.55,1);part.updateMatrix();beacon.setMatrixAt(i,part.matrix);});
+      if(marked.length){ring.instanceMatrix.needsUpdate=true;beacon.instanceMatrix.needsUpdate=true;}
       const visible = records.filter(r => !r.original && !r.hidden && !['broken','cleared'].includes(r.mode)).slice(0, capacity);
       for (const group of pieces) {
+        let colorChanged=false;
         group.mesh.count = visible.length * group.locals.length;
         visible.forEach((record, index) => {
           transform.position.set(record.x, record.y, record.z); transform.rotation.set(0, record.yaw ?? 0, 0); transform.scale.setScalar(1); transform.updateMatrix();
-          group.locals.forEach((local, j) => { matrix.multiplyMatrices(transform.matrix, local); group.mesh.setMatrixAt(index * group.locals.length + j, matrix); });
+          const color=record.gold?group.goldColor:group.baseColor;
+          const recolor=group.lastGold[index]!==Boolean(record.gold);group.lastGold[index]=Boolean(record.gold);colorChanged||=recolor;
+          group.locals.forEach((local, j) => { matrix.multiplyMatrices(transform.matrix, local);const slot=index*group.locals.length+j;group.mesh.setMatrixAt(slot, matrix);if(recolor)group.mesh.setColorAt(slot,color); });
         });
-        if (visible.length) group.mesh.instanceMatrix.needsUpdate = true;
+        if (visible.length) {group.mesh.instanceMatrix.needsUpdate = true;if(colorChanged)group.mesh.instanceColor.needsUpdate=true;}
       }
     },
-    dispose() { for (const group of pieces) { group.mesh.removeFromParent(); group.mesh.dispose(); } geometry.dispose(); }
+    dispose() { for (const group of pieces) { group.mesh.removeFromParent(); group.mesh.dispose();group.material.dispose(); }for(const mesh of [ring,beacon]){mesh.removeFromParent();mesh.dispose();mesh.geometry.dispose();}markerMat.dispose();geometry.dispose(); }
   };
 }

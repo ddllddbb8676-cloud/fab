@@ -121,12 +121,12 @@ export function createResidentSimulation({ fleet, store, destruction, detachCarg
   function pickTarget(actor) {
     // Reuse the last thrown FOUP before taking another; the world never fills with copies.
     const previous = store.records.get(actor.recordId);
-    if (previous && previous.mode === 'ground') {
+    if (previous && !previous.gold && previous.mode === 'ground') {
       const target = floorSpot({ x: previous.x, z: previous.z + .55 });
       if (target && go(actor, target, 'retrieve')) return;
     }
     if (previous && ['flying', 'carried', 'broken', 'cleared'].includes(previous.mode)) { actor.wait = 2; return; }
-    const candidates = ports.filter(p => !reservedPortIds.has(p.id) && !reserved(p.machineId) && store.atPort(p.id)&&!people.some(other=>other!==actor&&other.recordId===store.atPort(p.id).id))
+    const candidates = ports.filter(p => !reservedPortIds.has(p.id) && !reserved(p.machineId) && store.atPort(p.id)&&!store.atPort(p.id).gold&&!people.some(other=>other!==actor&&other.recordId===store.atPort(p.id).id))
       .sort((a,b) => distance(actor, a) - distance(actor,b)).slice(0, 12);
     const p = choose(candidates);
     if (!p) { patrol(actor); return; }

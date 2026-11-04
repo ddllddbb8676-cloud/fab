@@ -19,15 +19,17 @@ import {rankScores} from '../src/leaderboard.js';
 import {configuredOwnerId,hasUnlimitedChips} from './owner-privileges.js';
 import {canSelectTitle,restoreTitlePreference,destructionTitle,npcDestructionTitle,OPERATOR_TITLE} from '../src/destruction-titles.js';
 import {isRestArea,canSafetyTraverse,restAreaExit,SAFETY_CLEARANCE} from '../src/rest-area.js';
+import {createWorldEvents} from './world-events.js';
 
 const distance=(a,b)=>Math.hypot(a.x-b.x,a.z-b.z);
 const finite=(n,a,b)=>Number.isFinite(n)&&n>=a&&n<=b;
 export const SAFETY_DUTY={warmup:300,handover:15,cooldown:600,goal:SAFETY_CATCH_GOAL};
 const SAFETY_DUTY_VERSION=2,LEGACY_SAFETY_COOLDOWN=90;
-export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()=>{},onReward=()=>{},onRosterChange=()=>{},getHistoricalScores=()=>[],onEquipmentChange=()=>{},onFoupChange=()=>{},claimName=(id,kind,preferred,excluded)=>(kind==='safety'?createSafetyName:createVisitorName)(random,excluded,preferred),now=Date.now,nicknameAvailable=null,replaceNickname=null,ownerId=''}={}) {
+export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()=>{},onReward=()=>{},onRosterChange=()=>{},getHistoricalScores=()=>[],onEquipmentChange=()=>{},onFoupChange=()=>{},onEventsChange=()=>{},eventExcludedIds=[],claimName=(id,kind,preferred,excluded)=>(kind==='safety'?createSafetyName:createVisitorName)(random,excluded,preferred),now=Date.now,nicknameAvailable=null,replaceNickname=null,ownerId=''}={}) {
   ownerId=configuredOwnerId(ownerId);
   const players=new Map(), broken=new Map(), leases=new Map(), events=[], foupVersions=new Map();
   const fleet=createFleet(), byPort=new Map(ports.map(p=>[p.id,p]));
+  const excludedEvents=new Set(eventExcludedIds);let worldEvents=null;
   let time=0, revision=0,joinOrder=0,nextSafetyAt=SAFETY_DUTY.handover,dutyColor=0,lastRanking='';
   function profile(p){return {id:p.id,name:p.name,civilianName:p.civilianName,safetyName:p.safetyName,role:p.role,brokenCount:p.brokenCount,repairedCount:p.repairedCount,penalty:p.penalty,
     titlePreference:p.titlePreference,nicknameChoiceVersion:p.nicknameChoiceVersion,nicknameChoiceKind:p.nicknameChoiceKind,wallet:structuredClone(p.wallet),activeSeconds:p.activeSeconds,safetyTurns:p.safetyTurns,safetyCaughtIds:[...p.safetyCaughtIds],eligibleAfter:p.eligibleAfter,safetyDutyVersion:SAFETY_DUTY_VERSION,optOut:p.optOut,hasEntered:p.hasEntered,groundPosition:p.groundPosition,...(p.chipUnlimited?{chipUnlimited:true}:{})};}
@@ -56,7 +58,7 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
   }
   const destruction={
     get state(){return {destroyedIds:[...broken.keys()]};}, isDestroyed:id=>broken.has(id),
-    trigger(id){if(broken.has(id)||!machines[id])return false;broken.set(id,{id,at:time,destroyedAt:now()});onEquipmentChange(equipmentState());return true;},
+    trigger(id){if(broken.has(id)||!machines[id]||worldEvents?.preparing(id))return false;broken.set(id,{id,at:time,destroyedAt:now()});onEquipmentChange(equipmentState());return true;},
     beginRepair(id,owner='player'){const r=broken.get(id);if(!r||r.owner||[...broken.values()].some(b=>b.owner===owner))return false;r.owner=owner;r.progress=0;return true;},
     setRepairProgress(id,progress){const r=broken.get(id);if(!r?.owner)return false;r.progress=Math.min(1,Math.max(0,progress));return true;},
     cancelRepair(id){const r=broken.get(id);if(!r)return false;delete r.owner;delete r.progress;return true;},
@@ -75,8 +77,14 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
     fleet.detachCargo(v.id);
     if(!s.parked)store.launch(r,{...s.foup},{x:0,y:.6,z:(boardingMachine(s.car)?.sign??1)*2.2});
   }
-  const residents=createResidentSimulation({fleet,store,destruction,detachCargo,random,getNeighbors:()=>safety.people,protectedIds:()=>[...leases.keys()],onCue:emit});
+  const residents=createResidentSimulation({fleet,store,destruction,detachCargo,random,getNeighbors:()=>safety.people,protectedIds:()=>[...leases.keys(),...(worldEvents?.protectedIds()??[])],onCue:emit});
   const safety=createSafetyPatrols({random,excludedNames:residents.people.map(p=>p.name)});
+  worldEvents=createWorldEvents({now,random,onChange:onEventsChange,
+    connected:()=>[...players.keys()].filter(id=>/^visitor:[a-f0-9]{64}$/.test(id)&&!excludedEvents.has(id)),isDestroyed:destruction.isDestroyed,
+    prepareBay:bayId=>{for(const m of machines)if(m.bayId===bayId){const p=players.get(leases.get(m.id)?.owner);if(p)release(p);residents.yieldMachine(m.id);destruction.reset(m.id);}},
+    assignSafety:bayId=>safety.setEventBay(bayId),spawnGolden:(event,count)=>store.spawnGolden(event,count),expireGolden:(id,at)=>store.expireGolden(id,at),
+    goldenRemaining:id=>[...store.records.values()].filter(r=>r.gold?.eventId===id&&!r.gold.throwPaid&&!['broken','cleared'].includes(r.mode)).length,
+    reward:(id,amount,eventId)=>{const p=players.get(id);if(p&&credit(p,amount,'bay-event',{eventId}))changed(p);}});
   function finishDuty(p,optOut=false) {
     p.role='visitor';p.name=p.civilianName;p.optOut=optOut;p.safeUntil=time+12;
     p.eligibleAfter=p.activeSeconds+SAFETY_DUTY.cooldown;nextSafetyAt=time+SAFETY_DUTY.handover;
@@ -197,6 +205,16 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
     if(data.vehicleId!==undefined&&!Number.isInteger(data.vehicleId))return fail('잘못된 대상이에요');
     if(time-p.rateAt>1){p.rate=0;p.rateAt=time;} if(++p.rate>12)return fail('잠시 후 다시 눌러주세요');
     p.lastSeen=time;
+    worldEvents.update();
+    if(kind==='bay-travel'){
+      const destination=worldEvents.travel(data.eventId);
+      if(!destination)return fail('지금은 진행 중인 베이 이벤트가 없어요');
+      if(p.hidden)return fail('팹에 입장한 뒤 이동해 주세요');
+      if(p.vehicleId!=null||p.y>.15||store.getCarried(id))return fail('OHT에서 내려 FOUP을 내려놓은 뒤 이동해 주세요');
+      if(time<(p.nextEventTravel??0))return fail('잠시 후 다시 눌러주세요');
+      release(p);Object.assign(p,{...destination,y:0,speed:0,posture:'stand'});p.nextEventTravel=time+2;
+      p.groundPosition={x:p.x,y:0,z:p.z,heading:p.heading};changed(p);return {ok:true,eventTravel:destination};
+    }
     if(kind==='title-select') {
       if(hasUnlimitedChips(id,ownerId))return fail('이 계정은 운영자 칭호로 표시돼요.');
       if(!canSelectTitle(data.preference,p.brokenCount))return fail('아직 획득하지 못한 칭호예요.');
@@ -261,6 +279,7 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
     if(kind==='claim') {
       const m=machines[data.id];
       if(!m||!['emo','repair'].includes(data.kind)||store.getCarried(id))return fail('FOUP을 내려놓고 다시 눌러주세요');
+      if(worldEvents.preparing(m.id))return fail('이벤트 준비 중이에요. 3·2·1 시작 신호를 기다려주세요');
       if(destruction.isDestroyed(m.id)!==(data.kind==='repair'))return fail('장비 상태가 바뀌었어요');
       return claim(p,m,data.kind)?{ok:true}:fail();
     }
@@ -268,7 +287,7 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
       const m=machines[data.id],l=leases.get(data.id);
       if(!m||l?.owner!==id||distance(p,getEmoApproach(m).destination)>1.2)return fail('장비 앞으로 가까이 다가가 주세요');
       if(kind==='press'&&l.kind==='emo'){if(l.started===undefined)l.started=time;p.phase='press';p.time=0;emit('press',p);return {ok:true};}
-      if(kind==='explode'&&l.kind==='emo'&&l.started!==undefined&&time-l.started>=.55){const ok=destruction.trigger(m.id);if(ok){p.brokenCount++;credit(p,5,'destroy',{destructionId:m.id});}release(p);if(ok)changed(p);return {ok};}
+      if(kind==='explode'&&l.kind==='emo'&&l.started!==undefined&&time-l.started>=.55){const ok=destruction.trigger(m.id);if(ok){p.brokenCount++;credit(p,5,'destroy',{destructionId:m.id});}release(p);if(ok){changed(p);worldEvents.update();}return {ok};}
       if(kind==='repair'&&l.kind==='repair'){if(!destruction.beginRepair(m.id,id))return fail();l.started=time;p.phase='repair';p.time=0;return {ok:true};}
       if(kind==='finish'&&l.kind==='repair'&&l.started!==undefined&&time-l.started>=4.7){if(!destruction.reset(m.id))return fail();p.repairedCount++;credit(p,3,'repair');p.penalty=Math.max(0,p.penalty-1);if(!p.penalty)p.safeUntil=time+12;emit('complete',p);release(p);changed(p);return {ok:true};}
       return fail('동작이 끝난 뒤 다시 눌러주세요');
@@ -277,6 +296,11 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
       const s=stockerById.get(data.id),port=s?.ports.find(port=>port.kind===data.port);
       if(!port||p.hidden||p.y>.15||p.posture!=='stand'||p.vehicleId!=null||!['idle','approach'].includes(p.phase)||distance(p,port.approach)>1.2)return fail('스토커 로드포트 앞으로 가까이 와주세요');
       if(data.recordId!==undefined&&data.recordId!==null&&typeof data.recordId!=='string')return fail('FOUP을 다시 눌러주세요');
+      const held=store.getCarried(id);
+      if(data.port==='IN'&&worldEvents.isGolden(held)&&(!data.recordId||data.recordId===held.id)){
+        if(!store.consumeGolden(held.id,id))return fail('들고 있는 황금 FOUP을 다시 확인해 주세요');
+        credit(p,200,'golden-deposit');p.carrying=false;changed(p);emit('place',p);return {ok:true,phase:'golden-deposit',reward:200};
+      }
       const result=data.port==='IN'?store.stockerPut(s.id,id,data.recordId):store.stockerGet(s.id,id,data.recordId);
       if(result.ok){p.carrying=Boolean(store.getCarried(id));emit(result.phase==='pickup'?'pickup':'place',p);}
       return result;
@@ -297,8 +321,10 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
     if(kind==='throw') {
       const r=store.getCarried(id);if(!r||p.vehicleId!==null&&p.vehicleId!==undefined)return fail();
       const drop=Boolean(data.drop),speed=drop?.8:4.7;
+      const golden=!drop&&worldEvents.isGolden(r)&&!r.gold.throwPaid;
+      if(golden)r.gold.throwPaid=true;
       store.launch(r,{x:p.x+Math.sin(p.heading)*.34,y:Math.max(.4,p.y+.82),z:p.z+Math.cos(p.heading)*.34,yaw:p.heading+Math.PI},
-        {x:Math.sin(p.heading)*speed,y:drop?.2:3.1,z:Math.cos(p.heading)*speed},{shatter:!drop});p.carrying=false;emit(drop?'place':'throw',p);if(!drop){credit(p,1,'throw');changed(p);}return {ok:true};
+        {x:Math.sin(p.heading)*speed,y:drop?.2:3.1,z:Math.cos(p.heading)*speed},{shatter:!drop});p.carrying=false;emit(drop?'place':'throw',p);if(!drop){credit(p,golden?50:1,golden?'golden-throw':'throw');changed(p);}return {ok:true};
     }
     if(kind==='board') {
       const v=fleet.vehicles[data.id],m=v&&boardingMachine(v.state.car);
@@ -325,7 +351,9 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
     return fail('알 수 없는 조작이에요');
   }
   function step(dt) {
-    dt=Math.min(.1,Math.max(0,dt));time+=dt;fleet.step(dt);store.step(dt);residents.update(dt);
+    dt=Math.min(.1,Math.max(0,dt));time+=dt;
+    for(const p of players.values())if(time-p.lastSeen>40)remove(p.id);
+    worldEvents.update();fleet.step(dt);store.step(dt);residents.update(dt);
     for(const [id,l] of leases)if(time>l.expires){const p=players.get(l.owner);if(p)release(p);else leases.delete(id);}
     for(const p of players.values()) {
       if(time-p.lastSeen>40){remove(p.id);continue;}
@@ -336,7 +364,7 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
         else {
           r.cleanProgress=Math.min(1,p.time/FOUP_CLEAN_SECONDS);
           if(p.time>=(p.nextSweep||0)){emit('sweep',p);p.nextSweep=p.time+.52;}
-          if(p.time+1e-8>=FOUP_CLEAN_SECONDS){r.cleanProgress=1;if(store.finishCleanup(r.id,p.id,p.cleanBreakSeq)){credit(p,FOUP_CLEAN_REWARD,'clean');changed(p);}release(p);}
+          if(p.time+1e-8>=FOUP_CLEAN_SECONDS){r.cleanProgress=1;const golden=worldEvents.isGolden(r);if(store.finishCleanup(r.id,p.id,p.cleanBreakSeq)){if(r.gold){r.gold=null;store.notifyChange();}credit(p,golden?10:FOUP_CLEAN_REWARD,golden?'golden-clean':'clean');changed(p);}release(p);}
         }
       }
       p.emoteLeft=Math.max(0,(p.emoteUntil||0)-time);if(!p.emoteLeft)p.emote='';
@@ -364,9 +392,9 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
     return {type:'frame',v:PROTOCOL,t:round(time),rev:revision,count:players.size,...(includeRanking?{leaderboard}:{}),people:[...residents.people,...safety.people,...players.values()].map(p=>actorPacket({...p,carrying:Boolean(store.getCarried(p.id)),titleId:players.has(p.id)?titleState(p.id).titleId:npcDestructionTitle(p.id,p.role)?.id??''})),
       broken:[...broken.values()].map(r=>[r.id,round(time-r.at),r.progress??null,r.owner??null]),foups,
       fleet:fleet.vehicles.map(v=>{const s=v.state;return [v.id,round(s.car.x),round(s.car.z),round(s.car.yaw),round(s.foup.x),round(s.foup.y),round(s.foup.z),round(s.foup.yaw),round(s.gripperY),s.phase,s.parked,round(s.lowered),s.target.id,s.destination.id,Boolean(v.cargoDetached),Boolean(v.passenger),Boolean(v.boardingHold),v.residentId??v.playerId??null,s.waiting,s.delivered];}),
-      events:full?[]:events.splice(0),totals:residents.state.actions};
+      events:full?[]:events.splice(0),totals:residents.state.actions,worldEvents:worldEvents.view()};
   }
   store.initializeStockers();
   foupReady=true;
-  return {titleState,nicknameState,applyNickname,wallet:id=>players.has(id)?walletView(players.get(id)):null,join,remove,pose,command,step,snapshot,roster,ranking,equipmentState,restoreEquipment,restoreFoups,players,fleet,store,residents,safety,destruction,profile:id=>players.has(id)?profile(players.get(id)):null,get time(){return time;}};
+  return {titleState,nicknameState,applyNickname,wallet:id=>players.has(id)?walletView(players.get(id)):null,join,remove,pose,command,step,snapshot,roster,ranking,equipmentState,restoreEquipment,restoreFoups,worldEvents,players,fleet,store,residents,safety,destruction,profile:id=>players.has(id)?profile(players.get(id)):null,get time(){return time;}};
 }

@@ -42,7 +42,7 @@ export function createFoupDebris(THREE,scene,{capacity=1200,reducedMotion=false}
     }
     for(const [id,c]of clouds)if(clock-c.at>1.1)clouds.delete(id);
     broken.sort((a,b)=>Math.hypot(a.x-focus.x,a.z-focus.z)-Math.hypot(b.x-focus.x,b.z-focus.z));
-    const signature=`${overview}:${Math.round(focus.x/2)}:${Math.round(focus.z/2)}:`+broken.map(r=>`${r.id}/${r.breakSeq}/${r.x}/${r.z}`).join('|');
+    const signature=`${overview}:${Math.round(focus.x/2)}:${Math.round(focus.z/2)}:`+broken.map(r=>`${r.id}/${r.breakSeq}/${r.x}/${r.z}/${Boolean(r.gold)}`).join('|');
     if(!moving&&!clouds.size&&signature===lastSignature)return;
     lastSignature=moving||clouds.size?'':signature;
     panels.count=wafers.count=shards.count=dust.count=0;
@@ -52,7 +52,7 @@ export function createFoupDebris(THREE,scene,{capacity=1200,reducedMotion=false}
       const age=reducedMotion?2:r.damageAge??2,progress=r.cleanProgress||0,fade=1-Math.max(0,(progress-.62)/.38),size=Math.max(.001,fade);
       for(let i=0;i<(near?6:2);i++){
         const [x,y,z,sx,sy,sz]=panelsSpec[i],t=Math.min(1,age/.65),fly=near?Math.sin(t*Math.PI)*(.24+i*.025):0;
-        put(panels,r.x+x*t,r.y+y+fly,r.z+z*t,sx*size,sy*size,sz*size,Math.sin(t*Math.PI)*2,i*.8+(1-t)*2,0,i===1?'#9c7a48':'#c8b995');
+        put(panels,r.x+x*t,r.y+y+fly,r.z+z*t,sx*size,sy*size,sz*size,Math.sin(t*Math.PI)*2,i*.8+(1-t)*2,0,r.gold?(i===1?'#e9ab21':'#ffe476'):(i===1?'#9c7a48':'#c8b995'));
       }
       for(const [i,p]of pattern.items.entries()){
         if(!near&&i>=3)break;

@@ -1,4 +1,4 @@
-import {findTitle} from './destruction-titles.js?v=5c32a645ea91';
+import {findTitle} from './destruction-titles.js?v=9d9367db83f5';
 // A transparent, camera-facing name that clears the visible head and headwear.
 export function createAvatarNameplate(THREE, scene, name, { resident = false, screenLabel = false } = {}) {
   const canvas = document.createElement('canvas'); canvas.width = 512; canvas.height = 96;
