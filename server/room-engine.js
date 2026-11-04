@@ -80,6 +80,7 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
   const residents=createResidentSimulation({fleet,store,destruction,detachCargo,random,getNeighbors:()=>safety.people,protectedIds:()=>[...leases.keys(),...(worldEvents?.protectedIds()??[])],onCue:emit});
   const safety=createSafetyPatrols({random,excludedNames:residents.people.map(p=>p.name)});
   worldEvents=createWorldEvents({now,random,onChange:onEventsChange,
+    onBayStart:()=>{for(const p of players.values())if(isSafety(p.role))finishDuty(p,p.optOut);},
     connected:()=>[...players.keys()].filter(id=>/^visitor:[a-f0-9]{64}$/.test(id)&&!excludedEvents.has(id)),isDestroyed:destruction.isDestroyed,
     prepareBay:bayId=>{for(const m of machines)if(m.bayId===bayId){const p=players.get(leases.get(m.id)?.owner);if(p)release(p);residents.yieldMachine(m.id);destruction.reset(m.id);}},
     assignSafety:bayId=>safety.setEventBay(bayId),spawnGolden:(event,count)=>store.spawnGolden(event,count),expireGolden:(id,at)=>store.expireGolden(id,at),
@@ -97,7 +98,7 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
     onCatch({guardId:guard.id,targetId:target.id,targetName:target.name,...details,caught,goal:SAFETY_DUTY.goal,completed});
   }
   function assignSafetyDuty() {
-    if(time<nextSafetyAt||[...players.values()].some(p=>isSafety(p.role)))return;
+    if(worldEvents.bayRunning()||time<nextSafetyAt||[...players.values()].some(p=>isSafety(p.role)))return;
     const candidates=[...players.values()].filter(p=>!p.hidden&&!isRestArea(p,SAFETY_CLEARANCE)&&!p.optOut&&!p.penalty&&p.phase==='idle'&&p.targetId==null&&p.posture==='stand'&&!p.carrying&&time-p.lastSeen<12&&
       p.activeSeconds>=Math.max(SAFETY_DUTY.warmup,p.eligibleAfter)&&time>=p.assignAfter&&(Math.abs(p.x)>6||p.z<70));
     candidates.sort((a,b)=>a.safetyTurns-b.safetyTurns||a.joinOrder-b.joinOrder);
@@ -144,9 +145,13 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
     p.titlePreference=restoreTitlePreference(saved?.titlePreference,p.brokenCount);
     p.chipUnlimited=hasUnlimitedChips(id,ownerId);p.nicknameChoiceVersion=p.chipUnlimited?NICKNAME_CHOICE_VERSION:(saved?.nicknameChoiceVersion||0);p.nicknameChoiceKind=saved?.nicknameChoiceKind||(saved?'existing':'new');p.wallet=restoreWallet(saved||{});p.rideSeconds=0;
     if(p.groundPosition&&!isBlocked(p.groundPosition.x,p.groundPosition.z,.295))Object.assign(p,p.groundPosition);else p.groundPosition=null;
-    if(isSafety(p.role)&&isRestArea(p,SAFETY_CLEARANCE)){Object.assign(p,restAreaExit(p));p.groundPosition={x:p.x,y:0,z:p.z,heading:p.heading};}
-    changed(p);
-    players.set(id,p);revision++;return {ok:true,id,name:p.name};
+    const endDutyForEvent=isSafety(p.role)&&worldEvents.bayRunning();
+    if(!endDutyForEvent&&isSafety(p.role)&&isRestArea(p,SAFETY_CLEARANCE)){Object.assign(p,restAreaExit(p));p.groundPosition={x:p.x,y:0,z:p.z,heading:p.heading};}
+    players.set(id,p);revision++;
+    // Restored safety profiles must become visitors before the welcome packet,
+    // including joins before the first event update after a room restart.
+    if(endDutyForEvent)finishDuty(p,p.optOut);else changed(p);
+    return {ok:true,id,name:p.name};
   }
   function pose(id,data) {
     const p=players.get(id);if(!p||!data||!finite(data.x,-58.8,58.8)||!finite(data.z,-88.5,88.5)||!finite(data.y,0,3.56)||!finite(data.heading,-1e5,1e5))return false;

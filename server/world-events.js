@@ -13,12 +13,13 @@ export function nextGoldenSlot(at){
 
 // Wall-clock deadlines survive hibernation/restarts. Persist transitions only;
 // no new timer, storage read, or whole-fab path search is needed per frame.
-export function createWorldEvents({now=Date.now,random=Math.random,connected=()=>[],isDestroyed,prepareBay,assignSafety,spawnGolden,expireGolden,goldenRemaining,reward,onChange=()=>{}}){
+export function createWorldEvents({now=Date.now,random=Math.random,connected=()=>[],isDestroyed,prepareBay,assignSafety,spawnGolden,expireGolden,goldenRemaining,reward,onBayStart=()=>{},onChange=()=>{}}){
   let state={version:1,lastGoldenSlot:0,nextBayAt:0,bay:null,golden:null},reconcile=true,lastObservedAt=now();
   const save=()=>onChange(structuredClone(state));
   const idsFor=id=>bays[id]?.machines.map(m=>m.id)??[];
   const bayIds=()=>state.bay?idsFor(state.bay.bayId):[];
   const liveBay=()=>state.bay&&['preparing','active'].includes(state.bay.phase);
+  const bayRunning=()=>Boolean(liveBay()&&now()<state.bay.endsAt);
   const recentResult=()=>state.lastResult&&now()-state.lastResult.finishedAt<EVENT_RULES.resultDuration?state.lastResult:null;
   function safetyBays(){return [...new Set([...(liveBay()?[state.bay.bayId]:[]),...(recentResult()?[state.lastResult.bayId]:[])])];}
   function finish(at){
@@ -49,7 +50,7 @@ export function createWorldEvents({now=Date.now,random=Math.random,connected=()=
     state.bay={id:'bay:'+startsAt,seriesId:'bay:'+startsAt,bayId:bay.id,bayLimit:bayCount,phase:'preparing',announcedAt:at,startsAt,endsAt:startsAt+EVENT_RULES.bayDuration,round:1,clearedCount:0,clearedBayIds:[]};
     state.lastResult=null;
     state.nextBayAt=startsAt+EVENT_RULES.bayCooldown;
-    remember(request,'bay',state.bay);prepareBay(bay.id);assignSafety(bay.id);save();
+    remember(request,'bay',state.bay);onBayStart();prepareBay(bay.id);assignSafety(bay.id);save();
   }
   function beginGolden(at,request){
     expireGolden(null,at);
@@ -59,7 +60,7 @@ export function createWorldEvents({now=Date.now,random=Math.random,connected=()=
   }
   function update(){
     const at=now();lastObservedAt=at;
-    if(reconcile){expireGolden(state.golden?.id??null,at);assignSafety(safetyBays());reconcile=false;}
+    if(reconcile){expireGolden(state.golden?.id??null,at);if(bayRunning())onBayStart();assignSafety(safetyBays());reconcile=false;}
     if(state.golden&&at>=state.golden.endsAt){expireGolden(null,at);state.golden=null;save();}
     const slot=goldenSlot(at);
     if(slot!==null&&slot>state.lastGoldenSlot){
@@ -109,7 +110,7 @@ export function createWorldEvents({now=Date.now,random=Math.random,connected=()=
       lastResult:recentResult()?structuredClone(state.lastResult):null,
       golden:g?{id:g.id,startsAt:g.startsAt,endsAt:g.endsAt,total:g.recordIds.length,remaining:goldenRemaining(g.id)}:null};
   }
-  return {update,restore,view,startManual,controlState:()=>({...view(),serverNow:now(),nextGoldenAt:nextGoldenSlot(now())}),checkpoint:()=>structuredClone(state),
+  return {update,restore,view,startManual,bayRunning,controlState:()=>({...view(),serverNow:now(),nextGoldenAt:nextGoldenSlot(now())}),checkpoint:()=>structuredClone(state),
     preparing:id=>state.bay?.phase==='preparing'&&bays[state.bay.bayId].machines.some(m=>m.id===id),
     protectedIds:()=>[...new Set([...safetyBays().flatMap(idsFor),...(state.bay?.phase==='success'&&now()-state.bay.finishedAt<EVENT_RULES.resultDuration?bayIds():[])])],
     travel:id=>liveBay()&&id===state.bay.id?{x:Math.sign(bays[state.bay.bayId].x)*4,z:bays[state.bay.bayId].z,bayId:state.bay.bayId}:null,
