@@ -84,7 +84,7 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
     prepareBay:bayId=>{for(const m of machines)if(m.bayId===bayId){const p=players.get(leases.get(m.id)?.owner);if(p)release(p);residents.yieldMachine(m.id);destruction.reset(m.id);}},
     assignSafety:bayId=>safety.setEventBay(bayId),spawnGolden:(event,count)=>store.spawnGolden(event,count),expireGolden:(id,at)=>store.expireGolden(id,at),
     goldenRemaining:id=>[...store.records.values()].filter(r=>r.gold?.eventId===id&&!r.gold.throwPaid&&!['broken','cleared'].includes(r.mode)).length,
-    reward:(id,amount,eventId)=>{const p=players.get(id);if(p&&credit(p,amount,'bay-event',{eventId}))changed(p);}});
+    reward:(id,amount,eventId,seriesId)=>{const p=players.get(id);if(p&&credit(p,amount,'bay-event',{eventId,seriesId}))changed(p);}});
   function finishDuty(p,optOut=false) {
     p.role='visitor';p.name=p.civilianName;p.optOut=optOut;p.safeUntil=time+12;
     p.eligibleAfter=p.activeSeconds+SAFETY_DUTY.cooldown;nextSafetyAt=time+SAFETY_DUTY.handover;

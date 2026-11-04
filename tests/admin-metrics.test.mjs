@@ -192,7 +192,7 @@ test('manual event API is owner-only at the edge and room, requires same-origin 
   for(const cookie of ['',ordinaryToken])assert.equal((await f.room.fetch(eventRequest(input,{cookie}))).status,403);
   for(const badOrigin of ['', 'https://elsewhere.test'])assert.equal((await worker.fetch(eventRequest(input,{headers:{Origin:badOrigin}}),f.env)).status,403);
   assert.equal((await worker.fetch(eventRequest(input,{headers:{'Content-Type':'text/plain'}}),f.env)).status,415);
-  for(const value of [{...input,amount:20000},{kind:'golden',requestId:'bad'},[],null])assert.equal((await worker.fetch(eventRequest(value),f.env)).status,400);
+  for(const value of [{...input,amount:20000},{...input,bayCount:3},{...input,bayCount:'2'},{...input,kind:'golden',bayCount:2},{kind:'golden',requestId:'bad'},[],null])assert.equal((await worker.fetch(eventRequest(value),f.env)).status,400);
   assert.equal((await worker.fetch(eventRequest(input,{raw:' '.repeat(513)}),f.env)).status,400);
 });
 
@@ -200,12 +200,14 @@ test('owner start is persisted before success, duplicate requests replay once, a
   const f=await fixture(),before=structuredClone(f.records),at=Date.parse('2026-11-04T17:00:00+09:00');
   f.room.room.worldEvents=createWorldEvents({now:()=>at,random:()=>.42,isDestroyed:()=>false,prepareBay(){},assignSafety(){},spawnGolden:()=>[],expireGolden(){},goldenRemaining:()=>0,reward(){},onChange:s=>f.room.profiles.saveEvents(s)});
   const read=await worker.fetch(eventRequest(null,{method:'GET'}),f.env);assert.equal(read.status,200);assert.match(read.headers.get('Cache-Control'),/private, no-store/);assert.deepEqual(f.records,before);
-  const input={kind:'bay',requestId:'00000000-0000-0000-0000-000000000002'};
+  const input={kind:'bay',bayCount:2,requestId:'00000000-0000-0000-0000-000000000002'};
   const results=await Promise.all([worker.fetch(eventRequest(input),f.env),worker.fetch(eventRequest(input),f.env)]);
   for(const response of results){assert.equal(response.status,200);assert.match(response.headers.get('Cache-Control'),/private, no-store/);}
   const data=await Promise.all(results.map(r=>r.json()));assert.equal(data.filter(r=>r.replayed).length,1);
   assert.equal(data[0].event.id,data[1].event.id);assert.equal(f.records.get('world:events:v1').bay.id,data[0].event.id);
   assert.equal(f.records.get('world:events:v1').manualRequests.length,1);
+  assert.equal(f.records.get('world:events:v1').bay.bayLimit,2);
+  assert.equal((await worker.fetch(eventRequest({...input,bayCount:1}),f.env)).status,409);
   for(const key of [...before.keys()].filter(k=>k.startsWith('profile:')))assert.deepEqual(f.records.get(key),before.get(key));
   assert.equal(f.room.room.players.size,0);
 });

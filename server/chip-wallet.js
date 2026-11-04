@@ -9,14 +9,17 @@ export function restoreWallet(profile={}) {
   const grant=count(profile.brokenCount)*5+count(profile.repairedCount)*3;
   return {version:1,revision:0,chips:grant,retroGrant:grant,earnedChips:0,earnedDestructionChips:0,owned:['suit-default','eyes-default'],equipped:{...DEFAULT_OUTFIT}};
 }
-export function grantChips(player,amount,{destructionId,eventId}={}) {
+export function grantChips(player,amount,{destructionId,eventId,seriesId}={}) {
   if(!Number.isSafeInteger(amount)||amount<=0)return false;
   const w=player.wallet,credited=Math.min(amount,Number.MAX_SAFE_INTEGER-w.chips);
   if(eventId&&w.lastEventRewardId===eventId)return false;
   if(credited<=0)return false;
   w.chips+=credited;w.earnedChips=Math.min(Number.MAX_SAFE_INTEGER,count(w.earnedChips)+credited);w.revision++;
   if(Number.isInteger(destructionId)){w.earnedDestructionChips=Math.min(Number.MAX_SAFE_INTEGER,count(w.earnedDestructionChips)+credited);w.lastDestructionId=destructionId;}
-  if(eventId)w.lastEventRewardId=eventId;
+  if(eventId){
+    w.lastEventRewardId=eventId;w.lastEventRewardAmount=credited;
+    if(seriesId){w.eventSeriesChips=(w.lastEventSeriesId===seriesId?count(w.eventSeriesChips):0)+credited;w.lastEventSeriesId=seriesId;}
+  }
   return true;
 }
 export function wardrobeCommand(player,kind,data) {

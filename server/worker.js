@@ -203,7 +203,7 @@ export class FabRoom extends DurableObject {
       const denied=await eventAccess(request,this.adminEnv);if(denied)return denied;
       if(request.method==='GET')return eventResponse(200,{worldEvents:this.room.worldEvents.controlState()});
       const input=await readEventRequest(request);if(!input)return eventResponse(400,{message:'이벤트 요청을 확인해 주세요.'});
-      const result=this.room.worldEvents.startManual(input.kind,input.requestId);
+      const result=this.room.worldEvents.startManual(input.kind,input.requestId,input.bayCount);
       await this.checkpoint();
       if(result.ok&&this.sockets.size)this.start();
       return eventResponse(result.ok?200:result.status,{...result,worldEvents:this.room.worldEvents.controlState()});

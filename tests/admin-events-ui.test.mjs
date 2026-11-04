@@ -18,3 +18,8 @@ test('status blocks overlap and protects the upcoming regular golden slot',()=>{
  f.ui.render({...idle,nextGoldenAt:at+119000});assert.equal(f.get('start-bay-event').disabled,true);
  f.ui.render({...idle,golden:{endsAt:at+600000,total:20,remaining:18}});assert.equal(f.get('start-bay-event').disabled,true);assert.match(f.get('event-status').textContent,/18\/20/);
 });
+test('the two-bay button sends an explicit bounded mode and disables all start buttons together',async()=>{
+ let body;const f=setup(async(url,options)=>{if(options.method!=='POST')return Response.json({worldEvents:idle});body=JSON.parse(options.body);return Response.json({ok:true,event:{bayId:4,bayLimit:2},worldEvents:{...idle,bay:{bayId:4,bayLimit:2,phase:'preparing',startsAt:at+60000,endsAt:at+120000}}});});
+ await f.ui.refresh();await f.get('start-double-bay-event').listeners.click();assert.equal(body.bayCount,2);assert.match(f.get('event-message').textContent,/2개 베이 모드/);assert.match(f.get('event-status').textContent,/2개 베이 모드/);
+ for(const id of ['start-bay-event','start-double-bay-event','start-golden-event'])assert.equal(f.get(id).disabled,true);
+});

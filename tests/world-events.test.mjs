@@ -95,7 +95,7 @@ test('victory pays every currently connected real account once, including owner,
   const f=make({count:15,ownerId:id(1),eventExcludedIds:[id(16)]}),r=f.r;r.join(id(16));f.tick();const b=r.snapshot().worldEvents.bay;
   f.set(b.startsAt);f.tick();r.remove(id(15));r.join(id(17));r.players.get(id(2)).role='safety-red';
   for(const m of bays[b.bayId].machines)assert.equal(r.destruction.trigger(m.id),true);f.tick();
-  assert.equal(r.snapshot().worldEvents.bay.phase,'success');
+  assert.equal(r.snapshot().worldEvents.lastResult.phase,'success');assert.equal(r.snapshot().worldEvents.bay.phase,'success');assert.equal(r.snapshot().worldEvents.bay.round,1);
   for(const who of [...Array.from({length:14},(_,n)=>id(n+1)),id(17)]){assert.equal(r.wallet(who).chips,200);assert.equal(r.wallet(who).lastEventRewardId,b.id);}
   assert.equal(r.wallet(id(16)).chips,0);assert.equal(r.safety.people.filter(p=>p.eventBayId!==undefined).length,0);
   f.advance(1);assert.equal(r.wallet(id(1)).chips,200);
@@ -105,7 +105,7 @@ test('the final accepted destruction before the deadline succeeds immediately wi
   const f=make({count:15}),r=f.r;f.tick();const b=r.snapshot().worldEvents.bay;f.set(b.startsAt);f.tick();
   const [last,...other]=bays[b.bayId].machines;for(const m of other)r.destruction.trigger(m.id);
   move(r,id(1),getEmoApproach(last).destination);assert.equal(r.command(id(1),'claim',{id:last.id,kind:'emo'}).ok,true);assert.equal(r.command(id(1),'press',{id:last.id}).ok,true);f.advance(.6);
-  f.set(b.endsAt-1);assert.equal(r.command(id(1),'explode',{id:last.id}).ok,true);assert.equal(r.snapshot().worldEvents.bay.phase,'success');assert.equal(r.wallet(id(1)).chips,205);
+  f.set(b.endsAt-1);assert.equal(r.command(id(1),'explode',{id:last.id}).ok,true);assert.equal(r.snapshot().worldEvents.lastResult.phase,'success');assert.equal(r.wallet(id(1)).chips,205);
   assert.equal(r.wallet(id(1)).earnedDestructionChips,5);assert.equal(r.players.get(id(1)).brokenCount,1);
 });
 test('two-hour bay cooldown survives restart and golden hunts take priority, including the two-minute lead-in',()=>{
@@ -127,7 +127,7 @@ test('bay rewards and completion checkpoint are in one durable write and cannot 
   const d=disk(),profiles=createProfileStore(d.storage),options={onProfileChange:p=>profiles.save(p),onEquipmentChange:s=>profiles.saveEquipment(s),onEventsChange:s=>profiles.saveEvents(s),onFoupChange:s=>profiles.saveFoups(s)};
   const f=make({count:15,...options}),r=f.r;profiles.saveFoups(r.store.checkpoint());f.tick();const b=r.snapshot().worldEvents.bay;f.set(b.startsAt);f.tick();await profiles.flush();
   for(const m of bays[b.bayId].machines)r.destruction.trigger(m.id);f.tick();await profiles.flush();
-  const batch=d.batches.at(-1);assert.equal(batch['world:events:v1'].bay.phase,'success');for(let n=1;n<=15;n++)assert.equal(batch['profile:'+id(n)].wallet.chips,200);
+  const batch=d.batches.at(-1);assert.equal(batch['world:events:v1'].lastResult.phase,'success');assert.equal(batch['world:events:v1'].bay.phase,'success');for(let n=1;n<=15;n++)assert.equal(batch['profile:'+id(n)].wallet.chips,200);
   assert.ok(Object.keys(batch).length<=128);assert.ok(batch['world:equipment:v1']);
   const next=make({at:b.startsAt+1000,count:0,...options});next.r.restoreEquipment(await profiles.getEquipment());next.r.restoreFoups(await profiles.getFoups());next.r.worldEvents.restore(await profiles.getEvents());
   for(let n=1;n<=15;n++)next.r.join(id(n),await profiles.get(id(n)));next.tick();assert.equal(next.r.wallet(id(1)).chips,200);

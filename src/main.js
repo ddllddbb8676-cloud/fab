@@ -705,7 +705,7 @@ worldEventsUI=createWorldEventsUI({command:(...args)=>onlineLink.command(...args
   ready:()=>!entry.active&&!nicknameUI.isOpen&&!wardrobe.isOpen&&!captureTime?.isOpen&&!photoMode.isOpen&&!document.hidden,
   canCelebrate:id=>bays[id].machines.every(m=>destruction.collapseState(m.id)===true),
   onTravel:point=>{eventCamera.cancel();adminVisit?.cancel();viewControls.closeAll();directory.close();$('help').classList.add('hidden');$('tool-card').classList.add('hidden');playActions.resetOnline();explorer.arriveAtEvent(point);multiplayer?.sendPose(true);toast(`${point.bayId+1}번 BAY 앞에 도착했어요`);},
-  onVictory:id=>{eventCamera.start(id);audio.playChipReward();}
+  onVictory:id=>{if(Number.isInteger(id))eventCamera.start(id);audio.playChipReward();}
 });
 function applyWallet(wallet){const earned=chipRewardTracker.receive(wallet),delayed=Math.min(earned,destructionRewardTracker.receive(wallet)),eventReward=wallet.lastEventRewardId&&wallet.lastEventRewardId!==currentWallet?.lastEventRewardId?Math.min(200,earned-delayed):0;currentWallet=wallet;worldEventsUI?.wallet(wallet);appearance.setOutfit(wallet.equipped,safetyState.role);wardrobe.setWallet(wallet);if(!document.hidden){if(delayed)destructionRewards.add(delayed,wallet.lastDestructionId);showChipReward(earned-delayed-eventReward);}}
 if(!connectionConfig)residents = createResidents({ THREE, scene, fleet, store: playActions.store, destruction, detachCargo: v => playActions.detachVehicleCargo(v),

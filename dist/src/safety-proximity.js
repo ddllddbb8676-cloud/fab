@@ -1,5 +1,5 @@
-import {isSafety} from './safety-team.js?v=2956557327b1';
-import {isRestArea} from './rest-area.js?v=2956557327b1';
+import {isSafety} from './safety-team.js?v=9de751eb80da';
+import {isRestArea} from './rest-area.js?v=9de751eb80da';
 
 export function safetyProximity(person,guards,previous=false){
   const protectedPhases=['repair','riding','climb'];
