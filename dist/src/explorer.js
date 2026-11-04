@@ -1,12 +1,12 @@
-import { TOUR_POINTS, HALL, TOOL_WIDTH, bays, isBlocked } from './layout.js?v=f55723afdac4';
-import { findWalkPath, stepWalker, resolveWalkTap } from './walking.js?v=f55723afdac4';
-import { createTourRoute } from './tour-route.js?v=f55723afdac4';
-import { createTransferSession, updateTransferSession, transferCameraFrame, transferTransitFrame } from './transfer-view.js?v=f55723afdac4';
-import { getRuntimeObstacles } from './runtime-obstacles.js?v=f55723afdac4';
-import { planEmoApproach, emoPressCameraFrame, EMO_REACH_SECONDS, EMO_HOLD_SECONDS, EMO_CONTACT_TOLERANCE } from './emo-interaction.js?v=f55723afdac4';
-import { findRestHeading } from './posture.js?v=f55723afdac4';
-import {isRestArea,REST_AREA_MESSAGE} from './rest-area.js?v=f55723afdac4';
-import { WALK_SPEED, CHASE_CAMERA, stickVector, cameraRelativeMove } from './locomotion.js?v=f55723afdac4';
+import { TOUR_POINTS, HALL, TOOL_WIDTH, bays, isBlocked } from './layout.js?v=9bdc2d7c0a08';
+import { findWalkPath, stepWalker, resolveWalkTap } from './walking.js?v=9bdc2d7c0a08';
+import { createTourRoute } from './tour-route.js?v=9bdc2d7c0a08';
+import { createTransferSession, updateTransferSession, transferCameraFrame, transferTransitFrame } from './transfer-view.js?v=9bdc2d7c0a08';
+import { getRuntimeObstacles } from './runtime-obstacles.js?v=9bdc2d7c0a08';
+import { planEmoApproach, emoPressCameraFrame, EMO_REACH_SECONDS, EMO_HOLD_SECONDS, EMO_CONTACT_TOLERANCE } from './emo-interaction.js?v=9bdc2d7c0a08';
+import { findRestHeading } from './posture.js?v=9bdc2d7c0a08';
+import {isRestArea,REST_AREA_MESSAGE} from './rest-area.js?v=9bdc2d7c0a08';
+import { WALK_SPEED, CHASE_CAMERA, stickVector, cameraRelativeMove } from './locomotion.js?v=9bdc2d7c0a08';
 
 export const REPAIR_SECONDS = 5;
 
@@ -63,13 +63,11 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
   const cameraRay = new THREE.Ray(), cameraHit = new THREE.Vector3();
   const target = new THREE.Vector3(), desired = new THREE.Vector3(), direction = new THREE.Vector3();
   const cameraFocus = new THREE.Vector3(), previousFocus = new THREE.Vector3();
-  const cameraRig = { yaw: state.yaw, elevation: state.elevation, distance: state.distance, clearance: state.distance,
-    offset: 0, avoid: 0, turnSpeed: 0, probeIn: 0, clearFor: 0, pullBack: false };
-  const nearbyCameraBoxes = [], nearbyRuntimeCameraBoxes = [];
+  const cameraRig = { yaw: state.yaw, elevation: state.elevation, distance: state.distance, clearance: state.distance };
   let pathSpeed = 0, tourBlend = 0, runtimeSnapshot = null, runtimeCameraBoxes = [];
   const targetRing = new THREE.Mesh(new THREE.RingGeometry(.21, .29, 36), new THREE.MeshBasicMaterial({ color: '#3d9fa7', transparent: true, opacity: .8, side: THREE.DoubleSide, depthWrite: false }));
   targetRing.rotation.x = -Math.PI / 2; targetRing.position.y = .012; targetRing.visible = false; scene.add(targetRing);
-  let stickSpeed = 0, stickCameraYaw = state.yaw, stickManualYaw = state.yaw;
+  let stickSpeed = 0;
   function endJoystick() { state.joystickActive = false; state.joystick = { x: 0, y: 0 }; stickSpeed = 0; state.speed = 0; }
   function clearInput() { pointers.clear(); endJoystick(); state.speed = 0; pathSpeed = 0; }
   function beginJoystick() {
@@ -77,10 +75,6 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
     cancelEmo('movement'); onManualMove();
     if (state.mode !== 'walk') setMode('walk');
     state.path = []; pathSpeed = 0; targetRing.visible = false; state.posture = 'stand';
-    // Automatic obstacle avoidance must not steer an already held joystick.
-    // A new press uses the view now on screen; an intentional drag still turns it.
-    stickCameraYaw = Math.atan2(camera.position.x - state.position.x, camera.position.z - state.position.z);
-    stickManualYaw = cameraRig.yaw;
     $('tool-card').classList.add('hidden');
     for (const pointer of pointers.values()) pointer.suppressTap = true;
     state.manualLook = true; state.joystickActive = true;
@@ -214,13 +208,11 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
     const snap = cameraSnap || previousFocus.distanceToSquared(focus) > 64;
     if (snap) {
       cameraRig.yaw = yaw; cameraRig.elevation = elevation; cameraRig.distance = distance;
-      cameraRig.offset = 0; cameraRig.avoid = 0; cameraRig.turnSpeed = 0; cameraRig.probeIn = 0; cameraRig.clearFor = 0;
       cameraFocus.copy(focus); previousFocus.copy(focus);
     } else {
       cameraRig.yaw += angleDelta(cameraRig.yaw, yaw) * (1 - Math.exp(-dt * 16));
       cameraRig.elevation = damp(cameraRig.elevation, elevation, 16, dt);
-      cameraRig.distance = damp(cameraRig.distance, distance, cameraRig.pullBack ? 2.2 : 12, dt);
-      if (Math.abs(cameraRig.distance - distance) < .01) cameraRig.pullBack = false;
+      cameraRig.distance = damp(cameraRig.distance, distance, 12, dt);
       // Exact damping for a target moving linearly during this frame. This
       // avoids the frame-rate-dependent trailing distance of position.lerp.
       const decay = Math.exp(-dt * 14);
@@ -230,78 +222,33 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
       }
       previousFocus.copy(focus);
     }
-    nearbyCameraBoxes.length = 0;
-    nearbyRuntimeCameraBoxes.length = 0;
+    desired.set(cameraFocus.x + Math.sin(cameraRig.yaw) * Math.cos(cameraRig.elevation) * cameraRig.distance,
+      Math.min(HALL.height - .28, cameraFocus.y + Math.sin(cameraRig.elevation) * cameraRig.distance),
+      cameraFocus.z + Math.cos(cameraRig.yaw) * Math.cos(cameraRig.elevation) * cameraRig.distance);
+    desired.x = THREE.MathUtils.clamp(desired.x, -59.3, 59.3);
+    desired.z = THREE.MathUtils.clamp(desired.z, -89.3, 89.3);
+    direction.copy(desired).sub(focus);
+    let clearDistance = direction.length();
+    if (clearDistance < .0001) { camera.position.copy(desired); cameraSnap = false; return; }
+    direction.multiplyScalar(1 / clearDistance);
     if (obstacles) {
       const snapshot = getRuntimeObstacles();
       if (snapshot !== runtimeSnapshot) {
         runtimeSnapshot = snapshot;
         runtimeCameraBoxes = snapshot.map(o => new THREE.Box3(new THREE.Vector3(o.minX - .12, o.minY ?? 0, o.minZ - .12), new THREE.Vector3(o.maxX + .12, o.maxY ?? HALL.height, o.maxZ + .12)));
       }
-      // Select nearby cabinets once, then reuse them for the few upward probes.
-      const radius = cameraRig.distance + cameraFocus.distanceTo(focus);
-      for (const boxes of [cameraColliderBoxes, runtimeCameraBoxes]) for (const box of boxes) {
-        if (box.max.x < focus.x - radius || box.min.x > focus.x + radius || box.max.z < focus.z - radius || box.min.z > focus.z + radius) continue;
-        (boxes === runtimeCameraBoxes ? nearbyRuntimeCameraBoxes : nearbyCameraBoxes).push(box);
-      }
-    }
-    let blockedByRuntime = false;
-    const clearanceAt = yaw => {
-      blockedByRuntime = false;
-      desired.set(cameraFocus.x + Math.sin(yaw) * Math.cos(cameraRig.elevation) * cameraRig.distance,
-        Math.min(HALL.height - .28, cameraFocus.y + Math.sin(cameraRig.elevation) * cameraRig.distance),
-        cameraFocus.z + Math.cos(yaw) * Math.cos(cameraRig.elevation) * cameraRig.distance);
-      desired.x = THREE.MathUtils.clamp(desired.x, -59.3, 59.3);
-      desired.z = THREE.MathUtils.clamp(desired.z, -89.3, 89.3);
-      direction.copy(desired).sub(focus);
-      let clearance = direction.length();
-      if (clearance < .0001) return clearance;
-      direction.multiplyScalar(1 / clearance);
       cameraRay.set(focus, direction);
-      for (const boxes of [nearbyCameraBoxes, nearbyRuntimeCameraBoxes]) for (const box of boxes) {
+      const minX = Math.min(focus.x, desired.x), maxX = Math.max(focus.x, desired.x);
+      const minZ = Math.min(focus.z, desired.z), maxZ = Math.max(focus.z, desired.z);
+      for (const boxes of [cameraColliderBoxes, runtimeCameraBoxes]) for (const box of boxes) {
+        if (box.max.x < minX || box.min.x > maxX || box.max.z < minZ || box.min.z > maxZ) continue;
         const p = cameraRay.intersectBox(box, cameraHit);
-        if (p) {
-          const distance = Math.max(.08, focus.distanceTo(p) - .15);
-          if (distance < clearance) { clearance = distance; blockedByRuntime = boxes === nearbyRuntimeCameraBoxes; }
-        }
-      }
-      return clearance;
-    };
-    const baseClearance = clearanceAt(cameraRig.yaw), runtimeBlocked = blockedByRuntime;
-    const wanted = Math.min(cameraRig.distance * .9, 4.6);
-    cameraRig.clearFor = baseClearance >= wanted ? cameraRig.clearFor + dt : 0;
-    cameraRig.probeIn -= dt;
-    if (!obstacles || runtimeBlocked || cameraRig.clearFor > .65) cameraRig.avoid = 0;
-    else if (baseClearance < wanted && cameraRig.probeIn <= 0) {
-      cameraRig.probeIn = .16;
-      const oldClearance = clearanceAt(cameraRig.yaw + cameraRig.avoid);
-      // Keep the selected side while it is usable. Equal gaps must not make
-      // the view alternate left/right on successive frames.
-      if (!cameraRig.avoid || oldClearance < wanted - .35) {
-        let best = 0, bestClearance = baseClearance;
-        const side = Math.sign(cameraRig.avoid || cameraRig.offset) || 1;
-        search: for (let step = 1; step <= 24; step++) for (const sign of [side, -side]) {
-          const offset = sign * step * Math.PI / 24, available = clearanceAt(cameraRig.yaw + offset);
-          if (available > bestClearance + .15) { bestClearance = available; best = offset; }
-          if (available >= wanted) { best = offset; bestClearance = available; break search; }
-        }
-        if (bestClearance > baseClearance + .5) cameraRig.avoid = best;
+        if (p) clearDistance = Math.min(clearDistance, Math.max(.08, focus.distanceTo(p) - .15));
       }
     }
-    // Stay at the user's elevation, never automatically swing into a top view.
-    // Acceleration and angular-speed limits make large corrections take seconds.
-    const remaining = angleDelta(cameraRig.offset, cameraRig.avoid);
-    const speed = THREE.MathUtils.clamp(remaining * 2.2, -.65, .65);
-    cameraRig.turnSpeed = damp(cameraRig.turnSpeed, speed, 5, dt);
-    const turn = cameraRig.turnSpeed * dt;
-    if (Math.abs(remaining) < 1e-5 || Math.sign(turn) === Math.sign(remaining) && Math.abs(turn) >= Math.abs(remaining)) {
-      cameraRig.offset = cameraRig.avoid; cameraRig.turnSpeed = 0;
-    } else cameraRig.offset += turn;
-    let clearDistance = clearanceAt(cameraRig.yaw + cameraRig.offset);
-    if (clearDistance < .0001) { camera.position.copy(desired); cameraSnap = false; return; }
     // Collision shortening never feeds back into the ideal orbit. Move inward
     // immediately for safety, then ease outward when a cabinet/door clears.
-    cameraRig.clearance = snap ? clearDistance : Math.min(clearDistance, damp(cameraRig.clearance, clearDistance, 2.2, dt));
+    cameraRig.clearance = snap ? clearDistance : Math.min(clearDistance, damp(cameraRig.clearance, clearDistance, 3.2, dt));
     camera.position.copy(focus).addScaledVector(direction, cameraRig.clearance);
     cameraSnap = false;
     camera.lookAt(focus);
@@ -310,7 +257,7 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
     if (state.joystickActive) {
       const strength = Math.hypot(state.joystick.x, state.joystick.y);
       if (strength < 1e-6) { stickSpeed = 0; state.speed = 0; return; }
-      const yaw = stickCameraYaw + angleDelta(stickManualYaw, cameraRig.yaw);
+      const yaw = Math.atan2(camera.position.x - cameraFocus.x, camera.position.z - cameraFocus.z);
       const move = cameraRelativeMove(state.joystick.x / strength, state.joystick.y / strength, yaw);
       const eased = easeVelocity(stickSpeed, WALK_SPEED * strength, 24, dt); stickSpeed = eased.value;
       const next = stepWalker(state.position, move.x * eased.travel, move.z * eased.travel, { canTraverse });
@@ -485,7 +432,7 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
     if (pointers.size === 2) {
       cancelEmo('look-input');
       const p = [...pointers.values()], distance = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
-      if (distance > 1 && pinchDistance > 1) { state.distance = THREE.MathUtils.clamp(state.distance * pinchDistance / distance, 2, 6.8); cameraRig.pullBack = false; }
+      if (distance > 1 && pinchDistance > 1) state.distance = THREE.MathUtils.clamp(state.distance * pinchDistance / distance, 2, 6.8);
       pinchDistance = distance; return;
     }
     dragged = Math.max(dragged, Math.hypot(e.clientX-old.startX,e.clientY-old.startY));
@@ -508,7 +455,6 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
     e.preventDefault(); cancelEmo('look-input');
     const units = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? canvas.getBoundingClientRect().height : 1;
     state.distance = THREE.MathUtils.clamp(state.distance + e.deltaY * units * .004, 2, 6.8);
-    cameraRig.pullBack = false;
   }, { passive: false });
   window.addEventListener('keydown', e => {
     if (state.locked || e.key.toLowerCase() !== 'escape') return;
@@ -561,12 +507,6 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
       if (state.locked) return false;
       const path = findWalkPath(state.position, point,{canTraverse}); if (!path) return false;
       setMode('walk'); state.path = path; targetRing.position.set(point.x, .012, point.z); targetRing.visible = true; return true;
-    },
-    frameStocker(port) {
-      // Keep the angle the player already chose. Retreat first; if a cabinet
-      // blocks that view, the same slow side avoidance finds an open direction.
-      state.distance = Math.max(state.distance, CHASE_CAMERA.distance);
-      cameraRig.pullBack = true;
     },
     approachRepair(machine, options = {}) { return approachEmo(machine, { ...options, kind: 'repair', onPress: options.onComplete }); },
     lock(value) { cancelEmo('locked'); if (value && state.mode === 'blast') setMode('walk'); state.locked = value; clearInput(); state.path = []; targetRing.visible = false; },

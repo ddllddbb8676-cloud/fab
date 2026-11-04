@@ -93,10 +93,8 @@ export function createPlayActions({ THREE, scene, materials, fleet, explorer, av
     if(port.kind==='IN'&&!store.carried){toast('FOUP을 들고 IN을 누르면 보관해요');return true;}
     if(port.kind==='OUT'&&store.carried){toast('들고 있는 FOUP을 먼저 내려놓아 주세요');return true;}
     onCue('stocker-prepare',port);
-    const started=startWalk(port.approach,{kind:'stocker',stockerId:port.stockerId,portKind:port.kind,
+    return startWalk(port.approach,{kind:'stocker',stockerId:port.stockerId,portKind:port.kind,
       recordId:port.kind==='IN'?store.carried.id:store.stockerState(port.stockerId).out?.id??null});
-    if(started)explorer.frameStocker(port);
-    return started;
   }
   function requestCleanup(record){
     if(!onFoot())return false;

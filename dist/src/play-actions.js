@@ -1,8 +1,8 @@
-import { machines, ports, TOOL_WIDTH, TOOL_FRONT, PORT_Z, VEHICLE_Y, SEATED_FOUP_Y, isBlocked } from './layout.js?v=f55723afdac4';
-import { reservedPortIds } from './network-transport.js?v=f55723afdac4';
-import { floorSpot, supportHeight, createFoupStore, createFoupRenderer, FOUP_CLEAN_SECONDS } from './foup-play.js?v=f55723afdac4';
-import { createFoupDebris } from './foup-debris.js?v=f55723afdac4';
-import {stockerPorts,stockers,stockerById,stockerPoint} from './stocker-layout.js?v=f55723afdac4';
+import { machines, ports, TOOL_WIDTH, TOOL_FRONT, PORT_Z, VEHICLE_Y, SEATED_FOUP_Y, isBlocked } from './layout.js?v=9bdc2d7c0a08';
+import { reservedPortIds } from './network-transport.js?v=9bdc2d7c0a08';
+import { floorSpot, supportHeight, createFoupStore, createFoupRenderer, FOUP_CLEAN_SECONDS } from './foup-play.js?v=9bdc2d7c0a08';
+import { createFoupDebris } from './foup-debris.js?v=9bdc2d7c0a08';
+import {stockerPorts,stockers,stockerById,stockerPoint} from './stocker-layout.js?v=9bdc2d7c0a08';
 
 const smooth = t => { const p = Math.max(0, Math.min(1, t)); return p * p * (3 - 2 * p); };
 export function boardingMachine(car) {
@@ -93,10 +93,8 @@ export function createPlayActions({ THREE, scene, materials, fleet, explorer, av
     if(port.kind==='IN'&&!store.carried){toast('FOUP을 들고 IN을 누르면 보관해요');return true;}
     if(port.kind==='OUT'&&store.carried){toast('들고 있는 FOUP을 먼저 내려놓아 주세요');return true;}
     onCue('stocker-prepare',port);
-    const started=startWalk(port.approach,{kind:'stocker',stockerId:port.stockerId,portKind:port.kind,
+    return startWalk(port.approach,{kind:'stocker',stockerId:port.stockerId,portKind:port.kind,
       recordId:port.kind==='IN'?store.carried.id:store.stockerState(port.stockerId).out?.id??null});
-    if(started)explorer.frameStocker(port);
-    return started;
   }
   function requestCleanup(record){
     if(!onFoot())return false;
