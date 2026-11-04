@@ -10,8 +10,8 @@ import {canCatch,createSafetyPatrols} from '../src/safety-team.js';
 import {createRoom} from '../server/room-engine.js';
 
 const center=a=>({x:(a.minX+a.maxX)/2,y:0,z:(a.minZ+a.maxZ)/2});
-test('twenty small marked zones fit the corridors, allow sitting/lying and provide safe guard exits',()=>{
-  assert.equal(REST_AREAS.length,20);
+test('nineteen small marked zones fit the corridors, allow sitting/lying and provide safe guard exits',()=>{
+  assert.equal(REST_AREAS.length,19);
   for(const area of REST_AREAS){
     for(let x=area.minX+.3;x<area.maxX-.3;x+=.4)for(let z=area.minZ+.3;z<area.maxZ-.3;z+=.4)assert.equal(isBlocked(x,z,.295),false,area.id);
     const p=center(area);for(const pose of ['sit','lie'])assert.ok(restPoseFits(p,0,pose));
@@ -59,9 +59,17 @@ test('safe visitors never receive a safety turn and patrols never enter even wit
   for(let i=0;i<1200;i++){patrols.update(.05,targets,i*.05);for(const g of patrols.people)assert.equal(isRestArea(g,SAFETY_CLEARANCE),false);}
 });
 
-test('twenty green zones and distant beacons share five instance batches and one actual light',()=>{
+test('nineteen green zones and distant beacons share five instance batches and one actual light',()=>{
   const view=createRestAreaView(THREE,new THREE.Scene()),instances=[];view.root.traverse(o=>{if(o.isInstancedMesh)instances.push(o);});
-  assert.deepEqual(instances.map(o=>o.count).sort((a,b)=>a-b),[20,20,20,40,80]);
+  assert.deepEqual(instances.map(o=>o.count).sort((a,b)=>a-b),[19,19,19,38,76]);
   for(const area of REST_AREAS){const p=center(area);view.update(p);assert.equal(view.light.position.x,p.x);assert.equal(view.light.position.z,p.z);assert.ok(view.light.intensity>0);}
   const normal=new THREE.Vector3(0,0,-1).applyQuaternion(view.light.quaternion);assert.ok(normal.y<-.99);
+});
+
+test('the opposite main-aisle end is ordinary floor while the entrance remains a refuge',()=>{
+  assert.deepEqual(REST_AREAS.filter(a=>a.central).map(a=>a.id),['entry']);
+  const end={x:0,z:-79,role:'visitor',phase:'idle',posture:'stand',penalty:0,safeUntil:0};
+  assert.equal(isRestArea(end),false);assert.ok(canSafetyTraverse({x:0,z:-84},{x:0,z:-75}));
+  assert.equal(canCatch({...end,z:-79.5,role:'safety-red'},end,100),true);
+  assert.ok(isRestArea({x:0,z:81.5}));
 });

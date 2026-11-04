@@ -1,10 +1,9 @@
-import {bays} from './layout.js?v=b2d839209a1c';
+import {bays} from './layout.js?v=5c32a645ea91';
 // The short central aisle just outside the air-shower doors, in metres.
 export const REST_AREA=Object.freeze({minX:-2.2,maxX:2.2,minZ:73.5,maxZ:83});
 export const REST_AREAS=Object.freeze([
   Object.freeze({...REST_AREA,id:'entry',central:true}),
-  ...bays.map(bay=>{const x=bay.x+(bay.id%3-1)*8;return Object.freeze({id:`bay-${bay.id}`,minX:x-1.2,maxX:x+1.2,minZ:bay.z-.9,maxZ:bay.z+.9});}),
-  Object.freeze({id:'far-end',central:true,minX:-2.2,maxX:2.2,minZ:-81.5,maxZ:-76.5})
+  ...bays.map(bay=>{const x=bay.x+(bay.id%3-1)*8;return Object.freeze({id:`bay-${bay.id}`,minX:x-1.2,maxX:x+1.2,minZ:bay.z-.9,maxZ:bay.z+.9});})
 ]);
 export const SAFETY_CLEARANCE=.32;
 export const REST_AREA_MESSAGE='초록 휴식 구역은 안전팀이 들어갈 수 없어요';

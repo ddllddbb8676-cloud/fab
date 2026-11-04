@@ -12,7 +12,7 @@ import {setRuntimeObstacles} from '../src/runtime-obstacles.js';
 import {createFoupStore,supportHeight} from '../src/foup-play.js';
 import {createRoom} from '../server/room-engine.js';
 
-test('compact forecourt retains both rear service passages and all twelve stocker approaches',()=>{
+test('compact forecourt retains both rear service passages and all entrance stocker approaches',()=>{
   const lastCabinet=Math.max(...machines.flatMap(m=>m.walkBounds.map(b=>b.maxZ)));
   assert.ok(ENTRANCE.wallZ-lastCabinet>1.8);
   assert.ok(isRestArea(AIR_SHOWER.exit),'new exit remains safe from patrols');

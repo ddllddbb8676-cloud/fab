@@ -2,6 +2,8 @@ import { isBlocked, machines, SEATED_FOUP_Y } from './layout.js';
 import {entranceBounds} from './entrance-layout.js';
 import {stockers,stockerById,stockerBounds,stockerSlot,stockerRecordPose,STOCKER_CAPACITY,STOCKER_TRANSFER_SECONDS,STOCKER_OUT_CUE_AT} from './stocker-layout.js';
 const stockModes=new Set(['stored','stocking','retrieving','stocker-out']);
+// Accept the retired units only while reading older saved worlds.
+const retiredStockers=new Set(['STK03','STK04','STK05','STK06']);
 export const FOUP_CLEAN_SECONDS = 3.2;
 export const FOUP_CLEAN_REWARD = 2;
 export const FOUP_RESTOCK_SECONDS = 12;
@@ -132,12 +134,12 @@ export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () 
     const r=records.get(id);if(!r||r.mode!=='broken'||r.cleaner!==owner||r.breakSeq!==breakSeq||r.cleanProgress<1)return false;
     Object.assign(r,{mode:'cleared',cleaner:null,cleanProgress:0,refillIn:FOUP_RESTOCK_SECONDS});onChange();return true;
   }
-  function restock(r) {
+  function restock(r,notify=true) {
     const available=id=>{const p=byPort.get(id);return p&&initialPortIds.includes(id)&&!occupancy.has(id)&&!isDestroyed(p.machineId);};
     const id=available(r.homePortId)?r.homePortId:initialPortIds.find(available),p=byPort.get(id);
     if(!p)return;
     Object.assign(r,{mode:'port',portId:id,homePortId:id,x:p.x,y:SEATED_FOUP_Y,z:p.z,yaw:p.sign===1?Math.PI:0,damageAge:0});
-    occupancy.set(id,r.id);onChange();
+    occupancy.set(id,r.id);if(notify)onChange();
   }
   function checkpoint() {
     initializeStockers();
@@ -166,11 +168,11 @@ export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () 
     }
     const stock=saved.stockers;
     if(stock!==undefined){
-      if(stock?.version!==1||stock.initialized!==true||!Array.isArray(stock.entries)||stock.entries.length>stockers.length*STOCKER_CAPACITY)throw new Error('Invalid stocker checkpoint');
+      if(stock?.version!==1||stock.initialized!==true||!Array.isArray(stock.entries)||stock.entries.length>(stockers.length+retiredStockers.size)*STOCKER_CAPACITY)throw new Error('Invalid stocker checkpoint');
       const used=new Set(),cells=new Set(),outs=new Set();
       for(const row of stock.entries){
         const [id,sid,mode,slot]=row??[];
-        if(!Array.isArray(row)||!seen.has(id)||used.has(id)||!stockerById.has(sid)||!stockModes.has(mode)||!Number.isInteger(slot)||slot<0||slot>=STOCKER_CAPACITY||cells.has(`${sid}:${slot}`))throw new Error('Invalid stocker record');
+        if(!Array.isArray(row)||!seen.has(id)||used.has(id)||!(stockerById.has(sid)||retiredStockers.has(sid))||!stockModes.has(mode)||!Number.isInteger(slot)||slot<0||slot>=STOCKER_CAPACITY||cells.has(`${sid}:${slot}`))throw new Error('Invalid stocker record');
         if(['retrieving','stocker-out'].includes(mode)){if(outs.has(sid))throw new Error('Duplicate stocker output');outs.add(sid);}
         if(saved.records.find(r=>r[0]===id)?.[1]!=='ground')throw new Error('Invalid stocker fallback');
         used.add(id);cells.add(`${sid}:${slot}`);
@@ -181,7 +183,17 @@ export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () 
     synchronize(incoming,null,true);
     if(stock){
       stockersSeeded=true;
-      for(const [id,sid,mode,slot]of stock.entries){const r=records.get(id);stow(r,stockerById.get(sid),slot,['retrieving','stocker-out'].includes(mode)?'stocker-out':'stored');}
+      // Restore existing entrance shelves/OUT first, regardless of saved order.
+      for(const [id,sid,mode,slot]of stock.entries)if(stockerById.has(sid)){const r=records.get(id);stow(r,stockerById.get(sid),slot,['retrieving','stocker-out'].includes(mode)?'stocker-out':'stored');}
+      const cells=new Map(stockers.map(s=>[s.id,new Set(stockerState(s.id).items.map(r=>r.stockSlot))]));
+      for(const [id,sid]of stock.entries)if(retiredStockers.has(sid)){
+        const r=records.get(id),preferred=sid==='STK03'||sid==='STK05'?'STK01':'STK02';
+        const target=stockers.find(s=>s.id===preferred&&cells.get(s.id).size<STOCKER_CAPACITY)??stockers.find(s=>cells.get(s.id).size<STOCKER_CAPACITY);
+        if(target){let slot=0;while(cells.get(target.id).has(slot))slot++;cells.get(target.id).add(slot);stow(r,target,slot,'stored');}
+        // A previously full six-unit world may exceed the two-unit capacity.
+        // Reuse a free equipment port, or retain the safe ground fallback.
+        else restock(r,false);
+      }
     }else initializeStockers();
     // A carrier already on the old empty rear strip must remain reachable
     // after the service wall moves. Keep its identity and cleanup/reward state.

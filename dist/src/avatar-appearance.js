@@ -1,6 +1,6 @@
-import {createAllAccessories} from './accessories.js?v=b2d839209a1c';
-import {DEFAULT_OUTFIT,findItem,suitColor} from './cosmetics-catalog.js?v=b2d839209a1c';
-import {isSafety,safetyColor} from './safety-team.js?v=b2d839209a1c';
+import {createAllAccessories} from './accessories.js?v=5c32a645ea91';
+import {DEFAULT_OUTFIT,findItem,suitColor} from './cosmetics-catalog.js?v=5c32a645ea91';
+import {isSafety,safetyColor} from './safety-team.js?v=5c32a645ea91';
 const pools=new WeakMap();
 export function createAvatarAppearance(THREE,avatar,{scene=null,external=false}={}) {
   let pool=pools.get(THREE);

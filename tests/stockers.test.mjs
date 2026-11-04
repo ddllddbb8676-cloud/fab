@@ -13,8 +13,8 @@ const make=(opts={})=>{const store=createFoupStore({ports,initialPortIds:initial
 const step=(store,seconds=3.1)=>{for(let t=0;t<seconds;t+=.05)store.step(.05);};
 const overlap=(a,b)=>a.minX<b.maxX&&a.maxX>b.minX&&a.minZ<b.maxZ&&a.maxZ>b.minZ;
 
-test('six narrow ceiling-height stockers clear every tool and retain walkable approaches and tour',()=>{
-  assert.equal(stockers.length,6);assert.equal(stockerPorts.length,12);assert.equal(STOCKER_SIZE.height,4.88);
+test('two entrance ceiling-height stockers clear every tool and retain walkable approaches and tour',()=>{
+  assert.equal(stockers.length,2);assert.equal(stockerPorts.length,4);assert.equal(STOCKER_SIZE.height,4.88);
   assert.ok(STOCKER_SIZE.depth>STOCKER_SIZE.width*2);
   for(const s of stockers){
     for(const m of machines)for(const b of m.walkBounds)assert.equal(overlap(s.bounds,b),false,`${s.id}/${m.id}`);
@@ -56,31 +56,61 @@ test('stocker restart settles transfers silently and preserves identity and empt
   assert.equal(restored.stockerState('STK01').count,0);assert.equal(restored.checkpoint().stockers.entries.length,0);
 });
 
-test('relocated corner stockers keep stored identities and restore pending OUT at the new port',()=>{
-  const store=make(),ids=[...store.records.keys()].sort();
-  store.stockerGet('STK03','a');step(store,.5);
-  const beforeCounts=['STK03','STK04'].map(id=>store.stockerState(id).items.length);
-  const saved=store.checkpoint(),oldStock=new Map(saved.stockers.entries.filter(e=>['STK03','STK04'].includes(e[1])).map(e=>[e[0],e[1]]));
-  // The previous release saved these same carriers beside the middle bays.
-  for(const row of saved.records)if(oldStock.has(row[0])){row[3]=oldStock.get(row[0])==='STK03'?-57.8:57.8;row[5]=4.7;}
-  const restored=make();restored.restore(saved);
-  assert.deepEqual([...restored.records.keys()].sort(),ids);
-  assert.deepEqual(['STK03','STK04'].map(id=>restored.stockerState(id).items.length),beforeCounts);
-  for(const s of stockers.slice(2,4)){
-    assert.ok(s.bounds.minZ>-90&&s.bounds.minZ< -89.5,'back sits against far wall');
-    for(const r of restored.stockerState(s.id).items){
-      assert.ok(r.z< -80,'old middle coordinates are replaced');
-      assert.deepEqual({x:r.x,y:r.y,z:r.z,yaw:r.yaw},stockerRecordPose(r));
-    }
+// Checkpoints written by the former six-unit layout, including full shelves.
+function sixUnitCheckpoint(counts=[12,12,12,12,12,12]){
+  const records=[],entries=[],fallbacks=[[-5.2,82.88],[5.2,84.12],[-57.3,-82],[57.3,-82],[-3,-84.62],[3,-83.38]];
+  let index=0;
+  for(let unit=0;unit<6;unit++)for(let slot=0;slot<counts[unit];slot++){
+    const portId=initialSharedPorts[index++],id=`port:${portId}`,[x,z]=fallbacks[unit];
+    records.push([id,'ground',null,x,.225,z,0,2,false,portId]);
+    entries.push([id,`STK0${unit+1}`,'stored',slot]);
   }
-  assert.ok(restored.stockerState('STK03').out,'interrupted OUT is ready at the new loading port');
+  return {version:1,records,stockers:{version:1,initialized:true,entries}};
+}
+
+test('retired stocker contents move into entrance shelves once without losing existing OUT or identities',()=>{
+  let cues=0;const saved=sixUnitCheckpoint(),store=make({onStockerOut:()=>cues++}),ids=[...store.records.keys()].sort();
+  saved.stockers.entries[0][2]='retrieving';
+  saved.stockers.entries[24][2]='stocker-out';saved.stockers.entries[36][2]='stocking';
+  // Active shelf slots must be reserved even when a retired row appears first.
+  saved.stockers.entries.reverse();store.restore(saved);step(store);
+  assert.deepEqual([...store.records.keys()].sort(),ids);
+  assert.equal(store.stockerState('STK01').items.length,36);assert.equal(store.stockerState('STK02').items.length,36);
+  assert.equal(store.stockerState('STK01').out.id,saved.records[0][0]);assert.equal(cues,0);
+  for(const [id,sid] of saved.stockers.entries){
+    const r=store.records.get(id);assert.equal(r.breakSeq,2);
+    assert.ok(['STK01','STK02'].includes(r.stockerId));
+    assert.deepEqual({x:r.x,y:r.y,z:r.z,yaw:r.yaw},stockerRecordPose(r));
+    if(!['STK01','STK02'].includes(sid))assert.equal(r.mode,'stored');
+  }
+  const migrated=store.checkpoint();assert.ok(migrated.stockers.entries.every(e=>['STK01','STK02'].includes(e[1])));
+  store.restore(migrated);assert.deepEqual(store.checkpoint(),migrated,'no duplicate migration or refill on reconnect');
+});
+
+test('a full old six-unit world preserves every excess FOUP when two entrance shelves are full',()=>{
+  for(const destroyed of [false,true]){
+    const snapshots=[];
+    const store=make({isDestroyed:()=>destroyed,onChange:()=>snapshots.push(store.checkpoint())}),ids=[...store.records.keys()].sort(),saved=sixUnitCheckpoint([48,48,48,48,48,48]);
+    store.restore(saved);
+    assert.equal(snapshots.length,1,'only the completed restoration is published');
+    assert.equal(snapshots[0].stockers.entries.length,96);
+    assert.ok(snapshots[0].stockers.entries.every(e=>['STK01','STK02'].includes(e[1])));
+    assert.deepEqual([...store.records.keys()].sort(),ids);
+    for(const s of stockers)assert.equal(store.stockerState(s.id).items.length,48);
+    for(const [id]of saved.stockers.entries.slice(96)){
+      const r=store.records.get(id);assert.equal(r.mode,destroyed?'ground':'port');assert.equal(r.breakSeq,2);
+      if(destroyed)assert.equal(isBlocked(r.x,r.z,.295),false,'fallback remains reachable');
+      else assert.equal(store.atPort(r.portId)?.id,id,'returned to one unique intact port');
+    }
+    assert.equal(store.checkpoint().stockers.entries.length,96);
+  }
 });
 
 test('invalid stocker checkpoints fail before changing world state and full shelves reject IN',()=>{
   const store=make(),saved=store.checkpoint(),before=JSON.stringify(saved);
   const bad=structuredClone(saved);bad.stockers.entries.push(bad.stockers.entries[0]);assert.throws(()=>store.restore(bad));assert.equal(JSON.stringify(store.checkpoint()),before);
-  const full=structuredClone(saved);full.stockers.entries=[];
-  for(let i=0;i<48;i++)full.stockers.entries.push([full.records[i][0],'STK01','stored',i]);
+  const unknown=structuredClone(saved);unknown.stockers.entries[0][1]='STK07';assert.throws(()=>store.restore(unknown));assert.equal(JSON.stringify(store.checkpoint()),before);
+  const full=sixUnitCheckpoint([48,0,0,0,0,0]);
   store.restore(full);const r=[...store.records.values()].find(r=>r.mode==='port');assert.ok(store.pickup(r.id));
   assert.equal(store.stockerPut('STK01').ok,false);assert.equal(store.carried.id,r.id);
 });
@@ -91,6 +121,7 @@ test('authoritative stocker commands require port contact, keep chips, and sync 
   const move=(id,p)=>room.pose(id,{...p,y:0,heading:0,speed:0,posture:'stand',hidden:false});
   const wallets=['a','b'].map(id=>JSON.stringify(room.players.get(id).wallet));
   assert.equal(room.command('a','stocker',{id:s.id,port:'OUT'}).ok,false);
+  for(const id of ['STK03','STK04','STK05','STK06'])assert.equal(room.command('a','stocker',{id,port:'OUT'}).ok,false);
   move('a',out.approach);move('b',out.approach);
   assert.equal(room.command('a','stocker',{id:s.id,port:'OUT'}).ok,true);assert.equal(room.command('b','stocker',{id:s.id,port:'OUT'}).ok,false);
   const r=room.store.stockerState(s.id).items.find(r=>r.mode==='retrieving'),packet=foupFromPacket(foupPacket(r));
