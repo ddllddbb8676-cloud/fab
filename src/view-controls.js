@@ -1,4 +1,18 @@
 // Keep the scene clear: one menu, with the map shown only on request.
+// Photo mode hides HUD only. The world/network keep running, and the tap that
+// returns to play is consumed instead of also walking or pressing equipment.
+export function createPhotoMode({button,onToggle=()=>{},canOpen=()=>true,document=globalThis.document}={}){
+  const exit=document.createElement('button');exit.id='photo-exit';exit.type='button';exit.hidden=true;exit.setAttribute('aria-label','사진모드 종료: 화면 한 번 누르기 또는 Escape');
+  const hint=document.createElement('div');hint.id='photo-hint';hint.hidden=true;hint.setAttribute('role','status');hint.textContent='사진모드 · 화면을 한 번 누르면 돌아와요';
+  document.body.append(exit,hint);let active=false,timer,restore=[];
+  function close(){if(!active)return;active=false;clearTimeout(timer);document.body.classList.remove('photo-mode');exit.hidden=hint.hidden=true;for(const [element,inert] of restore)element.inert=inert;restore=[];button.setAttribute('aria-pressed','false');onToggle(false);button.focus({preventScroll:true});}
+  function open(){if(active||!canOpen())return false;onToggle(true);active=true;document.body.classList.add('photo-mode');restore=[...document.body.children].filter(el=>el!==exit&&el!==hint).map(el=>[el,el.inert]);for(const [el] of restore)el.inert=true;exit.hidden=hint.hidden=false;button.setAttribute('aria-pressed','true');exit.focus({preventScroll:true});timer=setTimeout(()=>{hint.hidden=true;},1600);return true;}
+  button.addEventListener('click',()=>active?close():open());
+  exit.addEventListener('click',event=>{event.preventDefault();event.stopImmediatePropagation();close();});
+  document.addEventListener('keydown',event=>{if(active&&event.key==='Escape'){event.preventDefault();event.stopImmediatePropagation();close();}},true);
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)close();});
+  return {open,close,get isOpen(){return active;}};
+}
 export function createViewControls({ onLock = () => {}, onOpen = () => {} } = {}) {
   const $ = id => document.getElementById(id);
   const toggle = $('controls-toggle'), panel = $('controls-panel'), map = $('map-panel');

@@ -1,6 +1,6 @@
-import { rankRepairEquipment } from './repair-ranking.js?v=46e019d9e853';
-import { setRuntimeObstacles } from './runtime-obstacles.js?v=46e019d9e853';
-import { createWalkPlanner } from './walking.js?v=46e019d9e853';
+import { rankRepairEquipment } from './repair-ranking.js?v=4b21b3c206ef';
+import { setRuntimeObstacles } from './runtime-obstacles.js?v=4b21b3c206ef';
+import { createWalkPlanner } from './walking.js?v=4b21b3c206ef';
 
 self.onmessage = event => {
   try {

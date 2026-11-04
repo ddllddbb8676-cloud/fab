@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#e8edef"><title>FAB — 작은 시선, 넓은 세계</title>
+  <meta name="theme-color" content="#e8edef"><title>FAB@semitoon · 팹뿌</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%231f5965'/%3E%3Cpath d='M18 46V18h28M18 30h22' stroke='white' stroke-width='5' fill='none'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="/src/style.css">
   <link rel="stylesheet" href="/src/equipment-directory.css">
@@ -14,25 +14,27 @@
 </head>
 <body>
   <main id="world" aria-label="가로 120미터 세로 180미터 층고 5미터의 반도체 팹 3D 공간"></main>
-  <div class="loading" id="loading" role="status"><div class="loading-mark">F<span>·</span></div><p>넓은 세계를 여는 중</p><span>FAB OBSERVATORY</span><small data-loading-detail hidden></small><div class="loading-actions"><button type="button" data-loading-retry hidden>다시 연결</button><button type="button" data-loading-copy hidden>점검 결과 복사</button></div><textarea data-loading-result readonly hidden aria-label="게임 시작 점검 결과"></textarea></div>
+  <div class="loading" id="loading" role="status"><div class="loading-mark">세미툰 <span>|</span> 팹뿌</div><div class="loading-go">ㄱㄱㄱㄱㄱ</div><p>팹 연결 중</p><span>FAB@semitoon</span><small data-loading-detail hidden></small><div class="loading-actions"><button type="button" data-loading-retry hidden>다시 연결</button><button type="button" data-loading-copy hidden>점검 결과 복사</button></div><textarea data-loading-result readonly hidden aria-label="게임 시작 점검 결과"></textarea></div>
   <section class="entry-overlay hidden" id="entry-overlay" aria-label="에어샤워 입장">
     <button class="entry-skip" id="entry-skip">건너뛰고 입장 <span aria-hidden="true">→</span></button>
-    <div class="entry-caption"><div class="eyebrow">WELCOME TO THE CLEANROOM</div><h1 id="entry-title" aria-live="polite">에어샤워실에 오신 걸 환영해요.</h1><p id="entry-description">잠시 뒤 바람이 나옵니다.</p><div class="entry-progress" role="progressbar" aria-label="팹 입장 진행" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="entry-progress-fill"></span></div><div class="entry-steps"><span id="entry-step-air">01 에어샤워</span><span id="entry-step-door">02 자동문 열림</span><span id="entry-step-walk">03 FAB 입장</span></div></div>
+    <div class="entry-caption"><div class="eyebrow">FAB@semitoon</div><h1 id="entry-title" aria-live="polite">세미툰 | 팹뿌</h1><p id="entry-description">ㄱㄱㄱㄱㄱ</p><div class="entry-progress" role="progressbar" aria-label="팹 입장 진행" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="entry-progress-fill"></span></div><div class="entry-steps"><span id="entry-step-air">01 에어샤워</span><span id="entry-step-door">02 자동문 열림</span><span id="entry-step-walk">03 FAB 입장</span></div></div>
   </section>
   <header class="topbar">
-    <a class="brand" href="/" aria-label="팹 관찰실 처음으로"><span class="brand-icon">F<span>·</span></span><span>FAB<span class="brand-sub">OBSERVATORY</span></span></a>
+    <a class="brand" href="/" aria-label="FAB@semitoon 처음으로"><span class="brand-icon" aria-hidden="true"><svg viewBox="0 0 48 48" width="34" height="34" fill="none"><path d="m29 3 3 7 7-4-2 8 8 2-7 5 5 7-9-1-3 7-4-8-8 3 3-8-7-4 9-3z" fill="#ffc35b"/><path d="m30 11 2 5 5-1-3 5 4 3-6 1-2 5-2-5-5-1 4-4-1-5z" fill="#f06c44"/><path d="M7 20h17l3 4v19H7z" fill="#eaf4f2" stroke="#163f48" stroke-width="2" stroke-linejoin="round"/><path d="M7 20h17l-5 6 4 5-5 4" stroke="#163f48" stroke-width="2" stroke-linejoin="round"/><path d="M10 34h5m-5 4h5" stroke="#779d9e" stroke-width="2"/><path d="M3 43h26" stroke="#163f48" stroke-width="3" stroke-linecap="round"/><path d="m6 10-2-3m6 8-5-1m31 22 4 3" stroke="#eaf4f2" stroke-width="2" stroke-linecap="round"/></svg></span><span><span class="brand-name">FAB<small>@semitoon</small></span><span class="brand-sub">팹 연결 중</span></span></a>
     <div class="top-actions"><button id="effects-sound" class="sound-toggle" type="button" aria-label="효과음 끄기" aria-pressed="true"><span aria-hidden="true">♪</span><span id="effects-sound-label">효과음</span></button><button id="sound" class="sound-toggle" type="button" aria-label="공조 소리 끄기" aria-pressed="true"><span aria-hidden="true">≋</span><span id="sound-label">공조음</span></button><button id="controls-toggle" class="controls-toggle" type="button" aria-label="팹 메뉴 열기" aria-controls="controls-panel" aria-expanded="false"><span class="menu-toggle-icon" aria-hidden="true"><i></i><i></i></span></button></div>
     <div class="personal-stats" id="personal-stats" role="status" aria-live="polite" aria-atomic="true" aria-label="내 기록: 부순 장비 0대, 고친 장비 0대">
       <span class="personal-stat" title="내가 부순 장비"><i class="break-count-icon" aria-hidden="true"></i><span id="personal-broken">0</span></span>
       <span class="personal-stat" title="내가 고친 장비"><svg class="repair-count-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a5.5 5.5 0 0 1 6.6-1.1l-3.6 3.6 2.5 2.5 3.6-3.6a5.5 5.5 0 0 1-7.4 7.4L8 23.5a2.1 2.1 0 0 1-3-3l8.4-8.4a5.5 5.5 0 0 1 1.3-5.8Z" transform="translate(-2 -2)"/></svg><span id="personal-repaired">0</span></span>
     </div>
     <section id="leaderboard" class="leaderboard" aria-label="지난 방문자와 상주 캐릭터를 포함한 누적 장비 파괴 TOP 5">
-      <div class="leaderboard-heading"><strong>파괴 TOP 5</strong><span>누적 기록</span></div>
-      <ol></ol><p class="leaderboard-empty">기록 대기 중</p>
+      <button class="leaderboard-heading" type="button" aria-expanded="true" aria-controls="leaderboard-rows leaderboard-empty" aria-label="파괴 TOP 5 접기"><strong>파괴 TOP 5</strong><span>누적 기록 <i class="leaderboard-chevron" aria-hidden="true">⌃</i></span></button>
+      <ol id="leaderboard-rows"></ol><p id="leaderboard-empty" class="leaderboard-empty">기록 대기 중</p>
     </section>
   </header>
+  <button id="photo-toggle" class="photo-toggle" type="button" aria-label="사진모드: 메뉴와 조작키 숨기기" aria-pressed="false" title="사진모드"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M8 6l1.4-2h5.2L16 6h3a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z"/><circle cx="12" cy="13" r="4"/></svg></button>
   <section id="controls-panel" class="controls-panel hidden" role="dialog" aria-label="팹 메뉴" tabindex="-1">
     <div class="panel-heading"><h2>팹 메뉴</h2><button id="controls-close" class="panel-close" type="button" aria-label="팹 메뉴 닫기">×</button></div>
+    <a class="menu-row semitoon-link" href="https://www.instagram.com/semi.toon/" target="_blank" rel="noopener noreferrer"><span class="menu-symbol" aria-hidden="true">↗</span><span class="menu-label">세미툰 바로가기</span><span class="menu-detail">인스타</span></a>
     <section class="menu-group" aria-labelledby="view-menu-heading">
       <h3 id="view-menu-heading">관람</h3>
       <nav class="view-controls" aria-label="관람 방식">
@@ -51,7 +53,7 @@
       <button id="next-oht" class="menu-row hidden" type="button"><span class="menu-symbol" aria-hidden="true">→</span><span class="menu-label">다음 OHT 따라보기</span></button>
       <button id="restore-equipment" class="menu-row restore-row hidden" type="button"><span class="menu-symbol" aria-hidden="true">↻</span><span class="menu-label">수리할 장비 선택</span><span id="destroyed-count" class="menu-detail">0대</span></button>
     </section>
-    <section class="menu-group" aria-label="내 캐릭터"><button id="wardrobe-open" class="menu-row" type="button"><span class="menu-symbol" aria-hidden="true">♧</span><span class="menu-label">꾸미기 · 내 옷장</span><span class="menu-detail"></span></button></section>
+    <section class="menu-group" aria-label="내 캐릭터"><button id="wardrobe-open" class="menu-row" type="button"><span class="menu-symbol" aria-hidden="true">♧</span><span class="menu-label">꾸미기 · 내 옷장</span><span class="menu-detail"></span></button><button id="capture-open" class="menu-row" type="button"><span class="menu-symbol" aria-hidden="true">▣</span><span class="menu-label">캡쳐타임</span><span class="menu-detail">내 기록</span></button></section>
     <section class="menu-group" aria-labelledby="settings-menu-heading">
       <h3 id="settings-menu-heading">설정</h3>
       <a id="operations-admin" class="menu-row hidden" href="/admin" style="text-decoration:none"><span class="menu-symbol" aria-hidden="true">▥</span><span class="menu-label">운영 현황</span><span class="menu-detail">운영자</span></a>

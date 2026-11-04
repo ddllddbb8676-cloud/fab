@@ -16,6 +16,12 @@ export function rankScores(rows,limit=5){
 
 export function createLeaderboard(element){
   const list=element.querySelector('ol'),empty=element.querySelector('.leaderboard-empty');
+  const toggle=element.querySelector('button.leaderboard-heading');
+  toggle?.addEventListener('click',()=>{
+    const collapsed=toggle.getAttribute('aria-expanded')==='true';
+    toggle.setAttribute('aria-expanded',String(!collapsed));toggle.setAttribute('aria-label',`파괴 TOP 5 ${collapsed?'펼치기':'접기'}`);
+    element.classList.toggle('leaderboard-collapsed',collapsed);
+  });
   let roster=[],people=[],selfId=null,last='',cumulative=null;
   function render(){
     const rows=cumulative??rankVisitors(people,roster),key=JSON.stringify([selfId,rows]);if(key===last)return;last=key;

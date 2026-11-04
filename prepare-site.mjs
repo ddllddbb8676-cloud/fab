@@ -26,6 +26,7 @@ for (const name of ['main.js', 'layout.js', 'transport.js', 'rail-network.js', '
 await copyFile(new URL('src/residents.js', root), new URL('src/residents.js', dist));
 await copyFile(new URL('src/admin-visit.js',root),new URL('src/admin-visit.js',dist));
 await copyFile(new URL('src/usage-telemetry.js',root),new URL('src/usage-telemetry.js',dist));
+for(const name of ['capture-time.js','capture-time.css'])await copyFile(new URL('src/'+name,root),new URL('src/'+name,dist));
 await copyFile(new URL('src/scene-depth.js', root), new URL('src/scene-depth.js', dist));
 await copyFile(new URL('src/playful-accessories.js', root), new URL('src/playful-accessories.js', dist));
 await copyFile(new URL('src/foup-debris.js', root), new URL('src/foup-debris.js', dist));
