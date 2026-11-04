@@ -20,4 +20,10 @@
 - 로컬 서버에서 같은 문 앞 황금 FOUP을 집고 스토커 IN에 넣어 정확히 200칩을 받았다. 집기 자체는 지갑을 바꾸지 않고, 중복 입고는 보상을 반복하지 않는다.
 - 관련 39개, 전체 533개 중 532개 통과/기존 선택 스트레스 1개 생략. 구문 검사·빌드 통과. 실제 iPhone 시각/조작 검증은 하지 않았다.
 - 운영에서 시험 이벤트를 열거나 새 검증 계정을 만들지 않았다. 읽기 결과는 `outputs/golden-pickup-fix/live-before.json`, 배포/검증 완료 여부는 같은 폴더의 `completed.json`·`verification.json`·`recovery.json`을 따른다.
-- 배포 전 운영은 `b25ea839-df7d-4faa-afe5-a818ea1b20d5`, Git 기준은 `be720ff8ad60e82d1e50f995295175c1814bdad8`이다. 아래 완료 기록이 추가되기 전에는 미배포다.
+- 배포 전 운영은 `b25ea839-df7d-4faa-afe5-a818ea1b20d5`, Git 기준은 `be720ff8ad60e82d1e50f995295175c1814bdad8`이다.
+
+## 21:54 KST 운영 반영 완료
+
+- 운영 버전 `a25dcf33-4710-40b7-b55d-9b2c19db1cea`, 기능 소스 `c87906f17237417bbe8ca773bd371e45ad9c3dbb`, 공개 모듈 `fc4534498d97` 77개. 기능 커밋은 GitHub main에 push했다.
+- 공개 게임 모듈과 관리자 JS/CSS가 빌드와 일치하고, 익명/일반 계정의 관리자 접근은 계속 거부된다. 기존 검증 계정의 ID·닉네임·지갑/구매품·파괴/수리 기록 해시는 배포 전후 같다. DO 네임스페이스와 소유자/제외 계정 secret 및 카메라 원복 blob을 유지했다.
+- `completed.json`과 `verification.json`이 완료됐으며 `recovery.json`은 `complete`다. 완료 실행기를 다시 실행하지 않는다. 이미 열어 둔 게임은 새로고침하면 변경된 클라이언트 집기 경로를 사용한다.
