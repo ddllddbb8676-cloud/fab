@@ -1,6 +1,8 @@
 import {createGrowthDashboard} from './growth.js';
+import {createEventControls} from './events.js';
 const $=id=>document.getElementById(id);
 const growthDashboard=createGrowthDashboard(document);
+const eventControls=createEventControls(document);
 const integer=new Intl.NumberFormat('ko-KR',{maximumFractionDigits:0});
 const decimal=new Intl.NumberFormat('ko-KR',{maximumFractionDigits:1});
 const localDate=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit'});
@@ -211,8 +213,13 @@ async function refresh(){
   }finally{clearTimeout(timeout);inFlight=false;$('refresh').disabled=false;}
 }
 $('refresh').addEventListener('click',refresh);
+$('refresh').addEventListener('click',()=>eventControls.refresh());
 $('hourly-day').addEventListener('change',()=>{selectedDay=$('hourly-day').value;if(lastData)hourly(lastData);});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&Date.now()-lastUpdated>=60000)refresh();});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)eventControls.refresh();});
+setInterval(()=>{if(!document.hidden)eventControls.refresh();},15000);
+setInterval(()=>{if(!document.hidden)eventControls.paint();},1000);
 setInterval(()=>{if(!document.hidden)refresh();},60000);
 globalThis.addEventListener?.('resize',()=>{if(lastData&&!document.hidden)daily(lastData);});
 refresh();
+eventControls.refresh();

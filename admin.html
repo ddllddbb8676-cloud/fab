@@ -21,6 +21,15 @@
     </div>
     <section id="access-message" class="notice" hidden aria-live="polite"></section>
     <div id="report" hidden>
+      <section class="panel event-controls" aria-labelledby="event-heading">
+        <div class="section-heading"><h2 id="event-heading">이벤트 시작</h2><span id="event-status" class="muted" role="status">상태 확인 중</span></div>
+        <div class="event-buttons">
+          <article><button id="start-bay-event" type="button" disabled>베이 뿌시기 시작</button><p>랜덤 베이 · 1분 예고 → 60초 도전<br>인원·대기 제한 없이 · 안전팀 NPC 제외</p></article>
+          <article><button id="start-golden-event" type="button" disabled>황금 FOUP 찾기 시작</button><p>즉시 20개 · 제한시간 10분<br>정기 08·12·16·20시도 그대로 진행</p></article>
+        </div>
+        <p id="event-message" class="visit-status" role="status" aria-live="polite"></p>
+        <p id="event-next-golden" class="section-note"></p><p id="event-window-note" class="section-note"></p>
+      </section>
       <section aria-labelledby="live-heading">
         <div class="section-heading"><h2 id="live-heading">지금 팹에는</h2><span class="live-label">LIVE</span></div>
         <div class="stat-grid">

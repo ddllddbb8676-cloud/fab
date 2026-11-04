@@ -78,7 +78,7 @@ test('15 real connected accounts trigger a minute of preparation; NPCs and verif
   const f=make({count:14,eventExcludedIds:[id(15)]}),r=f.r;r.join(id(15));f.tick();assert.equal(r.snapshot().worldEvents.bay,null);
   r.join(id(16));r.players.get(id(1)).role='safety-orange';f.tick();const b=r.snapshot().worldEvents.bay;
   assert.equal(b.phase,'preparing');assert.equal(b.startsAt-b.announcedAt,60000);assert.equal(b.endsAt-b.startsAt,60000);assert.equal(b.total,20);
-  assert.equal(r.safety.people.filter(p=>p.eventBayId===b.bayId).length,3);assert.equal(r.safety.people.length,4);
+  assert.equal(r.safety.people.filter(p=>p.eventBayId!==undefined).length,0);assert.ok(r.safety.people.every(p=>p.avoidBayId===b.bayId));assert.equal(r.safety.people.length,4);
 });
 test('all 20 tools are restored, protected until GO, and the challenge is exactly sixty seconds',()=>{
   const f=make({count:15}),r=f.r;for(const m of bays[7].machines)r.destruction.trigger(m.id);

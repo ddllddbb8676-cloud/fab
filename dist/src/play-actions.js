@@ -1,8 +1,8 @@
-import { machines, ports, TOOL_WIDTH, TOOL_FRONT, PORT_Z, VEHICLE_Y, SEATED_FOUP_Y, isBlocked } from './layout.js?v=9bdc2d7c0a08';
-import { reservedPortIds } from './network-transport.js?v=9bdc2d7c0a08';
-import { floorSpot, supportHeight, createFoupStore, createFoupRenderer, FOUP_CLEAN_SECONDS } from './foup-play.js?v=9bdc2d7c0a08';
-import { createFoupDebris } from './foup-debris.js?v=9bdc2d7c0a08';
-import {stockerPorts,stockers,stockerById,stockerPoint} from './stocker-layout.js?v=9bdc2d7c0a08';
+import { machines, ports, TOOL_WIDTH, TOOL_FRONT, PORT_Z, VEHICLE_Y, SEATED_FOUP_Y, isBlocked } from './layout.js?v=2956557327b1';
+import { reservedPortIds } from './network-transport.js?v=2956557327b1';
+import { floorSpot, supportHeight, createFoupStore, createFoupRenderer, FOUP_CLEAN_SECONDS } from './foup-play.js?v=2956557327b1';
+import { createFoupDebris } from './foup-debris.js?v=2956557327b1';
+import {stockerPorts,stockers,stockerById,stockerPoint} from './stocker-layout.js?v=2956557327b1';
 
 const smooth = t => { const p = Math.max(0, Math.min(1, t)); return p * p * (3 - 2 * p); };
 export function boardingMachine(car) {

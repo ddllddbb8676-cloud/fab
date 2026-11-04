@@ -4,6 +4,7 @@ import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
 import {sessionId} from '../server/player-profiles.js';
 import {restoreWallet} from '../server/chip-wallet.js';
+import {createWorldEvents} from '../server/world-events.js';
 
 const bundle=await build({entryPoints:[fileURLToPath(new URL('../server/worker.js',import.meta.url))],bundle:true,write:false,format:'esm',platform:'node',plugins:[{name:'platform',setup(build){
   build.onResolve({filter:/^cloudflare:workers$/},()=>({path:'base',namespace:'test'}));
@@ -17,6 +18,10 @@ const request=(path,cookie='',method='GET')=>new Request(origin+path,{method,hea
 const visitRequest=(value,{cookie=token,method='POST',headers={},raw}={})=>new Request(origin+'/api/admin/visit',{
   method,headers:{Origin:origin,'Content-Type':'application/json',...(cookie?{Cookie:'fab-session-v1='+cookie}:{}),...headers},
   ...(method==='GET'?{}:{body:raw??JSON.stringify(value)}),...(raw instanceof ReadableStream?{duplex:'half'}:{})
+});
+const eventRequest=(value,{cookie=token,method='POST',headers={},raw}={})=>new Request(origin+'/api/admin/events',{
+  method,headers:{Origin:origin,'Content-Type':'application/json',...(cookie?{Cookie:'fab-session-v1='+cookie}:{}),...headers},
+  ...(method==='GET'?{}:{body:raw??JSON.stringify(value)})
 });
 const peer=()=>({packets:[],send(raw){this.packets.push(JSON.parse(raw));},close(){},serializeAttachment(){}});
 async function fixture(){
@@ -176,4 +181,31 @@ test('visit resolves human safety civilian name to a short-lived target without 
   assert.equal((await worker.fetch(visitRequest({name:'안전팀 임시이름'}),f.env)).status,404);
   assert.deepEqual(f.records,records);assert.deepEqual([...f.room.room.players],players);
   assert.equal(f.room.room.players.has(owner),false,'resolving a visit does not join the operator to the room');
+});
+
+test('manual event API is owner-only at the edge and room, requires same-origin POST and bounds request bodies',async()=>{
+  let wakes=0;const env={FAB_OWNER_VISITOR_ID:owner,FAB_ROOM:{getByName(){wakes++;throw Error('Unauthorized wake');}}};
+  const input={kind:'bay',requestId:'00000000-0000-0000-0000-000000000001'};
+  for(const cookie of ['',ordinaryToken,probeToken])for(const method of ['GET','POST'])assert.equal((await worker.fetch(eventRequest(input,{cookie,method}),env)).status,403);
+  assert.equal(wakes,0);
+  const f=await fixture();
+  for(const cookie of ['',ordinaryToken])assert.equal((await f.room.fetch(eventRequest(input,{cookie}))).status,403);
+  for(const badOrigin of ['', 'https://elsewhere.test'])assert.equal((await worker.fetch(eventRequest(input,{headers:{Origin:badOrigin}}),f.env)).status,403);
+  assert.equal((await worker.fetch(eventRequest(input,{headers:{'Content-Type':'text/plain'}}),f.env)).status,415);
+  for(const value of [{...input,amount:20000},{kind:'golden',requestId:'bad'},[],null])assert.equal((await worker.fetch(eventRequest(value),f.env)).status,400);
+  assert.equal((await worker.fetch(eventRequest(input,{raw:' '.repeat(513)}),f.env)).status,400);
+});
+
+test('owner start is persisted before success, duplicate requests replay once, and event GET does not change profiles or join',async()=>{
+  const f=await fixture(),before=structuredClone(f.records),at=Date.parse('2026-11-04T17:00:00+09:00');
+  f.room.room.worldEvents=createWorldEvents({now:()=>at,random:()=>.42,isDestroyed:()=>false,prepareBay(){},assignSafety(){},spawnGolden:()=>[],expireGolden(){},goldenRemaining:()=>0,reward(){},onChange:s=>f.room.profiles.saveEvents(s)});
+  const read=await worker.fetch(eventRequest(null,{method:'GET'}),f.env);assert.equal(read.status,200);assert.match(read.headers.get('Cache-Control'),/private, no-store/);assert.deepEqual(f.records,before);
+  const input={kind:'bay',requestId:'00000000-0000-0000-0000-000000000002'};
+  const results=await Promise.all([worker.fetch(eventRequest(input),f.env),worker.fetch(eventRequest(input),f.env)]);
+  for(const response of results){assert.equal(response.status,200);assert.match(response.headers.get('Cache-Control'),/private, no-store/);}
+  const data=await Promise.all(results.map(r=>r.json()));assert.equal(data.filter(r=>r.replayed).length,1);
+  assert.equal(data[0].event.id,data[1].event.id);assert.equal(f.records.get('world:events:v1').bay.id,data[0].event.id);
+  assert.equal(f.records.get('world:events:v1').manualRequests.length,1);
+  for(const key of [...before.keys()].filter(k=>k.startsWith('profile:')))assert.deepEqual(f.records.get(key),before.get(key));
+  assert.equal(f.room.room.players.size,0);
 });

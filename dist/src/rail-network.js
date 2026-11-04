@@ -1,4 +1,4 @@
-import { ports, BAY_CENTERS, PORT_Z, ROW_OFFSET } from './layout.js?v=9bdc2d7c0a08';
+import { ports, BAY_CENTERS, PORT_Z, ROW_OFFSET } from './layout.js?v=2956557327b1';
 
 // Alternating one-way process runs and four one-way inter-bay trunks.
 // Port coordinates are unchanged. Every port is a real graph vertex.

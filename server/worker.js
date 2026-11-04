@@ -16,6 +16,7 @@ import {items as cosmeticItems} from '../src/cosmetics-catalog.js';
 import {isSafety} from '../src/safety-team.js';
 import {createGrowthRelay} from './growth-relay.js';
 import {telemetryAccess} from './telemetry-request.js';
+import {eventAccess,eventResponse,readEventRequest} from './admin-events.js';
 export {FabAnalytics} from './analytics-worker.js';
 
 const PRIVATE_HEADERS = {'Cache-Control':'private, no-store','Vary':'Cookie'};
@@ -51,6 +52,10 @@ export default {
   async fetch(request,env) {
     const redirect=canonicalRedirect(request);if(redirect)return redirect;
     const url=new URL(request.url);
+    if(url.pathname==='/api/admin/events'){
+      const denied=await eventAccess(request,env);if(denied)return denied;
+      return env.FAB_ROOM.getByName('FAB-A-v20').fetch(request);
+    }
     if(url.pathname==='/api/telemetry'){
       const denied=telemetryAccess(request,Boolean(sessionToken(request)));if(denied)return httpResult(denied);
       if(!env.FAB_ANALYTICS)return httpResult(503);
@@ -194,6 +199,15 @@ export class FabRoom extends DurableObject {
   sendWallets(){for(const [ws,s] of this.sockets){const player=this.room.players.get(s.id);if(s.ready!==false&&player&&s.walletRevision!==player.wallet.revision){const wallet=this.room.wallet(s.id);this.send(ws,{type:'wallet',wallet});s.walletRevision=wallet.revision;}}}
   broadcastRoster(){const data=JSON.stringify({type:'roster',roster:this.room.roster(),count:this.room.players.size});for(const [ws,s] of this.sockets)if(s.ready!==false)this.send(ws,data);}
   async fetch(request) {
+    if(new URL(request.url).pathname==='/api/admin/events'){
+      const denied=await eventAccess(request,this.adminEnv);if(denied)return denied;
+      if(request.method==='GET')return eventResponse(200,{worldEvents:this.room.worldEvents.controlState()});
+      const input=await readEventRequest(request);if(!input)return eventResponse(400,{message:'이벤트 요청을 확인해 주세요.'});
+      const result=this.room.worldEvents.startManual(input.kind,input.requestId);
+      await this.checkpoint();
+      if(result.ok&&this.sockets.size)this.start();
+      return eventResponse(result.ok?200:result.status,{...result,worldEvents:this.room.worldEvents.controlState()});
+    }
     if(new URL(request.url).pathname==='/api/admin/visit'){
       const denied=await visitAccess(request,this.adminEnv);if(denied)return denied;
       const input=await readVisitName(request);
