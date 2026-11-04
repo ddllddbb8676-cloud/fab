@@ -25,6 +25,8 @@ import { createEquipmentLabels } from './equipment-labels.js';
 import { createEquipmentDirectory } from './equipment-directory.js';
 import { createBayLighting, applyBayWhiteLightMask } from './bay-lighting.js';
 import { createAmbience } from './ambience.js';
+import {stockerBounds} from './stocker-layout.js';
+import {createStockerView} from './stocker-view.js';
 import { setRuntimeObstacles } from './runtime-obstacles.js';
 import { createEquipmentVisibility } from './equipment-visibility.js';
 import { createEquipmentDestruction } from './equipment-destruction.js';
@@ -432,6 +434,8 @@ const airShower = createAirShower(THREE); scene.add(airShower.root);
 const restAreaView=createRestAreaView(THREE,scene);
 const bayWhiteMask = applyBayWhiteLightMask(THREE, scene, bays, { yellowBayIds: bayLighting.bayIds });
 colliders.push(...AIR_SHOWER.bounds.map(b => ({ ...b, maxY: 3.15 })));
+colliders.push(...stockerBounds);
+const stockerView=createStockerView(THREE,scene);
 colliders.push({ minX: -2.02, maxX: 2.02, minZ: 82.2, maxZ: 88.92, minY: 3.07, maxY: 3.23 },
   { minX: -2.58, maxX: 2.58, minZ: 82.02, maxZ: 82.38, minY: 2.65, maxY: 3.23 });
 const entry = createEntrySequence({ reducedMotion });
@@ -631,6 +635,8 @@ function localVolume(position, range = 22) {
   return d >= range ? 0 : Math.min(1, (1 - d / range) ** 2 * 1.3);
 }
 function motionCue(kind, position) {
+  if(kind==='stocker-prepare'){audio.prepareStocker();return;}
+  if(kind==='stocker-out'){audio.playStocker(()=>localVolume(position,18));return;}
   const volume = localVolume(position);
   if (volume > .025) { if (kind === 'press') audio.playEmoPress(volume); else audio.playCue(kind, volume); }
 }
@@ -642,7 +648,7 @@ destruction = createEquipmentDestruction({ THREE, scene, machines: layoutMachine
   onBurst(id, position) { const volume = localVolume(position, 34); if (volume > .02) audio.playExplosion(volume); if (!reducedMotion && volume > .25) burstShake = .45 * volume; },
   onChange() { updateEmoCard(); }
 });
-playActions = createPlayActions({ THREE, scene, materials: M, fleet, explorer, avatar, initialPortIds,
+playActions = createPlayActions({ THREE, scene, materials: M, fleet, explorer, avatar, initialPortIds,seedStockers:!connectionConfig,
   hideOriginal(portId) { removedOriginalFoups.add(portId); for (const hide of originalFoupParts.get(portId) ?? []) hide(); },
   showOriginal(portId) { removedOriginalFoups.delete(portId);for(const show of originalFoupParts.get(portId)??[])show(true); },
   isDestroyed: id => destruction.isDestroyed(id), toast, onCue: motionCue, network:onlineLink, isRestricted: () => safetyState.penalty > 0, reducedMotion });
@@ -964,7 +970,7 @@ function animate(now) {
     for(const g of safetyPatrols.people)for(const actor of residents.people)if(canCatch(g,actor,elapsed))residents.beginSafetyLap(actor);
     safetyPeople.synchronize(safetyPatrols.people);safetyPeople.update(dt,camera,mode==='overview');
   }
-  playActions.render(dt,camera);appearance.update(avatar.root.visible); visitorBadge.update(avatar, explorer.state.posture,{headwear:appearance.headwear});
+  playActions.render(dt,camera);stockerView.update(playActions.store);appearance.update(avatar.root.visible); visitorBadge.update(avatar, explorer.state.posture,{headwear:appearance.headwear});
   visitorEmote.update(avatar,explorer.state.posture,dt,!entry.active,{camera,anchor:visitorBadge.sprite.position,title:Boolean(visitorBadge.titleId)});
   if(now>=nextSafetyCheck){
     const person={...explorer.state.position,id:multiplayer?.id??'self',...safetyState,hidden:entry.active||nicknameUI.isOpen||mode==='overview',phase:explorer.state.repairInteraction?.phase==='repair'?'repair':playActions.state.phase};

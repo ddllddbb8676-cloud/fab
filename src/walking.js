@@ -1,5 +1,6 @@
 import { machines, bays, BAY_CENTERS, TOOL_WIDTH, isBlocked } from './layout.js';
 import { canTraverseRuntimeObstacles, getRuntimeObstacles } from './runtime-obstacles.js';
+import { stockerPorts, STOCKER_WALK_OUTER_X } from './stocker-layout.js';
 export const WALK_RADIUS = .295;
 export function canWalkSegment(a, b) {
   if (!canTraverseRuntimeObstacles(a, b, WALK_RADIUS)) return false;
@@ -11,7 +12,7 @@ export function canWalkSegment(a, b) {
   return true;
 }
 // A small corridor graph retains the 65 cm side passages that a coarse grid misses.
-const xs = [-57.4, 0, 57.4];
+const xs = [-STOCKER_WALK_OUTER_X, 0, STOCKER_WALK_OUTER_X];
 for (const bank of [0, 1]) {
   const row = machines.filter(m => m.bank === bank && m.bayId === bank * BAY_CENTERS.length && m.sign === 1);
   for (let i = 0; i < row.length - 1; i++) xs.push((row[i].x + row[i + 1].x) / 2);
@@ -31,6 +32,14 @@ for (let iz = 0; iz < zs.length; iz++) for (let ix = 0; ix < xs.length; ix++) {
   }
 }
 const distance = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
+// Sparse apron/entrance corners, rather than multiplying the navigation grid.
+for(const point of [...[-14,-3,0,3,14].map(x=>({x,z:81.2})),...stockerPorts.map(p=>p.approach)]){
+  const node={id:walkNodes.length,x:point.x,z:point.z,links:[]};
+  const near=walkNodes.map(n=>({n,cost:distance(n,node)})).sort((a,b)=>a.cost-b.cost).slice(0,32)
+    .filter(({n})=>canWalkSegment(n,node)).slice(0,8);
+  for(const {n,cost}of near){node.links.push({id:n.id,cost});n.links.push({id:node.id,cost});}
+  walkNodes.push(node);
+}
 const pointKey = point => `${point.x},${point.z}`;
 function connections(point,canTraverse,cache) {
   const key = pointKey(point);

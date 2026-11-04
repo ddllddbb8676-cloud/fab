@@ -1,12 +1,13 @@
 # The Entertainer · FAB Piano
 
-Scott Joplin의 원곡을 사용해 FAB용으로 새로 합성한 디지털 피아노 음원이다. 실제 피아노 연주자의 녹음이나 외부 악기 샘플은 사용하지 않았다. 현재 게임에는 연결하지 않았으며 재생/선로딩/자동 재생 요청도 추가하지 않았다.
+Scott Joplin의 원곡을 사용해 FAB용으로 새로 합성한 디지털 피아노 음원이다. 실제 피아노 연주자의 녹음이나 외부 악기 샘플은 사용하지 않았다. 전체 곡은 게임에서 재생하지 않으며, 짧은 하이라이트만 스토커 OUT 효과음에 연결한다.
 
 - 전체 길이: 3분 4.282초 / 100 BPM / 스테레오 44.1kHz.
 - `fab-entertainer-piano.mp3`: 미리듣기/일반용, 128kbps, 약 2.95MB.
 - `fab-entertainer-piano-game.mp3`: 게임용 MP3, 96kbps, 약 2.21MB.
 - `fab-entertainer-piano-game.ogg`: 게임용 Ogg Vorbis, 약 1.69MB.
 - `fab-entertainer-preview.mp3`: 30초 미리듣기.
+- `fab-entertainer-stocker.mp3`: OUT용 10.2초 / 모노 96kbps / 123,401바이트. 원본 4.59초에서 시작해 익숙한 픽업 음형부터 나오며 마지막 0.5초는 페이드아웃한다. 입장할 때 다운로드하지 않고 스토커 조작/근처 출고 때만 요청한다. 효과음 끄기·화면 숨김을 따르고 한 번에 한 곡만 재생한다.
 - 무압축 24비트 WAV 원본은 Git에 넣지 않고 `outputs/entertainer-audio-20261104/audio/fab-entertainer-piano-master.wav`에 보관한다. 약 48.8MB다.
 
 ## 원곡과 출처

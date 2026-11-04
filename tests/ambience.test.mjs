@@ -33,6 +33,29 @@ function fakeContextClass() {
   };
 }
 
+test('stocker music loads on demand, shares one voice, fades with distance, and follows mute/visibility',async()=>{
+  const Context=fakeContextClass();Context.prototype.decodeAudioData=async()=>({duration:10.2});let fetches=0,volume=1;
+  const audio=createAmbience({AudioContext:Context,fetch:async()=>{fetches++;return {ok:true,arrayBuffer:async()=>new ArrayBuffer(1)};}});
+  assert.equal(await audio.playStocker(),false);assert.equal(fetches,0);await audio.activate();assert.equal(fetches,0);
+  await Promise.all([audio.prepareStocker(),audio.prepareStocker()]);assert.equal(fetches,1);
+  assert.equal(await audio.playStocker(()=>volume),true);assert.equal(await audio.playStocker(),false);assert.equal(audio.state.cueCounts['stocker-out'],1);
+  volume=0;audio.update();assert.equal(audio.state.activeEffects,0);
+  await audio.toggleEffects();assert.equal(await audio.playStocker(),false);await audio.toggleEffects();
+  audio.update({hidden:true});assert.equal(await audio.playStocker(),false);await audio.dispose();
+});
+
+test('muting while stocker music downloads cancels that cue without breaking other sounds',async()=>{
+  const Context=fakeContextClass();Context.prototype.decodeAudioData=async()=>({duration:10.2});let finish;
+  const audio=createAmbience({AudioContext:Context,fetch:()=>new Promise(resolve=>{finish=resolve;})});await audio.activate();
+  const playing=audio.playStocker();await audio.toggleEffects();finish({ok:true,arrayBuffer:async()=>new ArrayBuffer(1)});
+  assert.equal(await playing,false);assert.equal(audio.state.activeEffects,0);await audio.toggleEffects();assert.equal(audio.playEmoPress(),true);await audio.dispose();
+});
+
+test('unavailable stocker audio never rejects or blocks gameplay cues',async()=>{
+  const audio=createAmbience({AudioContext:fakeContextClass(),fetch:()=>{throw Error('offline');}});await audio.activate();
+  assert.equal(await audio.prepareStocker(),null);assert.equal(await audio.playStocker(),false);assert.equal(audio.playEmoPress(),true);await audio.dispose();
+});
+
 test('independent sound switches persist through gestures, with HVAC ducking and recovery',async()=>{
   const Context=fakeContextClass(),audio=createAmbience({AudioContext:Context});
   await audio.activate();const ctx=Context.instances[0],bus=ctx.nodes[2];

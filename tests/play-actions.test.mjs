@@ -8,6 +8,7 @@ import { createFleet, reservedPortIds } from '../src/network-transport.js';
 import { machines, ports, isBlocked, SEATED_FOUP_Y } from '../src/layout.js';
 import { createFoupStore } from '../src/foup-play.js';
 import { VISITOR_NAMES, createVisitorName } from '../src/visitor-name.js';
+import {stockers} from '../src/stocker-layout.js';
 
 function harness({ destroyed = false,networkFactory=null } = {}) {
   const previousDocument = globalThis.document, previousWindow = globalThis.window;
@@ -33,6 +34,31 @@ test('all generated visitor names include an adjective and stay within seven cha
   assert.ok(VISITOR_NAMES.length > 200);
   assert.ok(VISITOR_NAMES.every(name => [...name].length <= 7 && name.includes(' ')));
   for (let i = 0; i <= 1000; i++) assert.ok(VISITOR_NAMES.includes(createVisitorName(() => i / 1000)));
+});
+
+test('empty stocker ports can be tapped to walk, stow, retrieve and pick up the same FOUP',()=>{
+  const h=harness(),s=stockers[0],input=s.ports[0],output=s.ports[1];
+  try{
+    const id=`port:${h.initial.id}`;h.play.store.pickup(id);
+    h.explorer.state.position.set(input.approach.x,0,input.approach.z);
+    const origin=new THREE.Vector3(input.approach.x,2,input.approach.z),target=new THREE.Vector3(input.x,1.46,input.z);
+    assert.equal(h.play.tap(new THREE.Ray(origin,target.sub(origin).normalize())),true);
+    h.step(3.5);assert.equal(h.play.store.records.get(id).mode,'stored');assert.equal(h.play.store.carried,null);
+    assert.equal(h.play.requestStocker(output),true);h.step(5);assert.equal(h.play.store.records.get(id).mode,'stocker-out');
+    assert.equal(h.play.requestStocker(output),true);h.step(.5);assert.equal(h.play.store.carried.id,id);
+    assert.equal(h.play.state.phase,'idle');
+  }finally{h.dispose();}
+});
+
+test('diagonal OUT label taps do not select the empty adjacent IN port',()=>{
+  const h=harness(),s=stockers[1],output=s.ports[1];
+  try{
+    const id=`port:${h.initial.id}`;h.play.store.pickup(id);h.play.store.stockerPut(s.id);for(let t=0;t<3.1;t+=.05)h.play.store.step(.05);
+    h.explorer.state.position.set(output.approach.x,0,output.approach.z);
+    const origin=new THREE.Vector3(-.4,2.8,80.1),target=new THREE.Vector3(4.555,2.3,output.z);
+    assert.equal(h.play.tap(new THREE.Ray(origin,target.sub(origin).normalize())),true);h.step(3.5);
+    assert.equal(h.play.store.records.get(id).mode,'stocker-out');assert.ok(!h.toasts.some(t=>t==='FOUP을 들고 IN을 누르면 보관해요'));
+  }finally{h.dispose();}
 });
 
 test('a real canvas pointer tap retains the FOUP approach path until pickup',()=>{

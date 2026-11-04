@@ -3,6 +3,7 @@ import {nicknameKey} from '../src/visitor-name.js';
 import {restoreWallet,grantChips,wardrobeCommand,walletView} from './chip-wallet.js';
 import {npcOutfit} from '../src/npc-outfits.js';
 import { machines, ports, isBlocked } from '../src/layout.js';
+import {stockerById} from '../src/stocker-layout.js';
 import { createFleet, reservedPortIds } from '../src/network-transport.js';
 import { createFoupStore, FOUP_CLEAN_SECONDS, FOUP_CLEAN_REWARD } from '../src/foup-play.js';
 import { createResidentSimulation } from '../src/residents.js';
@@ -61,7 +62,7 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
     reset(id){const changed=broken.delete(id);if(changed)onEquipmentChange(equipmentState());return changed;}
   };
   let foupReady=false;
-  const store=createFoupStore({ports,initialPortIds:initialSharedPorts,isDestroyed:destruction.isDestroyed,onImpact:r=>emit('bounce',r),onShatter:r=>emit('shatter',r),onChange:()=>{if(foupReady)onFoupChange(store.checkpoint());}});
+  const store=createFoupStore({ports,initialPortIds:initialSharedPorts,seedStockers:true,isDestroyed:destruction.isDestroyed,onImpact:r=>emit('bounce',r),onShatter:r=>emit('shatter',r),onStockerOut:p=>emit('stocker-out',p),onChange:()=>{if(foupReady)onFoupChange(store.checkpoint());}});
   function restoreFoups(saved){
     if(time!==0||players.size)throw new Error('FOUP restore is only allowed before the room starts');
     store.restore(saved);
@@ -271,6 +272,14 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
       if(kind==='finish'&&l.kind==='repair'&&l.started!==undefined&&time-l.started>=4.7){if(!destruction.reset(m.id))return fail();p.repairedCount++;credit(p,3,'repair');p.penalty=Math.max(0,p.penalty-1);if(!p.penalty)p.safeUntil=time+12;emit('complete',p);release(p);changed(p);return {ok:true};}
       return fail('동작이 끝난 뒤 다시 눌러주세요');
     }
+    if(kind==='stocker'){
+      const s=stockerById.get(data.id),port=s?.ports.find(port=>port.kind===data.port);
+      if(!port||p.hidden||p.y>.15||p.posture!=='stand'||p.vehicleId!=null||!['idle','approach'].includes(p.phase)||distance(p,port.approach)>1.2)return fail('스토커 로드포트 앞으로 가까이 와주세요');
+      if(data.recordId!==undefined&&data.recordId!==null&&typeof data.recordId!=='string')return fail('FOUP을 다시 눌러주세요');
+      const result=data.port==='IN'?store.stockerPut(s.id,id,data.recordId):store.stockerGet(s.id,id,data.recordId);
+      if(result.ok){p.carrying=Boolean(store.getCarried(id));emit(result.phase==='pickup'?'pickup':'place',p);}
+      return result;
+    }
     if(kind==='pickup') {
       if(p.vehicleId!==null&&p.vehicleId!==undefined)return fail();
       let r=store.records.get(data.id);
@@ -356,6 +365,7 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
       fleet:fleet.vehicles.map(v=>{const s=v.state;return [v.id,round(s.car.x),round(s.car.z),round(s.car.yaw),round(s.foup.x),round(s.foup.y),round(s.foup.z),round(s.foup.yaw),round(s.gripperY),s.phase,s.parked,round(s.lowered),s.target.id,s.destination.id,Boolean(v.cargoDetached),Boolean(v.passenger),Boolean(v.boardingHold),v.residentId??v.playerId??null,s.waiting,s.delivered];}),
       events:full?[]:events.splice(0),totals:residents.state.actions};
   }
+  store.initializeStockers();
   foupReady=true;
   return {titleState,nicknameState,applyNickname,wallet:id=>players.has(id)?walletView(players.get(id)):null,join,remove,pose,command,step,snapshot,roster,ranking,equipmentState,restoreEquipment,restoreFoups,players,fleet,store,residents,safety,destruction,profile:id=>players.has(id)?profile(players.get(id)):null,get time(){return time;}};
 }

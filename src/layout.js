@@ -1,6 +1,7 @@
 import { AIR_SHOWER } from './air-shower.js';
 import { bayFamilyIndices } from './equipment-catalog.js';
 import { isRuntimeBlocked } from './runtime-obstacles.js';
+import { stockerBounds, STOCKER_WALK_OUTER_X } from './stocker-layout.js';
 // Metres. A viewing model informed by bay-layout research, not a construction plan.
 export const HALL = { width: 120, length: 180, height: 5 };
 export const AISLE = 5.2, SERVICE_AISLE = 1.4, SIDE_GAP = .65, TOOL_SCALE_X = 103 / 120;
@@ -91,6 +92,7 @@ for (const machine of machines) {
 }
 export function isBlocked(x, z, margin = .28) {
   if (Math.abs(x) > 58.8 || Math.abs(z) > 88.5) return true;
+  if((Math.abs(x)>56.5-margin||Math.abs(z)>82.2-margin)&&stockerBounds.some(b=>x>b.minX-margin&&x<b.maxX+margin&&z>b.minZ-margin&&z<b.maxZ+margin))return true;
   if (isRuntimeBlocked(x, z, margin)) return true;
   if (AIR_SHOWER.bounds.some(c => x > c.minX - margin && x < c.maxX + margin && z > c.minZ - margin && z < c.maxZ + margin)) return true;
   if (columns.some(c => Math.abs(x - c.x) < .27 + margin && Math.abs(z - c.z) < .27 + margin)) return true;
@@ -107,8 +109,8 @@ export function isBlocked(x, z, margin = .28) {
   return false;
 }
 export const TOUR_POINTS = [
-  [-4, BAY_CENTERS[7]], [-49, BAY_CENTERS[7]], [-57.4, BAY_CENTERS[7]],
-  [-57.4, BAY_CENTERS[5]], [-48, BAY_CENTERS[5]], [0, BAY_CENTERS[5]],
-  [0, BAY_CENTERS[3]], [49, BAY_CENTERS[3]], [57.4, BAY_CENTERS[3]],
-  [57.4, BAY_CENTERS[7]], [4, BAY_CENTERS[7]], [-4, BAY_CENTERS[7]]
+  [-4, BAY_CENTERS[7]], [-49, BAY_CENTERS[7]], [-STOCKER_WALK_OUTER_X, BAY_CENTERS[7]],
+  [-STOCKER_WALK_OUTER_X, BAY_CENTERS[5]], [-48, BAY_CENTERS[5]], [0, BAY_CENTERS[5]],
+  [0, BAY_CENTERS[3]], [49, BAY_CENTERS[3]], [STOCKER_WALK_OUTER_X, BAY_CENTERS[3]],
+  [STOCKER_WALK_OUTER_X, BAY_CENTERS[7]], [4, BAY_CENTERS[7]], [-4, BAY_CENTERS[7]]
 ];

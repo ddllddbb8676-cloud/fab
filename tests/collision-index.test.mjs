@@ -2,12 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { machines, columns, isBlocked } from '../src/layout.js';
 import { AIR_SHOWER } from '../src/air-shower.js';
+import {stockerBounds} from '../src/stocker-layout.js';
 import { isRuntimeBlocked, setRuntimeObstacles } from '../src/runtime-obstacles.js';
 
 // Independent reference: the pre-optimization full cabinet scan. This guards
 // against missing collisions at bucket seams, rotated hardware, or tiny gaps.
 function fullScan(x,z,margin=.28) {
   if (Math.abs(x)>58.8 || Math.abs(z)>88.5) return true;
+  if(stockerBounds.some(b=>x>b.minX-margin&&x<b.maxX+margin&&z>b.minZ-margin&&z<b.maxZ+margin))return true;
   if (isRuntimeBlocked(x,z,margin)) return true;
   if (AIR_SHOWER.bounds.some(c=>x>c.minX-margin&&x<c.maxX+margin&&z>c.minZ-margin&&z<c.maxZ+margin)) return true;
   if (columns.some(c=>Math.abs(x-c.x)<.27+margin&&Math.abs(z-c.z)<.27+margin)) return true;

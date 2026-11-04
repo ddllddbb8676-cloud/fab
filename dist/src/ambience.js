@@ -176,6 +176,7 @@ export function createAmbience(options = {}) {
   let error = null, starting = false, generation = 0, appliedJet = NaN, ready = false;
   let explosionBuffer = null, pressBuffer = null, totalEffects = 0, totalPresses = 0, totalExplosions = 0, effectError = null;
   const effects = new Set();
+  let stockerBuffer=null,stockerLoading=null,stockerRequest=0;
   const supported = typeof Context === 'function';
 
   function finishEffect(effect, stop = false) {
@@ -198,6 +199,7 @@ export function createAmbience(options = {}) {
   }
 
   function stopEffects(immediate = false) {
+    stockerRequest++;
     for (const effect of [...effects]) {
       if (immediate || context?.state !== 'running') { finishEffect(effect, true); continue; }
       if (effect.stopping) continue;
@@ -237,6 +239,7 @@ export function createAmbience(options = {}) {
 
   function releaseNodes() {
     stopEffects(true); explosionBuffer = pressBuffer = null;
+    stockerBuffer=null;stockerLoading=null;
     cueBuffers.clear();
     for (const source of sources) { try { source.stop(); } catch { /* already stopped */ } }
     for (const node of nodes) { try { node.disconnect(); } catch { /* disconnected */ } }
@@ -342,8 +345,38 @@ export function createAmbience(options = {}) {
     const changed = Math.abs(nextJet - appliedJet) > .005 || nextHidden !== hidden;
     jet = nextJet; hidden = nextHidden;
     if (hidden) stopEffects();
+    if(context?.state==='running')for(const effect of effects)if(effect.localVolume&&!effect.stopping){const volume=clamp01(effect.localVolume());if(volume<.015)finishEffect(effect,true);else effect.gain.gain.setTargetAtTime(.42*volume,context.currentTime,.15);}
     if (!disposed && changed) applyLevels();
     return snapshot();
+  }
+
+  function prepareStocker(){
+    if(stockerBuffer)return Promise.resolve(stockerBuffer);
+    if(stockerLoading)return stockerLoading;
+    if(disposed||!effectsDesired||hidden||!ready||!context)return Promise.resolve(null);
+    const audioContext=context,controller=new AbortController(),timer=setTimeout(()=>controller.abort(),4000);
+    const pending=Promise.resolve().then(async()=>{
+      try{
+        const response=await (options.fetch??globalThis.fetch)('/audio/entertainer/fab-entertainer-stocker.mp3',{signal:controller.signal});
+        if(!response.ok)throw Error('Stocker audio unavailable');
+        const buffer=await audioContext.decodeAudioData(await response.arrayBuffer());
+        if(!disposed&&context===audioContext)stockerBuffer=buffer;
+        return context===audioContext?buffer:null;
+      }catch{return null;}finally{clearTimeout(timer);if(stockerLoading===pending)stockerLoading=null;}
+    });stockerLoading=pending;return pending;
+  }
+  async function playStocker(localVolume=()=>1){
+    if(disposed||!effectsDesired||!desired||hidden||!ready||context?.state!=='running'||localVolume()<=.025||[...effects].some(e=>e.stocker))return false;
+    const request=++stockerRequest,started=Date.now(),buffer=await prepareStocker();
+    const elapsed=(Date.now()-started)/1000;
+    if(!buffer||request!==stockerRequest||elapsed>2||disposed||hidden||!effectsDesired||!desired||context?.state!=='running'||localVolume()<=.025||effects.size>=MAX_EXPLOSION_VOICES)return false;
+    const effect={source:null,gain:null,motion:true,reward:false,stocker:true,localVolume,endsAt:context.currentTime+buffer.duration-elapsed,finished:false,stopping:false};
+    try{
+      effect.source=context.createBufferSource();effect.source.buffer=buffer;
+      effect.gain=context.createGain();effect.gain.gain.value=.42*clamp01(localVolume());
+      effect.source.connect(effect.gain);effect.gain.connect(effectsBus);effect.source.onended=()=>finishEffect(effect);
+      effects.add(effect);updateDucking();effect.source.start(context.currentTime,elapsed);totalEffects++;totalCues++;cueCounts['stocker-out']=(cueCounts['stocker-out']??0)+1;return true;
+    }catch{finishEffect(effect,true);return false;}
   }
 
   function playEffect(kind, volume = 1) {
@@ -392,6 +425,6 @@ export function createAmbience(options = {}) {
 
   async function toggleAmbience() { ambienceDesired = !ambienceDesired; updateDucking(); if (ambienceDesired) await activate(); return snapshot(); }
   async function toggleEffects() { effectsDesired = !effectsDesired; if (!effectsDesired) stopEffects(); else await activate(); return snapshot(); }
-  return { activate, toggle, toggleAmbience, toggleEffects, update, playCue: (kind, volume) => MOTION_CUES[kind] ? playEffect(kind, volume) : false,
+  return { activate, toggle, toggleAmbience, toggleEffects, update, prepareStocker,playStocker, playCue: (kind, volume) => MOTION_CUES[kind] ? playEffect(kind, volume) : false,
     playChipReward: volume => playEffect('chip', volume), playExplosion: volume => playEffect('explosion', volume), playEmoPress: volume => playEffect('press', volume), dispose, get state() { return snapshot(); } };
 }
