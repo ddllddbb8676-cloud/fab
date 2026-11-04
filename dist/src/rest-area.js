@@ -1,4 +1,4 @@
-import {bays} from './layout.js?v=de3c32eddc76';
+import {bays} from './layout.js?v=c60e98d5aa15';
 // The short central aisle just outside the air-shower doors, in metres.
 export const REST_AREA=Object.freeze({minX:-2.2,maxX:2.2,minZ:73.5,maxZ:81.5});
 export const REST_AREAS=Object.freeze([

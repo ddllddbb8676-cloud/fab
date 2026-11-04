@@ -1,7 +1,7 @@
-import { machines, ports, TOOL_WIDTH, TOOL_FRONT, PORT_Z, VEHICLE_Y, SEATED_FOUP_Y, isBlocked } from './layout.js?v=de3c32eddc76';
-import { reservedPortIds } from './network-transport.js?v=de3c32eddc76';
-import { floorSpot, supportHeight, createFoupStore, createFoupRenderer, FOUP_CLEAN_SECONDS } from './foup-play.js?v=de3c32eddc76';
-import { createFoupDebris } from './foup-debris.js?v=de3c32eddc76';
+import { machines, ports, TOOL_WIDTH, TOOL_FRONT, PORT_Z, VEHICLE_Y, SEATED_FOUP_Y, isBlocked } from './layout.js?v=c60e98d5aa15';
+import { reservedPortIds } from './network-transport.js?v=c60e98d5aa15';
+import { floorSpot, supportHeight, createFoupStore, createFoupRenderer, FOUP_CLEAN_SECONDS } from './foup-play.js?v=c60e98d5aa15';
+import { createFoupDebris } from './foup-debris.js?v=c60e98d5aa15';
 
 const smooth = t => { const p = Math.max(0, Math.min(1, t)); return p * p * (3 - 2 * p); };
 export function boardingMachine(car) {

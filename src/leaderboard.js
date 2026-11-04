@@ -14,17 +14,33 @@ export function rankScores(rows,limit=5){
   return [...unique.values()].sort((a,b)=>b.brokenCount-a.brokenCount||(a.id<b.id?-1:a.id>b.id?1:0)).slice(0,limit);
 }
 
+const views=new WeakMap();
 export function createLeaderboard(element){
+  // Rebinding the same screen must not reset its choice or add a second toggle.
+  if(views.has(element))return views.get(element);
+  const document=element.ownerDocument||globalThis.document;
   const list=element.querySelector('ol'),empty=element.querySelector('.leaderboard-empty');
   const toggle=element.querySelector('button.leaderboard-heading');
-  toggle?.addEventListener('click',()=>{
-    const collapsed=toggle.getAttribute('aria-expanded')==='true';
-    toggle.setAttribute('aria-expanded',String(!collapsed));toggle.setAttribute('aria-label',`파괴 TOP 5 ${collapsed?'펼치기':'접기'}`);
-    element.classList.toggle('leaderboard-collapsed',collapsed);
+  let collapsed=false,hasRows=false,pointer=null,dragged=false;
+  function applyFold(){
+    const expanded=String(!collapsed),label=`파괴 TOP 5 ${collapsed?'펼치기':'접기'}`,emptyHidden=collapsed||hasRows;
+    if(toggle&&toggle.getAttribute('aria-expanded')!==expanded)toggle.setAttribute('aria-expanded',expanded);
+    if(toggle&&toggle.getAttribute('aria-label')!==label)toggle.setAttribute('aria-label',label);
+    if(element.classList.contains('leaderboard-collapsed')!==collapsed)element.classList.toggle('leaderboard-collapsed',collapsed);
+    if(list.hidden!==collapsed)list.hidden=collapsed;if(empty.hidden!==emptyHidden)empty.hidden=emptyHidden;
+  }
+  function moved(event){if(pointer&&event.pointerId===pointer.id&&Math.hypot(event.clientX-pointer.x,event.clientY-pointer.y)>8)dragged=true;}
+  toggle?.addEventListener('pointerdown',event=>{if(event.button!==undefined&&event.button!==0)return;pointer={id:event.pointerId,x:event.clientX,y:event.clientY};dragged=false;},{passive:true});
+  document.addEventListener('pointermove',moved,{passive:true});
+  document.addEventListener('pointerup',event=>{if(pointer?.id===event.pointerId){moved(event);pointer=null;}},{passive:true});
+  document.addEventListener('pointercancel',event=>{if(pointer?.id===event.pointerId){dragged=true;pointer=null;}},{passive:true});
+  toggle?.addEventListener('click',event=>{
+    if(dragged&&event.detail!==0){event.preventDefault();event.stopImmediatePropagation();return;}
+    collapsed=!collapsed;applyFold();
   });
   let roster=[],people=[],selfId=null,last='',cumulative=null;
   function render(){
-    const rows=cumulative??rankVisitors(people,roster),key=JSON.stringify([selfId,rows]);if(key===last)return;last=key;
+    const rows=cumulative??rankVisitors(people,roster),key=JSON.stringify([selfId,rows]);if(key===last)return;last=key;hasRows=rows.length>0;applyFold();
     const fragment=document.createDocumentFragment();
     rows.forEach((row,i)=>{
       const li=document.createElement('li');li.classList.toggle('is-self',row.id===selfId);
@@ -32,7 +48,8 @@ export function createLeaderboard(element){
       rank.className='leaderboard-rank';rank.textContent=String(i+1);name.className='leaderboard-name';name.textContent=row.name;
       score.className='leaderboard-score';score.textContent=String(row.brokenCount);li.setAttribute('aria-label',`${i+1}위 ${row.name}, 부순 장비 ${row.brokenCount}대`);
       li.append(rank,name,score);fragment.appendChild(li);
-    });list.replaceChildren(fragment);empty.hidden=rows.length>0;
+    });list.replaceChildren(fragment);
   }
-  return {setRoster(rows){roster=rows;render();},setPeople(rows){people=rows;render();},setRanking(rows){if(Array.isArray(rows)){cumulative=rankScores(rows);render();}},setSelf(id){selfId=id;render();},setOnline(online){element.hidden=!online;}};
+  const view={setRoster(rows){roster=rows;render();},setPeople(rows){people=rows;render();},setRanking(rows){if(Array.isArray(rows)){cumulative=rankScores(rows);render();}},setSelf(id){selfId=id;render();},setOnline(online){element.hidden=!online;applyFold();}};
+  applyFold();views.set(element,view);return view;
 }

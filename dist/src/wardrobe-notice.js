@@ -1,4 +1,4 @@
-import {findItem} from './cosmetics-catalog.js?v=de3c32eddc76';
+import {findItem} from './cosmetics-catalog.js?v=c60e98d5aa15';
 export const WARDROBE_NOTICE='칩을 모아서 캐릭터를 꾸며보세요';
 export const WARDROBE_NOTICE_DURATION=4500;
 const FIRST_SECONDS=60,REPEAT_SECONDS=300,STORAGE_KEY='fab-wardrobe-notice-at-v1';

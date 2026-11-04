@@ -1,4 +1,4 @@
-import { AIR_SHOWER } from './air-shower.js?v=de3c32eddc76';
+import { AIR_SHOWER } from './air-shower.js?v=c60e98d5aa15';
 
 const clamp = t => Math.max(0, Math.min(1, t));
 const smooth = t => { t = clamp(t); return t * t * (3 - 2 * t); };

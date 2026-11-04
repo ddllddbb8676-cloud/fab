@@ -1,6 +1,6 @@
-import {createAvatar} from './avatar.js?v=de3c32eddc76';
-import {createAvatarAppearance} from './avatar-appearance.js?v=de3c32eddc76';
-import {createAvatarNameplate} from './avatar-nameplate.js?v=de3c32eddc76';
+import {createAvatar} from './avatar.js?v=c60e98d5aa15';
+import {createAvatarAppearance} from './avatar-appearance.js?v=c60e98d5aa15';
+import {createAvatarNameplate} from './avatar-nameplate.js?v=c60e98d5aa15';
 export function createWardrobeView(THREE,canvas,name) {
   const renderer=new THREE.WebGLRenderer({canvas,antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));renderer.outputColorSpace=THREE.SRGBColorSpace;
   const scene=new THREE.Scene();scene.background=new THREE.Color('#e8f0f0');
