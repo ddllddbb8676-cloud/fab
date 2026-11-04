@@ -1,6 +1,7 @@
-import { machines, bays, BAY_CENTERS, TOOL_WIDTH, isBlocked } from './layout.js?v=e5342360c9d9';
-import { canTraverseRuntimeObstacles, getRuntimeObstacles } from './runtime-obstacles.js?v=e5342360c9d9';
-import { stockerPorts, STOCKER_WALK_OUTER_X } from './stocker-layout.js?v=e5342360c9d9';
+import { machines, bays, BAY_CENTERS, TOOL_WIDTH, isBlocked } from './layout.js?v=b91769ddb660';
+import { canTraverseRuntimeObstacles, getRuntimeObstacles } from './runtime-obstacles.js?v=b91769ddb660';
+import { stockerPorts, STOCKER_WALK_OUTER_X } from './stocker-layout.js?v=b91769ddb660';
+import { ENTRANCE } from './entrance-layout.js?v=b91769ddb660';
 export const WALK_RADIUS = .295;
 export function canWalkSegment(a, b) {
   if (!canTraverseRuntimeObstacles(a, b, WALK_RADIUS)) return false;
@@ -18,7 +19,7 @@ for (const bank of [0, 1]) {
   for (let i = 0; i < row.length - 1; i++) xs.push((row[i].x + row[i + 1].x) / 2);
 }
 xs.sort((a, b) => a - b);
-const zs = [-84, 84, ...BAY_CENTERS];
+const zs = [-84, ENTRANCE.serviceZ, ...BAY_CENTERS];
 for (let i = 0; i < BAY_CENTERS.length - 1; i++) zs.push((BAY_CENTERS[i] + BAY_CENTERS[i + 1]) / 2);
 zs.sort((a, b) => a - b);
 export const walkNodes = zs.flatMap((z, iz) => xs.map((x, ix) => ({ id: iz * xs.length + ix, x, z, links: [] })));
@@ -33,7 +34,7 @@ for (let iz = 0; iz < zs.length; iz++) for (let ix = 0; ix < xs.length; ix++) {
 }
 const distance = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 // Sparse apron/entrance corners, rather than multiplying the navigation grid.
-for(const point of [...[-14,-3,0,3,14].map(x=>({x,z:81.2})),...stockerPorts.map(p=>p.approach)]){
+for(const point of [...[-ENTRANCE.halfWidth,-3,0,3,ENTRANCE.halfWidth].map(x=>({x,z:ENTRANCE.serviceZ})),...stockerPorts.map(p=>p.approach)]){
   const node={id:walkNodes.length,x:point.x,z:point.z,links:[]};
   const near=walkNodes.map(n=>({n,cost:distance(n,node)})).sort((a,b)=>a.cost-b.cost).slice(0,32)
     .filter(({n})=>canWalkSegment(n,node)).slice(0,8);

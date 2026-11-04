@@ -1,54 +1,55 @@
-import {createNicknameUI,createNicknameModeration} from './nickname-ui.js?v=e5342360c9d9';
-import {createAdminVisit} from './admin-visit.js?v=e5342360c9d9';
-import {createChipRewardTracker,createChipRewardView,createDestructionRewardQueue} from './chip-rewards.js?v=e5342360c9d9';
-import {npcOutfit} from './npc-outfits.js?v=e5342360c9d9';
-import {createWardrobeNotice,WARDROBE_NOTICE,WARDROBE_NOTICE_DURATION} from './wardrobe-notice.js?v=e5342360c9d9';
-import {createAvatarAppearance} from './avatar-appearance.js?v=e5342360c9d9';
-import {createWardrobe} from './wardrobe-ui.js?v=e5342360c9d9';
-import {destructionTitle,findTitle} from './destruction-titles.js?v=e5342360c9d9';
+import {createNicknameUI,createNicknameModeration} from './nickname-ui.js?v=b91769ddb660';
+import {createAdminVisit} from './admin-visit.js?v=b91769ddb660';
+import {createChipRewardTracker,createChipRewardView,createDestructionRewardQueue} from './chip-rewards.js?v=b91769ddb660';
+import {npcOutfit} from './npc-outfits.js?v=b91769ddb660';
+import {createWardrobeNotice,WARDROBE_NOTICE,WARDROBE_NOTICE_DURATION} from './wardrobe-notice.js?v=b91769ddb660';
+import {createAvatarAppearance} from './avatar-appearance.js?v=b91769ddb660';
+import {createWardrobe} from './wardrobe-ui.js?v=b91769ddb660';
+import {destructionTitle,findTitle} from './destruction-titles.js?v=b91769ddb660';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { machines as layoutMachines, bays, columns, TOUR_POINTS, isBlocked, TOOL_SCALE_X, TOOL_WIDTH, SEATED_FOUP_Y, VEHICLE_Y, RAIL_Y, AISLE, SERVICE_AISLE, SIDE_GAP } from './layout.js?v=e5342360c9d9';
-import { network, railPaths } from './rail-network.js?v=e5342360c9d9';
-import { createFleet, reservedPortIds } from './network-transport.js?v=e5342360c9d9';
-import { createAvatar } from './avatar.js?v=e5342360c9d9';
-import { createExplorer } from './explorer.js?v=e5342360c9d9';
-import { createTouchJoystick } from './touch-joystick.js?v=e5342360c9d9';
-import { CHASE_CAMERA } from './locomotion.js?v=e5342360c9d9';
-import { WALK_CLIPPING, createSceneDepth, createFloorFoundation } from './scene-depth.js?v=e5342360c9d9';
-import { createViewControls,createPhotoMode } from './view-controls.js?v=e5342360c9d9';
-import { AIR_SHOWER, createAirShower } from './air-shower.js?v=e5342360c9d9';
-import { createEntrySequence } from './entry-sequence.js?v=e5342360c9d9';
-import { processFamilies, buildEquipmentCatalog, getBayPurpose } from './equipment-catalog.js?v=e5342360c9d9';
-import { createEquipmentLabels } from './equipment-labels.js?v=e5342360c9d9';
-import { createEquipmentDirectory } from './equipment-directory.js?v=e5342360c9d9';
-import { createBayLighting, applyBayWhiteLightMask } from './bay-lighting.js?v=e5342360c9d9';
-import { createAmbience } from './ambience.js?v=e5342360c9d9';
-import {stockerBounds} from './stocker-layout.js?v=e5342360c9d9';
-import {createStockerView} from './stocker-view.js?v=e5342360c9d9';
-import { setRuntimeObstacles } from './runtime-obstacles.js?v=e5342360c9d9';
-import { createEquipmentVisibility } from './equipment-visibility.js?v=e5342360c9d9';
-import { createEquipmentDestruction } from './equipment-destruction.js?v=e5342360c9d9';
-import { createEmoControls } from './emo-controls.js?v=e5342360c9d9';
-import { createSpatialBatch } from './spatial-batch.js?v=e5342360c9d9';
-import { createPlayActions } from './play-actions.js?v=e5342360c9d9';
-import { createVisitorName, createVisitorBadge } from './visitor-name.js?v=e5342360c9d9';
-import { createResidents } from './residents.js?v=e5342360c9d9';
-import { multiplayerConfiguration, createMultiplayer } from './multiplayer.js?v=e5342360c9d9';
-import {prepareRoomConnection} from './room-connection.js?v=e5342360c9d9';
-import { createSharedWorldView } from './shared-world-view.js?v=e5342360c9d9';
-import { createRemotePeople } from './remote-people.js?v=e5342360c9d9';
-import { createSafetyPatrols, canCatch, isSafety, safetyColor, PENALTY_MESSAGE, SAFETY_CATCH_GOAL, SAFETY_NO_EMO_MESSAGE } from './safety-team.js?v=e5342360c9d9';
-import { ROOM_CAPACITY, MAX_VISITORS, AUTOMATED_COUNT } from './room-population.js?v=e5342360c9d9';
-import {REST_AREAS,isRestArea,canSafetyTraverse,restAreaExit,SAFETY_CLEARANCE} from './rest-area.js?v=e5342360c9d9';
-import {createRestAreaView} from './rest-area-view.js?v=e5342360c9d9';
-import {createLeaderboard} from './leaderboard.js?v=e5342360c9d9';
-import {EMOTE_MENU,HEART_PATH,HEART_COLOR} from './emotes.js?v=e5342360c9d9';
-import {bindEmoteStrip} from './emote-strip.js?v=e5342360c9d9';
-import {createEmoteView} from './emote-view.js?v=e5342360c9d9';
-import {safetyProximity} from './safety-proximity.js?v=e5342360c9d9';
-import {startupStage,startupStep,startupFailure} from './startup-signals.js?v=e5342360c9d9';
+import { machines as layoutMachines, bays, columns, TOUR_POINTS, isBlocked, TOOL_SCALE_X, TOOL_WIDTH, SEATED_FOUP_Y, VEHICLE_Y, RAIL_Y, AISLE, SERVICE_AISLE, SIDE_GAP } from './layout.js?v=b91769ddb660';
+import { network, railPaths } from './rail-network.js?v=b91769ddb660';
+import { createFleet, reservedPortIds } from './network-transport.js?v=b91769ddb660';
+import { createAvatar } from './avatar.js?v=b91769ddb660';
+import { createExplorer } from './explorer.js?v=b91769ddb660';
+import { createTouchJoystick } from './touch-joystick.js?v=b91769ddb660';
+import { CHASE_CAMERA } from './locomotion.js?v=b91769ddb660';
+import { WALK_CLIPPING, createSceneDepth, createFloorFoundation } from './scene-depth.js?v=b91769ddb660';
+import { createViewControls,createPhotoMode } from './view-controls.js?v=b91769ddb660';
+import { AIR_SHOWER, createAirShower } from './air-shower.js?v=b91769ddb660';
+import { createEntrySequence, entryCamera } from './entry-sequence.js?v=b91769ddb660';
+import { ENTRANCE, entranceBounds } from './entrance-layout.js?v=b91769ddb660';
+import { processFamilies, buildEquipmentCatalog, getBayPurpose } from './equipment-catalog.js?v=b91769ddb660';
+import { createEquipmentLabels } from './equipment-labels.js?v=b91769ddb660';
+import { createEquipmentDirectory } from './equipment-directory.js?v=b91769ddb660';
+import { createBayLighting, applyBayWhiteLightMask } from './bay-lighting.js?v=b91769ddb660';
+import { createAmbience } from './ambience.js?v=b91769ddb660';
+import {stockerBounds} from './stocker-layout.js?v=b91769ddb660';
+import {createStockerView} from './stocker-view.js?v=b91769ddb660';
+import { setRuntimeObstacles } from './runtime-obstacles.js?v=b91769ddb660';
+import { createEquipmentVisibility } from './equipment-visibility.js?v=b91769ddb660';
+import { createEquipmentDestruction } from './equipment-destruction.js?v=b91769ddb660';
+import { createEmoControls } from './emo-controls.js?v=b91769ddb660';
+import { createSpatialBatch } from './spatial-batch.js?v=b91769ddb660';
+import { createPlayActions } from './play-actions.js?v=b91769ddb660';
+import { createVisitorName, createVisitorBadge } from './visitor-name.js?v=b91769ddb660';
+import { createResidents } from './residents.js?v=b91769ddb660';
+import { multiplayerConfiguration, createMultiplayer } from './multiplayer.js?v=b91769ddb660';
+import {prepareRoomConnection} from './room-connection.js?v=b91769ddb660';
+import { createSharedWorldView } from './shared-world-view.js?v=b91769ddb660';
+import { createRemotePeople } from './remote-people.js?v=b91769ddb660';
+import { createSafetyPatrols, canCatch, isSafety, safetyColor, PENALTY_MESSAGE, SAFETY_CATCH_GOAL, SAFETY_NO_EMO_MESSAGE } from './safety-team.js?v=b91769ddb660';
+import { ROOM_CAPACITY, MAX_VISITORS, AUTOMATED_COUNT } from './room-population.js?v=b91769ddb660';
+import {REST_AREAS,isRestArea,canSafetyTraverse,restAreaExit,SAFETY_CLEARANCE} from './rest-area.js?v=b91769ddb660';
+import {createRestAreaView} from './rest-area-view.js?v=b91769ddb660';
+import {createLeaderboard} from './leaderboard.js?v=b91769ddb660';
+import {EMOTE_MENU,HEART_PATH,HEART_COLOR} from './emotes.js?v=b91769ddb660';
+import {bindEmoteStrip} from './emote-strip.js?v=b91769ddb660';
+import {createEmoteView} from './emote-view.js?v=b91769ddb660';
+import {safetyProximity} from './safety-proximity.js?v=b91769ddb660';
+import {startupStage,startupStep,startupFailure} from './startup-signals.js?v=b91769ddb660';
 function recordUsageConnection(method, value) {
   try { window.__fabTelemetry?.[method](value); } catch {}
 }
@@ -199,6 +200,19 @@ mesh(walls, boxGeometry, M.white, 0, 2.5, -90, WIDTH, 5, .2);
 mesh(walls, boxGeometry, M.white, 0, 2.5, 90, WIDTH, 5, .2);
 mesh(walls, boxGeometry, M.white, -60, 2.5, 0, .2, 5, LENGTH);
 mesh(walls, boxGeometry, M.white, 60, 2.5, 0, .2, 5, LENGTH);
+// Close the unused rear strip while retaining a 1.9 m equipment service aisle.
+// These solid wings remain visible in the overview, so the empty floor does
+// not reappear when the perimeter walls and ceiling are hidden.
+for (const b of entranceBounds) {
+  const x = (b.minX + b.maxX) / 2, z = (b.minZ + b.maxZ) / 2, w = b.maxX - b.minX, d = b.maxZ - b.minZ;
+  box(M.white, x, ENTRANCE.height / 2, z, w, ENTRANCE.height, d);
+  box(M.edge, x, .12, b.minZ - .015, w, .24, .03);
+  box(M.accent, x, 1.1, b.minZ - .018, w, .065, .015);
+  for (let panelX = b.minX + 3; panelX < b.maxX; panelX += 3) box(M.panel, panelX, 2.5, b.minZ - .015, .025, 5, .02);
+  const sideX = Math.sign(x) * (ENTRANCE.halfWidth - .015);
+  box(M.edge, sideX, .12, z, .03, .24, d);
+  box(M.accent, sideX, 1.1, z, .015, .065, d);
+}
 const glass = new THREE.MeshPhysicalMaterial({ color: '#88b2c5', roughness: .12, metalness: .18, transparent: true, opacity: .28, side: THREE.DoubleSide });
 for (let z = -78; z <= 78; z += 12) {
   for (const side of [-1, 1]) {
@@ -435,9 +449,9 @@ const restAreaView=createRestAreaView(THREE,scene);
 const bayWhiteMask = applyBayWhiteLightMask(THREE, scene, bays, { yellowBayIds: bayLighting.bayIds });
 colliders.push(...AIR_SHOWER.bounds.map(b => ({ ...b, maxY: 3.15 })));
 colliders.push(...stockerBounds);
+colliders.push(...entranceBounds);
 const stockerView=createStockerView(THREE,scene);
-colliders.push({ minX: -2.02, maxX: 2.02, minZ: 82.2, maxZ: 88.92, minY: 3.07, maxY: 3.23 },
-  { minX: -2.58, maxX: 2.58, minZ: 82.02, maxZ: 82.38, minY: 2.65, maxY: 3.23 });
+colliders.push(...AIR_SHOWER.overheadBounds);
 const entry = createEntrySequence({ reducedMotion });
 let mode = 'walk', elapsed = 0, lastTime = 0, currentZone = '', toastTimer, selectedEquipment = null, playActions = null;
 let nextRefreshReminder=performance.now()+15*60*1000,lastToastAt=-Infinity;
@@ -582,7 +596,7 @@ function startEntry() {
   explorer.lock(false); explorer.setMode('walk');
   explorer.state.position.set(AIR_SHOWER.start.x, 0, AIR_SHOWER.start.z);
   explorer.state.yaw = 0; explorer.state.heading = Math.PI;
-  explorer.state.elevation = .3; explorer.state.distance = 2.65; explorer.state.manualLook = false;
+  Object.assign(explorer.state, entryCamera(0)); explorer.state.manualLook = false;
   explorer.lock(true); entry.start(); entryStage = '';
   camera.fov = innerWidth < 700 ? 84 : 64; camera.updateProjectionMatrix();
   document.body.classList.add('entering'); $('entry-overlay').classList.remove('hidden');
@@ -590,10 +604,11 @@ function startEntry() {
   for (const element of entryUi) element.inert = true;
   airShower.update(entry.state);
 }
-function finishEntry() {
+function finishEntry({ resumed = false } = {}) {
   entry.finish(); explorer.state.position.set(AIR_SHOWER.exit.x, 0, AIR_SHOWER.exit.z);
   setRuntimeObstacles(AIR_SHOWER.closedDoorBounds);
   explorer.state.speed = 0; explorer.state.distance = CHASE_CAMERA.distance; explorer.state.elevation = CHASE_CAMERA.elevation;
+  if (!resumed) Object.assign(explorer.state, entryCamera(1));
   camera.fov = CHASE_CAMERA.fov; camera.updateProjectionMatrix();
   explorer.lock(false); document.body.classList.remove('entering'); $('entry-overlay').classList.add('hidden');
   for (const element of entryUi) element.inert = false;
@@ -606,8 +621,7 @@ function updateEntry(dt) {
   airShower.update(s);
   explorer.state.position.set(s.position.x, 0, s.position.z);
   explorer.state.speed = Math.abs(s.position.z - before) / Math.max(dt, .001);
-  explorer.state.distance = 2.65 + (CHASE_CAMERA.distance - 2.65) * s.walk;
-  explorer.state.elevation = .3 + (CHASE_CAMERA.elevation - .3) * s.walk;
+  Object.assign(explorer.state, entryCamera(s.walk));
   camera.fov = (innerWidth < 700 ? 84 : 64) * (1 - s.walk) + CHASE_CAMERA.fov * s.walk; camera.updateProjectionMatrix();
   if (s.complete) { finishEntry(); return; }
   if (s.stage !== entryStage) {
@@ -667,7 +681,7 @@ $('capture-open').addEventListener('click',async()=>{
   if(entry.active||nicknameUI.isOpen||connectionConfig&&(!multiplayer?.connected||!personalStatsLoaded)){toast('연결을 마친 뒤 캡쳐타임을 열어주세요.');return;}
   captureLoading=true;
   try{
-    if(!captureTime){const {createCaptureTime}=await import('./capture-time.js?v=e5342360c9d9');captureTime=createCaptureTime({
+    if(!captureTime){const {createCaptureTime}=await import('./capture-time.js?v=b91769ddb660');captureTime=createCaptureTime({
       getRecord:()=>({name:visitorBadge.name,title:findTitle(visitorBadge.titleId)?.name??'',...personalStats}),
       capture:draw=>new Promise((resolve,reject)=>{const timer=setTimeout(()=>{captureFrame=null;reject(Error('capture-timeout'));},2500);captureFrame=canvas=>{clearTimeout(timer);try{resolve(draw(canvas));}catch(error){reject(error);}};}),
       onToggle:open=>{if(open){viewControls.closeAll();directory.close();adminVisit?.cancel();$('help').classList.add('hidden');$('tool-card').classList.add('hidden');joystick.setEnabled(false);}explorer.lock(open||entry.active||nicknameUI.isOpen||wardrobe.isOpen);},
@@ -689,7 +703,7 @@ else {
   remotePeople=createRemotePeople({THREE,scene,store:playActions.store,fleet,maxDetailed:mobile?32:48});
   sharedWorld=createSharedWorldView({fleet,store:playActions.store,destruction,onPeople:rows=>remotePeople.synchronize(rows),onCue:motionCue,onCount:(n,total)=>{realVisitorCount=n;totalCharacterCount=total;updateConnectionLabel();},onSelf:updateSafetyState});
   multiplayer=createMultiplayer({config:connectionConfig,prepared:window.__fabPreparedRoom,getPose:()=>({x:+explorer.state.position.x.toFixed(3),y:+explorer.state.position.y.toFixed(3),z:+explorer.state.position.z.toFixed(3),heading:+explorer.state.heading.toFixed(3),speed:+(explorer.state.speed||0).toFixed(2),posture:explorer.state.posture,hidden:entry.active||nicknameUI.isOpen}),
-    onTitles:applyTitles,onNickname:applyNickname,onWallet:applyWallet,onWelcome:data=>{recordUsageConnection('connected',data.privileges);adminVisit.welcome(data);remotePeople.setViewerPrivileges(data.privileges);visitorEmote.reset();chipRewardTracker.reset(data.wallet);destructionRewardTracker.reset(data.wallet);clearChipRewards();sharedWorld.welcome(data.id);leaderboard.setSelf(data.id);visitorBadge.rename(data.name);if(data.resume){finishEntry();airShower.update(entry.state);explorer.state.path=[];explorer.state.position.set(data.resume.x,0,data.resume.z);explorer.state.heading=data.resume.heading;toast('이름과 기록을 이어서 접속했어요.');}$('nickname-admin').classList.toggle('hidden',!data.privileges?.unlimitedChips);$('operations-admin').classList.toggle('hidden',!data.privileges?.unlimitedChips);applyNickname(data.nickname);},onRoster:rows=>{remotePeople.setRoster(rows);leaderboard.setRoster(rows);const self=rows.find(row=>row[0]===multiplayer?.id);if(self)visitorBadge.rename(self[1]);},onFrame:(frame,initial)=>{adminVisit.frame(frame);sharedWorld.apply(frame,initial);leaderboard.setPeople(frame.people);leaderboard.setRanking(frame.leaderboard);},onError:toast,
+    onTitles:applyTitles,onNickname:applyNickname,onWallet:applyWallet,onWelcome:data=>{recordUsageConnection('connected',data.privileges);adminVisit.welcome(data);remotePeople.setViewerPrivileges(data.privileges);visitorEmote.reset();chipRewardTracker.reset(data.wallet);destructionRewardTracker.reset(data.wallet);clearChipRewards();sharedWorld.welcome(data.id);leaderboard.setSelf(data.id);visitorBadge.rename(data.name);if(data.resume){finishEntry({resumed:true});airShower.update(entry.state);explorer.state.path=[];explorer.state.position.set(data.resume.x,0,data.resume.z);explorer.state.heading=data.resume.heading;toast('이름과 기록을 이어서 접속했어요.');}$('nickname-admin').classList.toggle('hidden',!data.privileges?.unlimitedChips);$('operations-admin').classList.toggle('hidden',!data.privileges?.unlimitedChips);applyNickname(data.nickname);},onRoster:rows=>{remotePeople.setRoster(rows);leaderboard.setRoster(rows);const self=rows.find(row=>row[0]===multiplayer?.id);if(self)visitorBadge.rename(self[1]);},onFrame:(frame,initial)=>{adminVisit.frame(frame);sharedWorld.apply(frame,initial);leaderboard.setPeople(frame.people);leaderboard.setRanking(frame.leaderboard);},onError:toast,
     onCatch:data=>toast(`${data.targetName}님을 잡았어요! 장비 3대를 고쳐야 합니다. (${data.caught??0} / ${SAFETY_CATCH_GOAL})${data.completed?` ${SAFETY_CATCH_GOAL}명 잡기 완료! 원래 방진복으로 돌아왔어요.`:''}`,5000),
     onStatus:status=>{recordUsageConnection('connectionStatus',status);if(status!=='connected')remotePeople.setViewerPrivileges(null);updateConnectionLabel(status);wardrobe.refresh();nicknameUI.refresh();if(status==='reconnecting'){clearChipRewards();playActions.resetOnline();explorer.cancelEmo('disconnect');toast('연결이 끊겨 다시 접속하고 있어요');}}
   });

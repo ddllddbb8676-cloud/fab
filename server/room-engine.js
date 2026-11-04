@@ -3,6 +3,7 @@ import {nicknameKey} from '../src/visitor-name.js';
 import {restoreWallet,grantChips,wardrobeCommand,walletView} from './chip-wallet.js';
 import {npcOutfit} from '../src/npc-outfits.js';
 import { machines, ports, isBlocked } from '../src/layout.js';
+import { AIR_SHOWER } from '../src/air-shower.js';
 import {stockerById} from '../src/stocker-layout.js';
 import { createFleet, reservedPortIds } from '../src/network-transport.js';
 import { createFoupStore, FOUP_CLEAN_SECONDS, FOUP_CLEAN_REWARD } from '../src/foup-play.js';
@@ -129,7 +130,7 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
     // 90-second deadline once; reconnects must neither erase nor restart rest.
     let eligibleAfter=saved?.eligibleAfter||0;
     if(eligibleAfter>0&&(saved?.safetyDutyVersion||0)<SAFETY_DUTY_VERSION)eligibleAfter+=SAFETY_DUTY.cooldown-LEGACY_SAFETY_COOLDOWN;
-    const p={id,name:role==='visitor'?civilianName:safetyName,civilianName,safetyName,role,penalty:saved?.penalty||0,safeUntil:time+12,x:0,y:0,z:78.8,heading:Math.PI,speed:0,posture:'stand',phase:'idle',time:0,hidden:true,lastSeen:time,rate:0,rateAt:time,
+    const p={id,name:role==='visitor'?civilianName:safetyName,civilianName,safetyName,role,penalty:saved?.penalty||0,safeUntil:time+12,x:AIR_SHOWER.exit.x,y:0,z:AIR_SHOWER.exit.z,heading:Math.PI,speed:0,posture:'stand',phase:'idle',time:0,hidden:true,lastSeen:time,rate:0,rateAt:time,
       activeSeconds:saved?.activeSeconds||0,safetyTurns:saved?.safetyTurns||0,safetyCaughtIds:caught,eligibleAfter,optOut:saved?.optOut||false,joinOrder:joinOrder++,assignAfter:time+SAFETY_DUTY.handover,hasEntered:saved?.hasEntered||false,groundPosition:saved?.groundPosition??null,lastSavedAt:time};
     p.brokenCount=saved?.brokenCount||0;p.repairedCount=saved?.repairedCount||0;
     p.titlePreference=restoreTitlePreference(saved?.titlePreference,p.brokenCount);

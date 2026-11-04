@@ -1,8 +1,17 @@
-import { AIR_SHOWER } from './air-shower.js?v=e5342360c9d9';
+import { AIR_SHOWER } from './air-shower.js?v=b91769ddb660';
+import { CHASE_CAMERA } from './locomotion.js?v=b91769ddb660';
 
 const clamp = t => Math.max(0, Math.min(1, t));
 const smooth = t => { t = clamp(t); return t * t * (3 - 2 * t); };
 export const ENTRY_TIMES = { shower: .8, settle: 4.8, opening: 5.45, walking: 7.05, closing: 11.25, done: 12.45 };
+
+// Turn only after leaving the doorway. STK01 becomes the first view without
+// changing ordinary chase controls or forcing a view on a resumed session.
+export function entryCamera(walk) {
+  const progress = clamp(walk);
+  return { yaw: 1.79 * smooth((progress - .6) / .4), elevation: .3,
+    distance: 1.5 + (CHASE_CAMERA.distance - 1.5) * progress };
+}
 
 // Cinematic timings only; this is not a real air-shower operating cycle.
 export function sampleEntry(time) {

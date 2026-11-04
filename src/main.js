@@ -19,7 +19,8 @@ import { CHASE_CAMERA } from './locomotion.js';
 import { WALK_CLIPPING, createSceneDepth, createFloorFoundation } from './scene-depth.js';
 import { createViewControls,createPhotoMode } from './view-controls.js';
 import { AIR_SHOWER, createAirShower } from './air-shower.js';
-import { createEntrySequence } from './entry-sequence.js';
+import { createEntrySequence, entryCamera } from './entry-sequence.js';
+import { ENTRANCE, entranceBounds } from './entrance-layout.js';
 import { processFamilies, buildEquipmentCatalog, getBayPurpose } from './equipment-catalog.js';
 import { createEquipmentLabels } from './equipment-labels.js';
 import { createEquipmentDirectory } from './equipment-directory.js';
@@ -199,6 +200,19 @@ mesh(walls, boxGeometry, M.white, 0, 2.5, -90, WIDTH, 5, .2);
 mesh(walls, boxGeometry, M.white, 0, 2.5, 90, WIDTH, 5, .2);
 mesh(walls, boxGeometry, M.white, -60, 2.5, 0, .2, 5, LENGTH);
 mesh(walls, boxGeometry, M.white, 60, 2.5, 0, .2, 5, LENGTH);
+// Close the unused rear strip while retaining a 1.9 m equipment service aisle.
+// These solid wings remain visible in the overview, so the empty floor does
+// not reappear when the perimeter walls and ceiling are hidden.
+for (const b of entranceBounds) {
+  const x = (b.minX + b.maxX) / 2, z = (b.minZ + b.maxZ) / 2, w = b.maxX - b.minX, d = b.maxZ - b.minZ;
+  box(M.white, x, ENTRANCE.height / 2, z, w, ENTRANCE.height, d);
+  box(M.edge, x, .12, b.minZ - .015, w, .24, .03);
+  box(M.accent, x, 1.1, b.minZ - .018, w, .065, .015);
+  for (let panelX = b.minX + 3; panelX < b.maxX; panelX += 3) box(M.panel, panelX, 2.5, b.minZ - .015, .025, 5, .02);
+  const sideX = Math.sign(x) * (ENTRANCE.halfWidth - .015);
+  box(M.edge, sideX, .12, z, .03, .24, d);
+  box(M.accent, sideX, 1.1, z, .015, .065, d);
+}
 const glass = new THREE.MeshPhysicalMaterial({ color: '#88b2c5', roughness: .12, metalness: .18, transparent: true, opacity: .28, side: THREE.DoubleSide });
 for (let z = -78; z <= 78; z += 12) {
   for (const side of [-1, 1]) {
@@ -435,9 +449,9 @@ const restAreaView=createRestAreaView(THREE,scene);
 const bayWhiteMask = applyBayWhiteLightMask(THREE, scene, bays, { yellowBayIds: bayLighting.bayIds });
 colliders.push(...AIR_SHOWER.bounds.map(b => ({ ...b, maxY: 3.15 })));
 colliders.push(...stockerBounds);
+colliders.push(...entranceBounds);
 const stockerView=createStockerView(THREE,scene);
-colliders.push({ minX: -2.02, maxX: 2.02, minZ: 82.2, maxZ: 88.92, minY: 3.07, maxY: 3.23 },
-  { minX: -2.58, maxX: 2.58, minZ: 82.02, maxZ: 82.38, minY: 2.65, maxY: 3.23 });
+colliders.push(...AIR_SHOWER.overheadBounds);
 const entry = createEntrySequence({ reducedMotion });
 let mode = 'walk', elapsed = 0, lastTime = 0, currentZone = '', toastTimer, selectedEquipment = null, playActions = null;
 let nextRefreshReminder=performance.now()+15*60*1000,lastToastAt=-Infinity;
@@ -582,7 +596,7 @@ function startEntry() {
   explorer.lock(false); explorer.setMode('walk');
   explorer.state.position.set(AIR_SHOWER.start.x, 0, AIR_SHOWER.start.z);
   explorer.state.yaw = 0; explorer.state.heading = Math.PI;
-  explorer.state.elevation = .3; explorer.state.distance = 2.65; explorer.state.manualLook = false;
+  Object.assign(explorer.state, entryCamera(0)); explorer.state.manualLook = false;
   explorer.lock(true); entry.start(); entryStage = '';
   camera.fov = innerWidth < 700 ? 84 : 64; camera.updateProjectionMatrix();
   document.body.classList.add('entering'); $('entry-overlay').classList.remove('hidden');
@@ -590,10 +604,11 @@ function startEntry() {
   for (const element of entryUi) element.inert = true;
   airShower.update(entry.state);
 }
-function finishEntry() {
+function finishEntry({ resumed = false } = {}) {
   entry.finish(); explorer.state.position.set(AIR_SHOWER.exit.x, 0, AIR_SHOWER.exit.z);
   setRuntimeObstacles(AIR_SHOWER.closedDoorBounds);
   explorer.state.speed = 0; explorer.state.distance = CHASE_CAMERA.distance; explorer.state.elevation = CHASE_CAMERA.elevation;
+  if (!resumed) Object.assign(explorer.state, entryCamera(1));
   camera.fov = CHASE_CAMERA.fov; camera.updateProjectionMatrix();
   explorer.lock(false); document.body.classList.remove('entering'); $('entry-overlay').classList.add('hidden');
   for (const element of entryUi) element.inert = false;
@@ -606,8 +621,7 @@ function updateEntry(dt) {
   airShower.update(s);
   explorer.state.position.set(s.position.x, 0, s.position.z);
   explorer.state.speed = Math.abs(s.position.z - before) / Math.max(dt, .001);
-  explorer.state.distance = 2.65 + (CHASE_CAMERA.distance - 2.65) * s.walk;
-  explorer.state.elevation = .3 + (CHASE_CAMERA.elevation - .3) * s.walk;
+  Object.assign(explorer.state, entryCamera(s.walk));
   camera.fov = (innerWidth < 700 ? 84 : 64) * (1 - s.walk) + CHASE_CAMERA.fov * s.walk; camera.updateProjectionMatrix();
   if (s.complete) { finishEntry(); return; }
   if (s.stage !== entryStage) {
@@ -689,7 +703,7 @@ else {
   remotePeople=createRemotePeople({THREE,scene,store:playActions.store,fleet,maxDetailed:mobile?32:48});
   sharedWorld=createSharedWorldView({fleet,store:playActions.store,destruction,onPeople:rows=>remotePeople.synchronize(rows),onCue:motionCue,onCount:(n,total)=>{realVisitorCount=n;totalCharacterCount=total;updateConnectionLabel();},onSelf:updateSafetyState});
   multiplayer=createMultiplayer({config:connectionConfig,prepared:window.__fabPreparedRoom,getPose:()=>({x:+explorer.state.position.x.toFixed(3),y:+explorer.state.position.y.toFixed(3),z:+explorer.state.position.z.toFixed(3),heading:+explorer.state.heading.toFixed(3),speed:+(explorer.state.speed||0).toFixed(2),posture:explorer.state.posture,hidden:entry.active||nicknameUI.isOpen}),
-    onTitles:applyTitles,onNickname:applyNickname,onWallet:applyWallet,onWelcome:data=>{recordUsageConnection('connected',data.privileges);adminVisit.welcome(data);remotePeople.setViewerPrivileges(data.privileges);visitorEmote.reset();chipRewardTracker.reset(data.wallet);destructionRewardTracker.reset(data.wallet);clearChipRewards();sharedWorld.welcome(data.id);leaderboard.setSelf(data.id);visitorBadge.rename(data.name);if(data.resume){finishEntry();airShower.update(entry.state);explorer.state.path=[];explorer.state.position.set(data.resume.x,0,data.resume.z);explorer.state.heading=data.resume.heading;toast('이름과 기록을 이어서 접속했어요.');}$('nickname-admin').classList.toggle('hidden',!data.privileges?.unlimitedChips);$('operations-admin').classList.toggle('hidden',!data.privileges?.unlimitedChips);applyNickname(data.nickname);},onRoster:rows=>{remotePeople.setRoster(rows);leaderboard.setRoster(rows);const self=rows.find(row=>row[0]===multiplayer?.id);if(self)visitorBadge.rename(self[1]);},onFrame:(frame,initial)=>{adminVisit.frame(frame);sharedWorld.apply(frame,initial);leaderboard.setPeople(frame.people);leaderboard.setRanking(frame.leaderboard);},onError:toast,
+    onTitles:applyTitles,onNickname:applyNickname,onWallet:applyWallet,onWelcome:data=>{recordUsageConnection('connected',data.privileges);adminVisit.welcome(data);remotePeople.setViewerPrivileges(data.privileges);visitorEmote.reset();chipRewardTracker.reset(data.wallet);destructionRewardTracker.reset(data.wallet);clearChipRewards();sharedWorld.welcome(data.id);leaderboard.setSelf(data.id);visitorBadge.rename(data.name);if(data.resume){finishEntry({resumed:true});airShower.update(entry.state);explorer.state.path=[];explorer.state.position.set(data.resume.x,0,data.resume.z);explorer.state.heading=data.resume.heading;toast('이름과 기록을 이어서 접속했어요.');}$('nickname-admin').classList.toggle('hidden',!data.privileges?.unlimitedChips);$('operations-admin').classList.toggle('hidden',!data.privileges?.unlimitedChips);applyNickname(data.nickname);},onRoster:rows=>{remotePeople.setRoster(rows);leaderboard.setRoster(rows);const self=rows.find(row=>row[0]===multiplayer?.id);if(self)visitorBadge.rename(self[1]);},onFrame:(frame,initial)=>{adminVisit.frame(frame);sharedWorld.apply(frame,initial);leaderboard.setPeople(frame.people);leaderboard.setRanking(frame.leaderboard);},onError:toast,
     onCatch:data=>toast(`${data.targetName}님을 잡았어요! 장비 3대를 고쳐야 합니다. (${data.caught??0} / ${SAFETY_CATCH_GOAL})${data.completed?` ${SAFETY_CATCH_GOAL}명 잡기 완료! 원래 방진복으로 돌아왔어요.`:''}`,5000),
     onStatus:status=>{recordUsageConnection('connectionStatus',status);if(status!=='connected')remotePeople.setViewerPrivileges(null);updateConnectionLabel(status);wardrobe.refresh();nicknameUI.refresh();if(status==='reconnecting'){clearChipRewards();playActions.resetOnline();explorer.cancelEmo('disconnect');toast('연결이 끊겨 다시 접속하고 있어요');}}
   });

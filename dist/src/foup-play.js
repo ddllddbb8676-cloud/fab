@@ -1,5 +1,6 @@
-import { isBlocked, machines, SEATED_FOUP_Y } from './layout.js?v=e5342360c9d9';
-import {stockers,stockerById,stockerBounds,stockerSlot,stockerRecordPose,STOCKER_CAPACITY,STOCKER_TRANSFER_SECONDS,STOCKER_OUT_CUE_AT} from './stocker-layout.js?v=e5342360c9d9';
+import { isBlocked, machines, SEATED_FOUP_Y } from './layout.js?v=b91769ddb660';
+import {entranceBounds} from './entrance-layout.js?v=b91769ddb660';
+import {stockers,stockerById,stockerBounds,stockerSlot,stockerRecordPose,STOCKER_CAPACITY,STOCKER_TRANSFER_SECONDS,STOCKER_OUT_CUE_AT} from './stocker-layout.js?v=b91769ddb660';
 const stockModes=new Set(['stored','stocking','retrieving','stocker-out']);
 export const FOUP_CLEAN_SECONDS = 3.2;
 export const FOUP_CLEAN_REWARD = 2;
@@ -16,6 +17,7 @@ export function floorSpot(point, radius = .295) {
 
 export function supportHeight(x, z) {
   let height = 0;
+  for(const b of entranceBounds)if(x>b.minX&&x<b.maxX&&z>b.minZ&&z<b.maxZ)height=Math.max(height,b.maxY);
   for(const b of stockerBounds)if(x>b.minX&&x<b.maxX&&z>b.minZ&&z<b.maxZ)height=Math.max(height,b.maxY);
   for (const machine of machines) for (const b of machine.walkBounds) {
     if (x > b.minX && x < b.maxX && z > b.minZ && z < b.maxZ) height = Math.max(height, b.part === 'cabinet' ? 3.4 : b.part === 'efem' ? 1.4625 : 2.05);
@@ -181,6 +183,12 @@ export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () 
       stockersSeeded=true;
       for(const [id,sid,mode,slot]of stock.entries){const r=records.get(id);stow(r,stockerById.get(sid),slot,['retrieving','stocker-out'].includes(mode)?'stocker-out':'stored');}
     }else initializeStockers();
+    // A carrier already on the old empty rear strip must remain reachable
+    // after the service wall moves. Keep its identity and cleanup/reward state.
+    for(const r of records.values())if(['ground','broken','cleared','flying','carried'].includes(r.mode)){
+      const wing=entranceBounds.find(b=>r.x>b.minX-.3&&r.x<b.maxX+.3&&r.z>b.minZ-.3&&r.z<b.maxZ+.3);
+      if(wing)r.z=wing.minZ-.4;
+    }
     for(const r of records.values())if(['flying','carried'].includes(r.mode)){
       // An interrupted throw cannot return a fresh, reward-eligible FOUP. Restore
       // its settled result; interrupted carries/drop actions remain intact.

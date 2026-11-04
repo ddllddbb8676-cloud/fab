@@ -2,18 +2,23 @@
 // Sliding leaves are separate from permanent colliders. Input is locked during
 // entry; use closedDoorBounds when the doors close after the avatar has exited.
 export const AIR_SHOWER = Object.freeze({
-  start: { x: 0, z: 85.8 },
-  exit: { x: 0, z: 78.8 },
-  doorZ: 82.2,
+  start: { x: 0, z: 87 },
+  exit: { x: 0, z: 81.5 },
+  doorZ: 85.4,
+  rearZ: 88.8,
   closedDoorBounds: Object.freeze([
-    Object.freeze({ minX: -1.2, maxX: 1.2, minZ: 82.1, maxZ: 82.35, minY: 0, maxY: 2.65 })
+    Object.freeze({ minX: -1.2, maxX: 1.2, minZ: 85.3, maxZ: 85.55, minY: 0, maxY: 2.65 })
   ]),
   bounds: [
-    { minX: -2.02, maxX: -1.78, minZ: 82.2, maxZ: 88.92 },
-    { minX: 1.78, maxX: 2.02, minZ: 82.2, maxZ: 88.92 },
+    { minX: -2.02, maxX: -1.78, minZ: 85.4, maxZ: 88.92 },
+    { minX: 1.78, maxX: 2.02, minZ: 85.4, maxZ: 88.92 },
     { minX: -2.02, maxX: 2.02, minZ: 88.68, maxZ: 88.92 },
-    { minX: -2.58, maxX: -1.2, minZ: 82.02, maxZ: 82.38 },
-    { minX: 1.2, maxX: 2.58, minZ: 82.02, maxZ: 82.38 }
+    { minX: -2.58, maxX: -1.2, minZ: 85.22, maxZ: 85.58 },
+    { minX: 1.2, maxX: 2.58, minZ: 85.22, maxZ: 85.58 }
+  ],
+  overheadBounds: [
+    { minX: -2.02, maxX: 2.02, minZ: 85.28, maxZ: 88.92, minY: 3.07, maxY: 3.23 },
+    { minX: -2.58, maxX: 2.58, minZ: 85.175, maxZ: 85.625, minY: 2.65, maxY: 3.23 }
   ]
 });
 
@@ -61,17 +66,18 @@ export function createAirShower(THREE) {
   const nozzleShell = new THREE.CylinderGeometry(.095, .112, .075, 16);
   const nozzleBore = new THREE.CylinderGeometry(.053, .053, .008, 14);
   const nozzleRim = new THREE.TorusGeometry(.071, .012, 6, 18);
+  const depth = AIR_SHOWER.rearZ - AIR_SHOWER.doorZ, centerZ = (AIR_SHOWER.rearZ + AIR_SHOWER.doorZ) / 2;
   for (const side of [-1, 1]) {
-    box(root, white, side * 1.9, 1.575, 85.5, .24, 3.15, 6.6);
-    box(root, steel, side * 1.765, .13, 85.5, .035, .26, 6.6);
-    box(root, steel, side * 1.765, 2.91, 85.5, .035, .065, 6.6);
-    for (const z of [83.1, 84.3, 85.5, 86.7, 87.9]) {
+    box(root, white, side * 1.9, 1.575, centerZ, .24, 3.15, depth);
+    box(root, steel, side * 1.765, .13, centerZ, .035, .26, depth);
+    box(root, steel, side * 1.765, 2.91, centerZ, .035, .065, depth);
+    for (const z of [centerZ - .72, centerZ + .72]) {
       box(root, panel, side * 1.767, 1.64, z, .028, 2.42, 1.145);
       box(root, white, side * 1.744, 1.64, z, .022, 2.32, 1.065);
       box(root, dark, side * 1.742, .34, z, .022, .23, .88);
       for (let i = 0; i < 5; i++) box(root, steel, side * 1.724, .25 + i * .045, z, .022, .012, .84);
     }
-    for (const z of [83.65, 84.85, 86.05, 87.25]) for (const y of [.88, 1.51, 2.14]) {
+    for (const z of [centerZ - .72, centerZ + .72]) for (const y of [.88, 1.51, 2.14]) {
       const shell = new THREE.Mesh(nozzleShell, steel);
       shell.position.set(side * 1.699, y, z); shell.rotation.z = Math.PI / 2; root.add(shell);
       const bore = new THREE.Mesh(nozzleBore, black);
@@ -82,24 +88,24 @@ export function createAirShower(THREE) {
     }
   }
   // The grille stays almost flush with the FAB floor; no step traps the avatar.
-  box(root, panel, 0, -.016, 85.5, 3.55, .03, 6.6);
-  box(root, dark, 0, .002, 85.5, 2.7, .008, 5.85);
-  for (let z = 82.64; z < 88.4; z += .12) box(root, steel, 0, .008, z, 2.69, .012, .065);
-  for (const x of [-1.37, 1.37]) box(root, panel, x, .011, 85.5, .045, .018, 5.85);
-  for (const z of [82.54, 88.46]) box(root, steel, 0, .012, z, 3.54, .018, .1);
+  box(root, panel, 0, -.016, centerZ, 3.55, .03, depth);
+  box(root, dark, 0, .002, centerZ, 2.7, .008, depth - .75);
+  for (let z = AIR_SHOWER.doorZ + .44; z < AIR_SHOWER.rearZ - .4; z += .12) box(root, steel, 0, .008, z, 2.69, .012, .065);
+  for (const x of [-1.37, 1.37]) box(root, panel, x, .011, centerZ, .045, .018, depth - .75);
+  for (const z of [AIR_SHOWER.doorZ + .34, AIR_SHOWER.rearZ - .34]) box(root, steel, 0, .012, z, 3.54, .018, .1);
   // A restrained floor mark gives the waiting character a visual home.
   for (const x of [-.4, .4]) {
-    box(root, teal, x, .018, 85.8, .035, .008, .8);
-    box(root, teal, x * .77, .018, 85.39, .22, .008, .035);
-    box(root, teal, x * .77, .018, 86.21, .22, .008, .035);
+    box(root, teal, x, .018, AIR_SHOWER.start.z, .035, .008, .8);
+    box(root, teal, x * .77, .018, AIR_SHOWER.start.z - .41, .22, .008, .035);
+    box(root, teal, x * .77, .018, AIR_SHOWER.start.z + .41, .22, .008, .035);
   }
 
-  box(roof, white, 0, 3.15, 85.5, 4.04, .16, 6.84);
-  box(roof, panel, 0, 3.057, 85.5, 1.15, .035, 4.95);
-  for (let z = 83.18; z < 87.9; z += .12) box(roof, steel, 0, 3.035, z, .97, .02, .025);
+  box(roof, white, 0, 3.15, centerZ, 4.04, .16, depth + .24);
+  box(roof, panel, 0, 3.057, centerZ, 1.15, .035, depth - 1.65);
+  for (let z = AIR_SHOWER.doorZ + .98; z < AIR_SHOWER.rearZ - .9; z += .12) box(roof, steel, 0, 3.035, z, .97, .02, .025);
   for (const x of [-1.03, 1.03]) {
-    box(roof, dark, x, 3.052, 85.5, .27, .055, 5.22);
-    box(roof, light, x, 3.017, 85.5, .19, .025, 5.12);
+    box(roof, dark, x, 3.052, centerZ, .27, .055, depth - 1.38);
+    box(roof, light, x, 3.017, centerZ, .19, .025, depth - 1.48);
   }
 
   // An opaque rear door closes the vestibule behind the opening camera.

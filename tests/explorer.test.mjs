@@ -170,7 +170,7 @@ test('explorer mode changes preserve position, hide avatar during transfer and r
     assert.equal(explorer.state.mode, 'transfer'); assert.equal(explorer.state.transferVehicleId, 0); assert.equal(avatar.root.visible, false);
     assert.ok(explorer.state.position.equals(saved)); explorer.setMode('walk'); assert.equal(avatar.root.visible, true); assert.ok(explorer.state.position.equals(saved));
     setRuntimeObstacles(AIR_SHOWER.closedDoorBounds);
-    explorer.state.position.set(0, 0, 81.4); explorer.state.yaw = 0; explorer.state.distance = 4.4; explorer.state.elevation = .08;
-    explorer.update(.1); assert.ok(camera.position.z < 82, 'camera remains in front of the closed entry door');
+    explorer.state.position.set(0, 0, AIR_SHOWER.doorZ - .8); explorer.state.yaw = 0; explorer.state.distance = 4.4; explorer.state.elevation = .08;
+    explorer.update(.1); assert.ok(camera.position.z < AIR_SHOWER.closedDoorBounds[0].minZ - .1, 'camera remains in front of the closed entry door');
   } finally { setRuntimeObstacles([]); globalThis.document = priorDocument; globalThis.window = priorWindow; }
 });
