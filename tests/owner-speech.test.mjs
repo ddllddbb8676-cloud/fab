@@ -19,32 +19,33 @@ test('the legacy operator command remains limited to the configured operator',()
   const {room,enter,say}=setup();enter(visitor);
   assert.equal(say(visitor,'권한 사칭').ok,false);assert.equal(say(owner,'입장 전').ok,false);
   enter(owner);const profile=room.profile(owner),world=room.worldEvents.checkpoint();
-  assert.equal(say(owner,'시작할게요!').ok,true);
+  assert.equal(say(owner,'시작!').ok,true);
+  assert.equal(say(owner,'시작하자').ok,false);
   assert.equal(say(visitor,'덮어쓰기').ok,false);
-  assert.equal(room.snapshot(true).ownerSpeech.text,'시작할게요!');
+  assert.equal(room.snapshot(true).ownerSpeech.text,'시작!');
   assert.deepEqual(room.profile(owner),profile);assert.deepEqual(room.worldEvents.checkpoint(),world);
   const missing=setup('');missing.enter(owner);assert.equal(missing.say(owner,'test').ok,false);
 });
 test('the legacy owner field and late join snapshots do not consume broadcasts',()=>{
   const {room,enter,say,advance}=setup();enter(owner);
   assert.equal(room.snapshot().ownerSpeech,undefined);
-  say(owner,'첫 문장');const full=room.snapshot(true).ownerSpeech;
+  say(owner,'첫말');const full=room.snapshot(true).ownerSpeech;
   assert.deepEqual(room.snapshot(true).ownerSpeech,full);
   assert.deepEqual(room.snapshot().ownerSpeech,full);assert.equal(room.snapshot().ownerSpeech,undefined);
   advance(4000);assert.equal(room.snapshot(true).ownerSpeech.expiresAt,full.expiresAt);
-  say(owner,'다음 문장');const next=room.snapshot().ownerSpeech;
-  assert.equal(next.text,'다음 문장');assert.ok(next.revision>full.revision);
+  say(owner,'다음말');const next=room.snapshot().ownerSpeech;
+  assert.equal(next.text,'다음말');assert.ok(next.revision>full.revision);
   advance(SPEECH_DURATION_MS);const cleared=room.snapshot().ownerSpeech;
   assert.deepEqual(cleared,{revision:next.revision+1});assert.equal(room.snapshot().ownerSpeech,undefined);
-  say(owner,'잠시 뒤에 봐요');room.remove(owner);assert.equal(room.snapshot(true).ownerSpeech.text,undefined);
+  say(owner,'또봐');room.remove(owner);assert.equal(room.snapshot(true).ownerSpeech.text,undefined);
   room.join(owner);assert.equal(room.snapshot(true).ownerSpeech.text,undefined);
 });
 test('Korean and emoji use a bounded single line, preserve literal markup, and reject invisible-only or forged objects',()=>{
-  assert.equal(readSpeech('  안녕\n  팹! 👋 ').text,'안녕 팹! 👋');
-  assert.equal(readSpeech('<b>안녕</b>').text,'<b>안녕</b>');
+  assert.equal(readSpeech('  안\n  녕 ').text,'안 녕');
+  assert.equal(readSpeech('<b>').text,'<b>');
   for(const character of ['팹','🍀','🧑🏽‍🚀','🇰🇷','❤️','가'.normalize('NFD')]){
-    assert.equal(readSpeech(character.repeat(20)).length,20);
-    assert.equal(readSpeech(character.repeat(20)).ok,true);assert.equal(readSpeech(character.repeat(21)).ok,false);
+    assert.equal(readSpeech(character.repeat(3)).length,3);
+    assert.equal(readSpeech(character.repeat(3)).ok,true);assert.equal(readSpeech(character.repeat(4)).ok,false);
   }
   for(const v of [null,{},' \n ','\u200b\u200d','ab'.repeat(300)])assert.equal(readSpeech(v).ok,false);
 });
@@ -61,12 +62,12 @@ test('room speech uses each actual session and updates only that speaker, regard
   assert.equal(speak(visitor,'아직 입장 전').ok,false);
   enter(visitor);room.players.get(visitor).role='safety-orange';
   const profile=room.profile(visitor),world=room.worldEvents.checkpoint();
-  assert.equal(speak(owner,'같이 가요').ok,true);advance(4000);
+  assert.equal(speak(owner,'가자!').ok,true);advance(4000);
   assert.equal(speak(visitor,'네').ok,true);assert.equal(speak(visitor,'출발!').ok,true);
-  assert.equal(speak(visitor,'가'.repeat(21)).ok,false);assert.equal(speak(owner,'가'.repeat(21)).ok,false);
+  assert.equal(speak(visitor,'가'.repeat(4)).ok,false);assert.equal(speak(owner,'가'.repeat(4)).ok,false);
   const next=room.snapshot(true);
-  assert.deepEqual(next.speech.bubbles.map(b=>[b.speaker,b.text]),[[owner,'같이 가요'],[visitor,'출발!']]);
-  assert.equal(next.ownerSpeech.text,'같이 가요');assert.deepEqual(room.snapshot().speech,next.speech);
+  assert.deepEqual(next.speech.bubbles.map(b=>[b.speaker,b.text]),[[owner,'가자!'],[visitor,'출발!']]);
+  assert.equal(next.ownerSpeech.text,'가자!');assert.deepEqual(room.snapshot().speech,next.speech);
   assert.equal(room.snapshot().speech,undefined);advance(4000);
   const firstExpired=room.snapshot();
   assert.deepEqual(firstExpired.speech.bubbles.map(b=>b.speaker),[visitor]);assert.equal(firstExpired.ownerSpeech.text,undefined);
@@ -79,9 +80,9 @@ test('ordinary accounts can speak without a configured operator and HTTP merging
   const peer=new HttpRoomPeer(),send=()=>peer.send(JSON.stringify(room.snapshot()));
   assert.deepEqual(room.command(owner,'say',{text:'첫 말'}),{ok:true});send();
   assert.deepEqual(room.command(visitor,'say',{text:'같이!'}),{ok:true});send();send();
-  room.command(owner,'say',{text:'다음 말'});send();
+  room.command(owner,'say',{text:'다음말'});send();
   const [cursor,raw]=peer.delivery().messages[0],first=JSON.parse(raw);
-  assert.deepEqual(first.speech.bubbles.map(b=>b.text),['다음 말','같이!']);assert.equal(first.ownerSpeech,undefined);
+  assert.deepEqual(first.speech.bubbles.map(b=>b.text),['다음말','같이!']);assert.equal(first.ownerSpeech,undefined);
   peer.acknowledge(cursor);advance(SPEECH_DURATION_MS);send();send();
   assert.deepEqual(JSON.parse(peer.delivery().messages[0][1]).speech.bubbles,[]);
 });

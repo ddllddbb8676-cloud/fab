@@ -1,8 +1,8 @@
-import { PROTOCOL } from './shared-protocol.js?v=901f3801cc18';
-import {WELCOME_TIMEOUT_MS} from './room-connection.js?v=901f3801cc18';
-import {createRoomChannel} from './room-channel.js?v=901f3801cc18';
-export {multiplayerConfiguration} from './room-config.js?v=901f3801cc18';
-export {WELCOME_TIMEOUT_MS} from './room-connection.js?v=901f3801cc18';
+import { PROTOCOL } from './shared-protocol.js?v=3b5478afa86e';
+import {WELCOME_TIMEOUT_MS} from './room-connection.js?v=3b5478afa86e';
+import {createRoomChannel} from './room-channel.js?v=3b5478afa86e';
+export {multiplayerConfiguration} from './room-config.js?v=3b5478afa86e';
+export {WELCOME_TIMEOUT_MS} from './room-connection.js?v=3b5478afa86e';
 
 export function createMultiplayer({config,prepared=null,getPose,onWelcome,onFrame,onRoster,onStatus,onError,onCatch,onWallet,onNickname,onTitles}) {
   let socket=null,status='connecting',id=null,seq=0,retry=0,closed=false,suspended=false,lastPose='',lastSent=0,connection=0,retryTimer=null,handshakeTimer=null;

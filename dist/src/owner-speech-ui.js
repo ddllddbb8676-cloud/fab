@@ -1,4 +1,4 @@
-import {readSpeech, SPEECH_DURATION_MS, SPEECH_LIMIT} from './owner-speech.js?v=901f3801cc18';
+import {readSpeech, SPEECH_DURATION_MS, SPEECH_LIMIT} from './owner-speech.js?v=3b5478afa86e';
 
 export function createSpeechComposer({button, menuButton, command, canOpen, onToggle, toast, doc=document}) {
   let allowed=false, dialog, input, counter, submit, status, opener, composing=false, pending=false, generation=0;
@@ -22,7 +22,7 @@ export function createSpeechComposer({button, menuButton, command, canOpen, onTo
     dialog=doc.createElement('dialog');
     dialog.className='speech-dialog';
     dialog.setAttribute('aria-labelledby','speech-heading');
-    dialog.innerHTML='<form><h2 id="speech-heading">말풍선 보내기</h2><p id="speech-help">내 캐릭터 위에 8초 동안 보여요.</p><label for="speech-input">내용</label><input id="speech-input" type="text" maxlength="512" autocomplete="off" enterkeyhint="send" aria-describedby="speech-help speech-count"><div class="speech-feedback"><span role="status"></span><small id="speech-count"></small></div><div class="speech-actions"><button type="button">닫기</button><button type="submit">보내기</button></div></form>';
+    dialog.innerHTML=`<form><h2 id="speech-heading">말풍선 보내기</h2><p id="speech-help">최대 ${SPEECH_LIMIT}자 · 내 캐릭터 위에 8초 동안 보여요.</p><label for="speech-input">내용</label><input id="speech-input" type="text" maxlength="512" autocomplete="off" enterkeyhint="send" aria-describedby="speech-help speech-count"><div class="speech-feedback"><span role="status"></span><small id="speech-count"></small></div><div class="speech-actions"><button type="button">닫기</button><button type="submit">보내기</button></div></form>`;
     doc.body.append(dialog);
     input=dialog.querySelector('input');
     counter=dialog.querySelector('small');
