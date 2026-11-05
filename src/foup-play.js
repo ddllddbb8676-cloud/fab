@@ -1,5 +1,6 @@
 import { isBlocked, machines, bays, SEATED_FOUP_Y } from './layout.js';
 import {entranceBounds} from './entrance-layout.js';
+import {CART_HOMES,cartCargoPose,cartFits,cartPoint} from './cart-layout.js';
 import {stockers,stockerById,stockerBounds,stockerSlot,stockerRecordPose,STOCKER_CAPACITY,STOCKER_TRANSFER_SECONDS,STOCKER_OUT_CUE_AT} from './stocker-layout.js';
 const stockModes=new Set(['stored','stocking','retrieving','stocker-out']);
 // Accept the retired units only while reading older saved worlds.
@@ -32,9 +33,11 @@ export function supportHeight(x, z) {
 export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () => {}, showOriginal = () => {}, isDestroyed = () => false, onImpact = () => {}, onShatter = () => {}, onChange = () => {}, seedStockers=false, canSupplyStocker=()=>true, canPickup=()=>true, onStockerOut=()=>{} }) {
   const byPort = new Map(ports.map(p => [p.id, p])), records = new Map(), occupancy = new Map();
   const hands = new Map();
+  const carts=new Map();
   let stockersSeeded=false;
   function reset() {
     records.clear();occupancy.clear();hands.clear();
+    carts.clear();for(const home of CART_HOMES)carts.set(home.id,{...home,driver:null,riders:[null,null]});
     stockersSeeded=false;
     for (const id of initialPortIds) {
     const p = byPort.get(id); if (!p) continue;
@@ -106,20 +109,34 @@ export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () 
     const record = { id, mode: portId ? 'port' : 'ground', portId, homePortId: portId, breakSeq: 0, original: false, ...pose };
     records.set(id, record); if (portId) occupancy.set(portId, id); onChange(); return record;
   }
-  function pickup(id, owner = 'player') {
+  function pickup(id, owner = 'player', fromCart=false) {
     const record = records.get(id);
     if(record?.gold&&owner.startsWith('resident:'))return false;
-    if (hands.has(owner) || !record || !['port', 'ground','stocker-out'].includes(record.mode) || !canPickup(record,owner)) return false;
+    if (hands.has(owner) || !record || !(['port', 'ground','stocker-out'].includes(record.mode)||fromCart&&record.mode==='cart') || !canPickup(record,owner)) return false;
     if (record.portId && atPort(record.portId) !== record) return false;
     const sourceStocker=record.mode==='stocker-out'?stockerById.get(record.stockerId):null;
     if (record.original) { hideOriginal(record.portId); record.original = false; }
     if (record.portId) occupancy.delete(record.portId);
     record.homePortId ??= record.portId;
     delete record.stockerId;delete record.stockSlot;delete record.stockAge;delete record.stockCue;
+    delete record.cartId;delete record.cartSlot;
     record.portId = null; record.mode = 'carried'; record.owner = owner; hands.set(owner, id);
     if(sourceStocker)refillStocker(sourceStocker);
     onChange(record);return true;
   }
+  function loadCart(cartId,slot,owner,expectedId){
+    const c=carts.get(cartId),r=records.get(hands.get(owner));
+    if(!c||!r||r.id!==expectedId||!Number.isInteger(slot)||slot<0||slot>3||c.riders[Math.floor(slot/2)]||cartItems(cartId).some(r=>r.cartSlot===slot))return false;
+    hands.delete(owner);delete r.owner;
+    Object.assign(r,{mode:'cart',portId:null,cartId,cartSlot:slot,shatter:false},cartCargoPose(c,slot));
+    onChange(r);return true;
+  }
+  function takeCart(cartId,slot,owner,expectedId){
+    const r=cartItems(cartId).find(r=>r.cartSlot===slot);
+    return Boolean(r&&r.id===expectedId&&pickup(r.id,owner,true));
+  }
+  function cartItems(cartId){return [...records.values()].filter(r=>r.mode==='cart'&&r.cartId===cartId);}
+  function moveCart(c){for(const r of cartItems(c.id))Object.assign(r,cartCargoPose(c,r.cartSlot));}
   function place(portId, owner = 'player') {
     const record = records.get(hands.get(owner)), p = byPort.get(portId);
     if (!record || !p || occupancy.has(portId) || isDestroyed(p.machineId)) return false;
@@ -129,6 +146,7 @@ export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () 
   function launch(record, pose, velocity, { shatter = false } = {}) {
     if (!record || !records.has(record.id) || ['broken','cleared'].includes(record.mode)) return false;
     if (record.original) { hideOriginal(record.portId); record.original = false; }
+    delete record.cartId;delete record.cartSlot;
     if (record.portId) occupancy.delete(record.portId);
     if (record.owner) hands.delete(record.owner); delete record.owner;
     Object.assign(record, pose, { mode: 'flying', portId: null, vx: velocity.x, vy: velocity.y, vz: velocity.z, bounce: 0, shatter }); onChange(); return true;
@@ -189,16 +207,22 @@ export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () 
     const rounded=n=>Math.round(n*1000)/1000;
     // Keep the original v1 rows readable by the pre-stocker release. On rollback
     // these SAME FOUPs safely return to the floor apron, not invalid new modes.
-    const rows=[...records.values()].filter(r=>!r.original),entries=[];
+    const rows=[...records.values()].filter(r=>!r.original),entries=[],cartEntries=[];
     const result={version:1,records:rows.map(r=>{
       let mode=r.mode,p=r;
       if(stockModes.has(mode)){
         entries.push([r.id,r.stockerId,mode,r.stockSlot]);
         p={...stockerById.get(r.stockerId).ports[1].approach,y:.225,yaw:r.yaw};mode='ground';
       }
+      if(mode==='cart'){
+        cartEntries.push([r.id,r.cartId,r.cartSlot]);
+        const c=carts.get(r.cartId),spot=floorSpot(cartPoint(c,r.cartSlot%2?.95:-.95,0,0),.24)??{x:c.x,z:c.z};
+        p={...spot,y:.225,yaw:r.yaw};mode='ground';
+      }
       return [r.id,mode,r.portId??null,rounded(p.x),rounded(p.y),rounded(p.z),rounded(p.yaw||0),r.breakSeq||0,Boolean(r.shatter),r.homePortId??null];
     })};
     if(stockersSeeded||entries.length)result.stockers={version:1,initialized:true,entries};
+    result.carts={version:1,positions:[...carts.values()].map(c=>[c.id,rounded(c.x),rounded(c.z),rounded(c.yaw)]),entries:cartEntries};
     const golden=rows.filter(r=>r.gold).map(r=>[r.id,r.gold.eventId,r.gold.expiresAt,Boolean(r.gold.throwPaid)]);
     if(golden.length)result.golden={version:1,entries:golden};
     return result;
@@ -224,6 +248,22 @@ export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () 
       }
     }
     const gold=saved.golden;
+    const cart=saved.carts;
+    if(cart!==undefined){
+      if(cart?.version!==1||!Array.isArray(cart.positions)||!cart.positions.length||cart.positions.length>CART_HOMES.length||!Array.isArray(cart.entries)||cart.entries.length>CART_HOMES.length*4)throw Error('Invalid cart checkpoint');
+      const known=new Set(CART_HOMES.map(c=>c.id)),positions=new Set();
+      for(const row of cart.positions){
+        if(!Array.isArray(row))throw Error('Invalid cart position');
+        const [id,x,z,yaw]=row;
+        if(!known.has(id)||positions.has(id)||![x,z,yaw].every(Number.isFinite)||Math.abs(yaw)>1e5||!cartFits({x,z,yaw},isBlocked,.115))throw Error('Invalid cart position');
+        positions.add(id);
+      }
+      const used=new Set(),cells=new Set(),stored=new Set(stock?.entries.map(row=>row[0])??[]);
+      for(const row of cart.entries){
+        if(!Array.isArray(row)||!seen.has(row[0])||used.has(row[0])||stored.has(row[0])||!positions.has(row[1])||!Number.isInteger(row[2])||row[2]<0||row[2]>3||cells.has(`${row[1]}:${row[2]}`)||saved.records.find(r=>r[0]===row[0])?.[1]!=='ground')throw Error('Invalid cart cargo');
+        used.add(row[0]);cells.add(`${row[1]}:${row[2]}`);
+      }
+    }
     if(gold!==undefined){
       if(gold?.version!==1||!Array.isArray(gold.entries)||gold.entries.length>20)throw Error('Invalid golden checkpoint');
       const used=new Set();for(const [id,eventId,expiresAt,paid] of gold.entries){
@@ -233,6 +273,10 @@ export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () 
     reset();
     const incoming=saved.records.map(([id,mode,portId,x,y,z,yaw,breakSeq,shatter,homePortId])=>({id,mode,portId,x,y,z,yaw,breakSeq,shatter,homePortId,damageAge:2,cleaner:null,cleanProgress:0,refillIn:FOUP_RESTOCK_SECONDS}));
     synchronize(incoming,null,true);
+    if(cart){
+      for(const [id,x,z,yaw]of cart.positions)Object.assign(carts.get(id),{x,z,yaw});
+      for(const [rid,cartId,cartSlot]of cart.entries)Object.assign(records.get(rid),{mode:'cart',cartId,cartSlot},cartCargoPose(carts.get(cartId),cartSlot));
+    }
     for(const [id,eventId,expiresAt,throwPaid] of gold?.entries??[])records.get(id).gold={eventId,expiresAt,throwPaid};
     if(stock){
       stockersSeeded=true;
@@ -313,7 +357,7 @@ export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () 
     }
   }
   function interpolate(dt) {const f=1-Math.exp(-dt*16);for(const r of records.values()){if(r.goal){for(const k of ['x','y','z'])r[k]+=(r.goal[k]-r[k])*f;r.yaw=r.goal.yaw;}if(r.mode==='broken')r.damageAge=Math.min(2,(r.damageAge||0)+dt);if(['stocking','retrieving'].includes(r.mode)){r.stockAge=Math.min(STOCKER_TRANSFER_SECONDS,(r.stockAge||0)+Math.max(0,dt));Object.assign(r,stockerRecordPose(r));}}}
-  return { records, atPort, adopt, pickup, place, launch, step, reset, synchronize, interpolate, checkpoint, restore, beginCleanup, cancelCleanup, finishCleanup,stockerState,stockerPut,stockerGet,initializeStockers,spawnGolden,expireGolden,consumeGolden,notifyChange:onChange, occupied: id => occupancy.has(id),
+  return { records,carts,cartItems,loadCart,takeCart,moveCart, atPort, adopt, pickup:(id,owner)=>pickup(id,owner), place, launch, step, reset, synchronize, interpolate, checkpoint, restore, beginCleanup, cancelCleanup, finishCleanup,stockerState,stockerPut,stockerGet,initializeStockers,spawnGolden,expireGolden,consumeGolden,notifyChange:onChange, occupied: id => occupancy.has(id),
     getCarried: owner => records.get(hands.get(owner)) ?? null,
     get carried() { return records.get(hands.get('player')) ?? null; },
     get state() { return { carriedId: hands.get('player') ?? null, managed: records.size, moved: [...records.values()].filter(r => !r.original).map(r => ({ id: r.id, mode: r.mode, owner: r.owner, portId: r.portId, x: r.x, y: r.y, z: r.z })) }; }

@@ -1,16 +1,16 @@
-import {createAvatarAppearance} from './avatar-appearance.js?v=85d42af6a700';
-import {suitColor} from './cosmetics-catalog.js?v=85d42af6a700';
-import {isSafety} from './safety-team.js?v=85d42af6a700';
-import { createAvatar } from './avatar.js?v=85d42af6a700';
-import { createVisitorBadge } from './visitor-name.js?v=85d42af6a700';
-import { getEmoApproach } from './emo-interaction.js?v=85d42af6a700';
-import { machines } from './layout.js?v=85d42af6a700';
-import { safetyColor, isSuitMesh } from './safety-team.js?v=85d42af6a700';
-import {createEmoteView} from './emote-view.js?v=85d42af6a700';
-import {npcDestructionTitle} from './destruction-titles.js?v=85d42af6a700';
+import {createAvatarAppearance} from './avatar-appearance.js?v=f76ad48afa43';
+import {suitColor} from './cosmetics-catalog.js?v=f76ad48afa43';
+import {isSafety} from './safety-team.js?v=f76ad48afa43';
+import { createAvatar } from './avatar.js?v=f76ad48afa43';
+import { createVisitorBadge } from './visitor-name.js?v=f76ad48afa43';
+import { getEmoApproach } from './emo-interaction.js?v=f76ad48afa43';
+import { machines } from './layout.js?v=f76ad48afa43';
+import { safetyColor, isSuitMesh } from './safety-team.js?v=f76ad48afa43';
+import {createEmoteView} from './emote-view.js?v=f76ad48afa43';
+import {npcDestructionTitle} from './destruction-titles.js?v=f76ad48afa43';
 
 // A shared pool of articulated bodies; distant visitors use two tiny instances.
-export function createRemotePeople({THREE,scene,store,fleet=null,maxDetailed=40}) {
+export function createRemotePeople({THREE,scene,store,fleet=null,maxDetailed=40,cartSeat=()=>null,cartGrip=()=>null}) {
   // Only the server's welcome privilege enables this local viewing aid.
   // Neither display names, titles nor safety-team roles establish ownership.
   let identifyNpcs=false;
@@ -32,16 +32,19 @@ export function createRemotePeople({THREE,scene,store,fleet=null,maxDetailed=40}
   function setViewerPrivileges(privileges){identifyNpcs=privileges?.unlimitedChips===true;for(const slot of pool)updateNpcMarker(slot);}
   function synchronize(rows) {
     const live=new Set(rows.map(r=>r.id));for(const id of actors.keys())if(!live.has(id))actors.delete(id);
-    for(const row of rows){let a=actors.get(row.id);if(!a){a={...row,...roster.get(row.id)};actors.set(row.id,a);}a.goal=row;Object.assign(a,{role:row.role,phase:row.phase,posture:row.posture,targetId:row.targetId,vehicleId:row.vehicleId,carrying:row.carrying,hidden:row.hidden,titleId:row.titleId??npcDestructionTitle(row.id,row.role)?.id??''});}
+    for(const row of rows){let a=actors.get(row.id);if(!a){a={...row,...roster.get(row.id)};actors.set(row.id,a);}if(a.phase!==row.phase&&row.phase?.startsWith('cart-'))a.time=row.time;a.goal=row;Object.assign(a,{role:row.role,phase:row.phase,posture:row.posture,targetId:row.targetId,vehicleId:row.vehicleId,carrying:row.carrying,hidden:row.hidden,caughtLeft:row.caughtLeft||0,catchLeft:row.catchLeft||0,titleId:row.titleId??npcDestructionTitle(row.id,row.role)?.id??''});}
   }
   function update(dt,camera,overview=false) {
     const f=1-Math.exp(-dt*14),visible=[];
     for(const a of actors.values()) {
+      a.caughtLeft=Math.max(0,(a.caughtLeft||0)-dt);a.catchLeft=Math.max(0,(a.catchLeft||0)-dt);
       if(a.goal){for(const k of ['x','y','z','speed','time'])a[k]+=(a.goal[k]-a[k])*f;a.heading+=Math.atan2(Math.sin(a.goal.heading-a.heading),Math.cos(a.goal.heading-a.heading))*f;}
       const car=a.phase==='riding'&&fleet?.vehicles[a.vehicleId]?.state.car;
       if(car)Object.assign(a,{x:car.x,y:2.16,z:car.z,heading:car.yaw,speed:0});
+      const seat=cartSeat(a.id);if(seat)Object.assign(a,seat);
       a.distance=Math.hypot(a.x-camera.position.x,a.z-camera.position.z);if(!a.hidden&&(overview||a.distance<95))visible.push(a);
-      const held=store.getCarried(a.id);if(held)Object.assign(held,{x:a.x+Math.sin(a.heading)*.34,y:a.y+(a.posture==='sit'?.48:a.posture==='lie'?.62:.82),z:a.z+Math.cos(a.heading)*.34,yaw:a.heading+Math.PI});
+      const lift=a.phase==='cart-unload'?Math.min(1,a.time/.8):0;
+      const held=store.getCarried(a.id);if(held)Object.assign(held,{x:a.x+Math.sin(a.heading)*(.34+.16*lift),y:a.y+(a.posture==='sit'?.48:a.posture==='lie'?.62:.82)+.70*lift,z:a.z+Math.cos(a.heading)*(.34+.16*lift),yaw:a.heading+Math.PI});
     }
     visible.sort((a,b)=>a.distance-b.distance);const detailed=visible.filter(a=>!overview&&a.distance<32).slice(0,maxDetailed);
     while(pool.length<detailed.length)createSlot();
@@ -63,7 +66,7 @@ export function createRemotePeople({THREE,scene,store,fleet=null,maxDetailed=40}
       slot.badge.setTitle(a.titleId);
       slot.clock+=dt;const near=a.distance<14;
       if(slot.clock>=(near?1/30:1/15)){
-        const avatar=slot.avatar;avatar.root.position.set(a.x,a.y,a.z);
+        const avatar=slot.avatar;avatar.root.position.set(a.x,a.y,a.z);avatar.root.userData.cartGrip=cartGrip(a.id);avatar.root.userData.caughtLeft=a.caughtLeft;avatar.root.userData.catchLeft=a.catchLeft;avatar.root.userData.cartUnload=a.phase==='cart-unload'?Math.min(1,a.time/.8):a.phase==='cart-stow'?Math.max(0,1-a.time/.5):0;
         const working=a.phase==='repair',pressing=a.phase==='press',plan=Number.isInteger(a.targetId)?getEmoApproach(machines[a.targetId]):null;
         const target=plan&&(working?{...plan.button,y:.96+.16*Math.sin(a.time*15),z:plan.button.z+plan.button.sign*.09}:pressing?plan.button:null);
         avatar.update(Math.min(.1,slot.clock),{speed:a.speed,heading:a.heading,posture:a.posture,hanging:a.phase==='riding'||a.role==='rider',carrying:a.carrying,snap:slot.resetPose,

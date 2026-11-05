@@ -59,6 +59,11 @@ export function createResidentSimulation({ fleet, store, destruction, detachCarg
   function yieldMachine(id) {
     for (const actor of people) if (actor.targetId === id) { release(actor); actor.wait = 4; }
   }
+  function reserveCart(actor){
+    if(!people.includes(actor)||actor.cartTask||actor.penalty||actor.caughtLeft>0||actor.vehicleId!=null||store.getCarried(actor.id)||!['idle','patrol','rest'].includes(actor.phase))return false;
+    release(actor);actor.cartTask=true;actor.posture='stand';actor.y=0;actor.speed=0;return true;
+  }
+  function releaseCart(actor){delete actor.cartTask;release(actor);actor.wait=3;actor.speed=0;}
   function go(actor, destination, phase) {
     if(['caught-lap','patrol'].includes(phase))destination=npcDestination(actor,destination,[...people,...getNeighbors()]);
     const path = findWalkPath(actor, destination);
@@ -71,7 +76,7 @@ export function createResidentSimulation({ fleet, store, destruction, detachCarg
     if (!go(actor, destination, 'patrol')) actor.wait = 2;
   }
   function beginSafetyLap(actor) {
-    if(!people.includes(actor)||actor.penalty||elapsed<(actor.safeUntil||0)||['repair','riding','climb'].includes(actor.phase))return false;
+    if(!people.includes(actor)||actor.cartTask||actor.penalty||elapsed<(actor.safeUntil||0)||['repair','riding','climb'].includes(actor.phase))return false;
     const home={x:actor.x,z:actor.z},posture=actor.posture,heading=actor.heading;
     const bay=bays.reduce((best,b)=>distance(actor,b)<distance(actor,best)?b:best,bays[0]);
     const row=bay.machines.filter(m=>m.sign===1);
@@ -179,6 +184,7 @@ export function createResidentSimulation({ fleet, store, destruction, detachCarg
     for(const [id,until]of recentRepairs)if(elapsed>=until)recentRepairs.delete(id);
     const neighbors=[...people,...getNeighbors()];
     for (const actor of people) {
+      if(actor.cartTask)continue;
       actor.time += dt; actor.wait = Math.max(0, actor.wait - dt); actor.speed = 0;
       if (actor.role === 'rider') {
         const car = fleet.vehicles.find(v => v.id === actor.vehicleId).state.car;
@@ -246,9 +252,9 @@ export function createResidentSimulation({ fleet, store, destruction, detachCarg
     }
     // At most one path search per rendered frame, regardless of population.
     const next=people[planner++ % people.length];
-    if(!rerouteNpc(next,neighbors,elapsed))think(next);
+    if(!next.cartTask&&!rerouteNpc(next,neighbors,elapsed))think(next);
   }
-  return { people, update, yieldMachine, beginSafetyLap,
+  return { people, update, yieldMachine, beginSafetyLap, reserveCart, releaseCart,
     get state() { return { total: people.length, simulated: true, roles: { ...RESIDENT_ROLES }, actions: { ...totals },
       people: people.map(p => ({ id:p.id, name:p.name, role:p.role, phase:p.phase, posture:p.posture, x:p.x,y:p.y,z:p.z,targetId:p.targetId,vehicleId:p.vehicleId,actions:p.actions,penalty:p.penalty||0 })) }; }
   };

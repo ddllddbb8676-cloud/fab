@@ -1,18 +1,18 @@
-import { machines, bays, ports, BAY_CENTERS } from './layout.js?v=85d42af6a700';
-import { NPC_WALK_SPEED, NPC_REPAIR_SPEED } from './locomotion.js?v=85d42af6a700';
-import { findWalkPath } from './walking.js?v=85d42af6a700';
-import {stepNpc,rerouteNpc,npcDestination} from './npc-navigation.js?v=85d42af6a700';
-import { getEmoApproach } from './emo-interaction.js?v=85d42af6a700';
-import { findRestHeading } from './posture.js?v=85d42af6a700';
-import { createVisitorName, createVisitorBadge } from './visitor-name.js?v=85d42af6a700';
-import {npcDestructionTitle} from './destruction-titles.js?v=85d42af6a700';
-import { createAvatar } from './avatar.js?v=85d42af6a700';
-import {createAvatarAppearance} from './avatar-appearance.js?v=85d42af6a700';
-import {npcOutfit} from './npc-outfits.js?v=85d42af6a700';
-import { floorSpot } from './foup-play.js?v=85d42af6a700';
-import { reservedPortIds } from './network-transport.js?v=85d42af6a700';
+import { machines, bays, ports, BAY_CENTERS } from './layout.js?v=f76ad48afa43';
+import { NPC_WALK_SPEED, NPC_REPAIR_SPEED } from './locomotion.js?v=f76ad48afa43';
+import { findWalkPath } from './walking.js?v=f76ad48afa43';
+import {stepNpc,rerouteNpc,npcDestination} from './npc-navigation.js?v=f76ad48afa43';
+import { getEmoApproach } from './emo-interaction.js?v=f76ad48afa43';
+import { findRestHeading } from './posture.js?v=f76ad48afa43';
+import { createVisitorName, createVisitorBadge } from './visitor-name.js?v=f76ad48afa43';
+import {npcDestructionTitle} from './destruction-titles.js?v=f76ad48afa43';
+import { createAvatar } from './avatar.js?v=f76ad48afa43';
+import {createAvatarAppearance} from './avatar-appearance.js?v=f76ad48afa43';
+import {npcOutfit} from './npc-outfits.js?v=f76ad48afa43';
+import { floorSpot } from './foup-play.js?v=f76ad48afa43';
+import { reservedPortIds } from './network-transport.js?v=f76ad48afa43';
 
-import { RESIDENT_ROLES } from './room-population.js?v=85d42af6a700';
+import { RESIDENT_ROLES } from './room-population.js?v=f76ad48afa43';
 export { RESIDENT_ROLES };
 export const REPAIR_STOCK=Object.freeze({minimum:50,target:60,repairGraceSeconds:45});
 const distance = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -59,6 +59,11 @@ export function createResidentSimulation({ fleet, store, destruction, detachCarg
   function yieldMachine(id) {
     for (const actor of people) if (actor.targetId === id) { release(actor); actor.wait = 4; }
   }
+  function reserveCart(actor){
+    if(!people.includes(actor)||actor.cartTask||actor.penalty||actor.caughtLeft>0||actor.vehicleId!=null||store.getCarried(actor.id)||!['idle','patrol','rest'].includes(actor.phase))return false;
+    release(actor);actor.cartTask=true;actor.posture='stand';actor.y=0;actor.speed=0;return true;
+  }
+  function releaseCart(actor){delete actor.cartTask;release(actor);actor.wait=3;actor.speed=0;}
   function go(actor, destination, phase) {
     if(['caught-lap','patrol'].includes(phase))destination=npcDestination(actor,destination,[...people,...getNeighbors()]);
     const path = findWalkPath(actor, destination);
@@ -71,7 +76,7 @@ export function createResidentSimulation({ fleet, store, destruction, detachCarg
     if (!go(actor, destination, 'patrol')) actor.wait = 2;
   }
   function beginSafetyLap(actor) {
-    if(!people.includes(actor)||actor.penalty||elapsed<(actor.safeUntil||0)||['repair','riding','climb'].includes(actor.phase))return false;
+    if(!people.includes(actor)||actor.cartTask||actor.penalty||elapsed<(actor.safeUntil||0)||['repair','riding','climb'].includes(actor.phase))return false;
     const home={x:actor.x,z:actor.z},posture=actor.posture,heading=actor.heading;
     const bay=bays.reduce((best,b)=>distance(actor,b)<distance(actor,best)?b:best,bays[0]);
     const row=bay.machines.filter(m=>m.sign===1);
@@ -179,6 +184,7 @@ export function createResidentSimulation({ fleet, store, destruction, detachCarg
     for(const [id,until]of recentRepairs)if(elapsed>=until)recentRepairs.delete(id);
     const neighbors=[...people,...getNeighbors()];
     for (const actor of people) {
+      if(actor.cartTask)continue;
       actor.time += dt; actor.wait = Math.max(0, actor.wait - dt); actor.speed = 0;
       if (actor.role === 'rider') {
         const car = fleet.vehicles.find(v => v.id === actor.vehicleId).state.car;
@@ -246,9 +252,9 @@ export function createResidentSimulation({ fleet, store, destruction, detachCarg
     }
     // At most one path search per rendered frame, regardless of population.
     const next=people[planner++ % people.length];
-    if(!rerouteNpc(next,neighbors,elapsed))think(next);
+    if(!next.cartTask&&!rerouteNpc(next,neighbors,elapsed))think(next);
   }
-  return { people, update, yieldMachine, beginSafetyLap,
+  return { people, update, yieldMachine, beginSafetyLap, reserveCart, releaseCart,
     get state() { return { total: people.length, simulated: true, roles: { ...RESIDENT_ROLES }, actions: { ...totals },
       people: people.map(p => ({ id:p.id, name:p.name, role:p.role, phase:p.phase, posture:p.posture, x:p.x,y:p.y,z:p.z,targetId:p.targetId,vehicleId:p.vehicleId,actions:p.actions,penalty:p.penalty||0 })) }; }
   };

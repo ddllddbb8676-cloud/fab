@@ -195,9 +195,13 @@ export function createAvatar(THREE) {
     seated = approach(seated, posture === 'sit' && restReady ? 1 : 0);
     reclining = approach(reclining, posture === 'lie' && restReady ? 1 : 0);
     const sit = seated * seated * (3 - 2 * seated), lie = reclining * reclining * (3 - 2 * reclining);
+    const startled=Math.max(0,Math.min(1,(root.userData.caughtLeft||0)/1.15));
+    const flinch=startled>0?Math.sin(Math.PI*(1-startled))**.6:0;
+    const catching=Math.sin(Math.PI*Math.max(0,Math.min(1,(root.userData.catchLeft||0)/.65)));
     body.rotation.order = 'YXZ'; body.rotation.set(-Math.PI / 2 * lie, facing, 0, 'YXZ');
     const restShift = .72 * lie - .10 * sit;
     body.position.set(Math.sin(facing) * restShift, .26 * Math.sin(Math.PI / 2 * lie), Math.cos(facing) * restShift);
+    if(flinch>0)body.position.y+=flinch*.065;
     shadow.scale.set(1, 1 + 1.9 * lie, 1); shadow.rotation.y = facing;
     root.userData.resting = seated + reclining > .01;
     root.userData.posture = posture;
@@ -211,6 +215,7 @@ export function createAvatar(THREE) {
     const duck = Math.max(0, Math.min(1, crouch)) * .16;
     upper.position.set(wave * .002 * activity, bob - .37 * sit - duck, 0); upper.rotation.z = wave * .003 * activity;
     upper.rotation.x = cleaning ? .10+.035*Math.cos(cleanTime*8) : working ? .035 + .025 * Math.sin(repairTime * 15) : 0;
+    if(flinch>0){upper.rotation.x-=flinch*.12;upper.rotation.z+=Math.sin(startled*18)*flinch*.055;}
     if(cleaning){upper.rotation.z=sweep*.045;root.updateMatrixWorld(true);}
     for (const leg of legs) {
       const p = (phase + (leg.side === 1 ? .5 : 0)) % 1, stance = p < .6, q = stance ? p / .6 : (p - .6) / .4;
@@ -231,7 +236,18 @@ export function createAvatar(THREE) {
       if (sit > 0) { arm.elbow.lerp(reachElbow.set(arm.side * .20, .71, .10), sit); arm.wrist.lerp(reachWrist.set(arm.side * .17, .63, .24), sit); }
       if (working && arm !== rightArm) { arm.elbow.set(-.21, .72, .13); arm.wrist.set(-.17, .74, .24); }
       if (carrying) { arm.elbow.set(arm.side * .22, .69, .16); arm.wrist.set(arm.side * .23, .83, .34); }
+      const unloading=root.userData.cartUnload||0;
+      if(unloading>0){arm.elbow.lerp(reachElbow.set(arm.side*.25,1.02,.21),unloading);arm.wrist.lerp(reachWrist.set(arm.side*.23,1.31,.50),unloading);}
       if (hanging) { arm.shoulder.y = .95; arm.elbow.set(arm.side * .24, 1.27, .035); arm.wrist.set(arm.side * .20, 1.60, .015); }
+      if(catching>0&&arm===rightArm){arm.elbow.lerp(reachElbow.set(.23,.85,.2),catching);arm.wrist.lerp(reachWrist.set(.13,.97,.46),catching);}
+      if(flinch>0){arm.elbow.lerp(reachElbow.set(arm.side*.3,1.05,0),flinch);arm.wrist.lerp(reachWrist.set(arm.side*.29,1.43,.05),flinch);}
+      const grip=root.userData.cartGrip;
+      if(grip&&!working&&!cleaning&&!hanging){
+        root.updateMatrixWorld(true);
+        pressLocal.set(grip.x+Math.cos(grip.yaw)*arm.side*.20,grip.y,grip.z-Math.sin(grip.yaw)*arm.side*.20);
+        upper.worldToLocal(pressLocal);arm.wrist.copy(pressLocal);
+        arm.elbow.copy(arm.shoulder).lerp(arm.wrist,.5);arm.elbow.x+=arm.side*.07;
+      }
       if(cleaning){
         broomGrip.set(0,arm.side===1?.66:.94,0);broom.localToWorld(broomGrip);upper.worldToLocal(broomGrip);
         arm.wrist.copy(broomGrip);arm.elbow.copy(arm.shoulder).lerp(arm.wrist,.5);arm.elbow.x+=arm.side*.10;arm.elbow.z-=.025;
