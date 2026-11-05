@@ -1,19 +1,26 @@
 const minute=new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
 export function createEventControls(doc,{fetcher=globalThis.fetch,now=Date.now,newId=()=>crypto.randomUUID()}={}){
   const get=id=>doc.getElementById(id),bay=get('start-bay-event'),doubleBay=get('start-double-bay-event'),gold=get('start-golden-event'),status=get('event-status'),message=get('event-message');
+  const contest=get('start-contest-event');
   let state=null,busy=false,refreshing=false,request=null,offset=0,disposed=false;
   function paint(){
     const at=now()+offset,activeBay=state?.bay&&['preparing','active'].includes(state.bay.phase)&&state.bay.endsAt>at,activeGold=state?.golden&&state.golden.endsAt>at;
-    bay.disabled=busy||!state||Boolean(activeBay||activeGold)||state.nextGoldenAt-at<120000;
+    const match=state?.contest, activeContest=match&&['recruiting','active'].includes(match.phase)&&match.endsAt>at;
+    const unavailable=busy||!state||Boolean(activeBay||activeGold||activeContest);
+    bay.disabled=unavailable||state.nextGoldenAt-at<120000;
     doubleBay.disabled=bay.disabled;
-    gold.disabled=busy||!state||Boolean(activeBay||activeGold)||state.nextGoldenAt-at<600000;
+    gold.disabled=unavailable||state.nextGoldenAt-at<600000;
+    contest.disabled=unavailable||state.nextGoldenAt-at<210000;
     if(!state){status.textContent='이벤트 상태 확인 중';return;}
     const remaining=end=>Math.max(0,Math.ceil((end-at)/1000));
     if(activeBay)status.textContent=`${state.bay.bayLimit??1}개 베이 모드 · ${state.bay.clearedCount?state.bay.clearedCount+'개 성공 · ':''}${state.bay.bayId+1}번 BAY · ${state.bay.phase==='preparing'?'시작까지 '+remaining(state.bay.startsAt)+'초':'도전 중 · '+remaining(state.bay.endsAt)+'초 남음'}`;
     else if(activeGold)status.textContent=`황금 FOUP · ${state.golden.remaining}/${state.golden.total}개 · ${Math.ceil(remaining(state.golden.endsAt)/60)}분 남음`;
+    else if(activeContest)status.textContent=match.phase==='recruiting'?`흑백 풉 쟁탈전 · ${match.joined}명 참가 · 모집 ${remaining(match.startsAt)}초`:`흑팀 ${match.black} · 백팀 ${match.white} · ${remaining(match.endsAt)}초 남음`;
+    else if(match?.phase==='cancelled')status.textContent=match.reason;
+    else if(match?.phase==='finished')status.textContent=`쟁탈전 종료 · 흑팀 ${match.black} · 백팀 ${match.white}`;
     else status.textContent='진행 중인 이벤트 없음';
     get('event-next-golden').textContent='다음 정기 황금 FOUP · '+minute.format(state.nextGoldenAt)+' (한국 시간)';
-    get('event-window-note').textContent=!activeBay&&!activeGold&&state.nextGoldenAt-at<600000?'정기 황금 FOUP과 겹치는 이벤트는 시작할 수 없어요.':'';
+    get('event-window-note').textContent=!activeBay&&!activeGold&&!activeContest&&state.nextGoldenAt-at<600000?'정기 황금 FOUP과 겹치는 이벤트는 시작할 수 없어요.':'';
   }
   function render(next){
     if(!next||!Number.isFinite(next.serverNow)||!Number.isFinite(next.nextGoldenAt))throw Error('Invalid event status');
@@ -27,7 +34,8 @@ export function createEventControls(doc,{fetcher=globalThis.fetch,now=Date.now,n
     finally{clearTimeout(timer);refreshing=false;}
   }
   async function start(kind,bayCount=1){
-    if(busy||disposed||(kind==='bay'?(bayCount===2?doubleBay:bay):gold).disabled)return;
+    const button=kind==='bay'?(bayCount===2?doubleBay:bay):kind==='contest'?contest:gold;
+    if(busy||disposed||button.disabled)return;
     if(!request||request.kind!==kind||(request.bayCount??1)!==bayCount)request={kind,requestId:newId(),...(kind==='bay'?{bayCount}:{})};
     busy=true;paint();message.textContent='이벤트를 시작하고 있어요…';
     const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),8000);
@@ -36,11 +44,12 @@ export function createEventControls(doc,{fetcher=globalThis.fetch,now=Date.now,n
       const data=await r.json();if(data.worldEvents)render(data.worldEvents);
       if(!r.ok||!data.ok){if(r.status<500)request=null;message.textContent=data.message||'지금은 시작하지 못했어요.';return;}
       request=null;
-      message.textContent=data.replayed?'이미 접수된 시작 요청을 확인했어요.':kind==='bay'?`${data.event.bayId+1}번 BAY 예고 시작! ${bayCount}개 베이 모드 · 1분 뒤 도전해요.`:'황금 FOUP 찾기 시작! 10분 동안 20개를 찾아주세요.';
+      message.textContent=data.replayed?'이미 접수된 시작 요청을 확인했어요.':kind==='contest'?'흑백 풉 쟁탈전 모집 시작! 게임에서 참가 인원을 확인해 주세요.':kind==='bay'?`${data.event.bayId+1}번 BAY 예고 시작! ${bayCount}개 베이 모드 · 1분 뒤 도전해요.`:'황금 FOUP 찾기 시작! 10분 동안 20개를 찾아주세요.';
     }catch{message.textContent='응답이 늦어요. 다시 눌러도 같은 요청을 중복 실행하지 않아요.';}
     finally{clearTimeout(timer);busy=false;paint();}
   }
   bay.addEventListener('click',()=>start('bay',1));doubleBay.addEventListener('click',()=>start('bay',2));gold.addEventListener('click',()=>start('golden'));
+  contest.addEventListener('click',()=>start('contest'));
   paint();
   return {refresh,render,paint,dispose(){disposed=true;}};
 }

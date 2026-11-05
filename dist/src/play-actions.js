@@ -1,9 +1,9 @@
-import { machines, ports, TOOL_WIDTH, TOOL_FRONT, PORT_Z, VEHICLE_Y, SEATED_FOUP_Y, isBlocked } from './layout.js?v=f4d57efc026d';
-import { reservedPortIds } from './network-transport.js?v=f4d57efc026d';
-import { floorSpot, supportHeight, createFoupStore, createFoupRenderer, FOUP_CLEAN_SECONDS } from './foup-play.js?v=f4d57efc026d';
-import { createFoupDebris } from './foup-debris.js?v=f4d57efc026d';
-import {stockerPorts,stockers,stockerById,stockerPoint} from './stocker-layout.js?v=f4d57efc026d';
-import {canTraverseRuntimeObstacles} from './runtime-obstacles.js?v=f4d57efc026d';
+import { machines, ports, TOOL_WIDTH, TOOL_FRONT, PORT_Z, VEHICLE_Y, SEATED_FOUP_Y, isBlocked } from './layout.js?v=eeab61e402c0';
+import { reservedPortIds } from './network-transport.js?v=eeab61e402c0';
+import { floorSpot, supportHeight, createFoupStore, createFoupRenderer, FOUP_CLEAN_SECONDS } from './foup-play.js?v=eeab61e402c0';
+import { createFoupDebris } from './foup-debris.js?v=eeab61e402c0';
+import {stockerPorts,stockers,stockerById,stockerPoint} from './stocker-layout.js?v=eeab61e402c0';
+import {canTraverseRuntimeObstacles} from './runtime-obstacles.js?v=eeab61e402c0';
 
 const smooth = t => { const p = Math.max(0, Math.min(1, t)); return p * p * (3 - 2 * p); };
 export function boardingMachine(car) {
@@ -255,7 +255,7 @@ export function createPlayActions({ THREE, scene, materials, fleet, explorer, av
   }
   function throwFoup(drop = false) {
     const record = store.carried; if (!record || action || passengerId !== null) return false;
-    if(network){if(awaiting)return false;return remote('throw',{drop},()=>{explorer.state.carrying=Boolean(store.carried);toast(drop?'FOUP을 내려놓았어요':'FOUP을 던졌어요 · 깨진 잔해를 누르면 청소해요');});}
+    if(network){if(awaiting)return false;return remote('throw',{drop},result=>{explorer.state.carrying=Boolean(store.carried);toast(drop?'FOUP을 내려놓았어요':result.contestThrow?'풉을 던졌어요! 우리 원 안에 멈추면 득점이에요.':'FOUP을 던졌어요 · 깨진 잔해를 누르면 청소해요');});}
     const p = pose(), heading = p.heading;
     store.launch(record, { x: record.x, y: record.y, z: record.z, yaw: record.yaw }, { x: Math.sin(heading) * (drop ? .8 : 4.7), y: drop ? .2 : 3.1, z: Math.cos(heading) * (drop ? .8 : 4.7) }, {shatter:!drop});
     explorer.state.carrying = false; onCue(drop ? 'place' : 'throw'); toast(drop ? 'FOUP을 바닥에 내려놓았어요' : 'FOUP을 던졌어요'); return true;

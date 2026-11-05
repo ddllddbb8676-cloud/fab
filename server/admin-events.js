@@ -18,7 +18,7 @@ export async function readEventRequest(request){
     const value=JSON.parse(text+decoder.decode());
     if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).some(key=>!['kind','requestId','bayCount'].includes(key)))return null;
     if(Object.hasOwn(value,'bayCount')&&(value.kind!=='bay'||![1,2].includes(value.bayCount)))return null;
-    return ['bay','golden'].includes(value.kind)&&typeof value.requestId==='string'&&/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(value.requestId)?value:null;
+    return ['bay','golden','contest'].includes(value.kind)&&typeof value.requestId==='string'&&/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(value.requestId)?value:null;
   }catch{return null;}
   finally{clearTimeout(timer);if(!done)void reader.cancel().catch(()=>{});reader.releaseLock();}
 }

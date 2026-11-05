@@ -1,4 +1,6 @@
 import {bays} from '../src/layout.js';
+import {CONTEST_RULES} from '../src/foup-contest.js';
+import {createFoupContest} from './foup-contest.js';
 
 export const EVENT_RULES=Object.freeze({goldenHours:[8,12,16,20],goldenCount:20,goldenDuration:600000,bayPlayers:15,bayNotice:60000,bayDuration:60000,bayCooldown:7200000,bayReward:200,resultDuration:10000});
 const HOUR=3600000,DAY=24*HOUR,KST=9*HOUR;
@@ -13,9 +15,11 @@ export function nextGoldenSlot(at){
 
 // Wall-clock deadlines survive hibernation/restarts. Persist transitions only;
 // no new timer, storage read, or whole-fab path search is needed per frame.
-export function createWorldEvents({now=Date.now,random=Math.random,connected=()=>[],isDestroyed,prepareBay,assignSafety,spawnGolden,expireGolden,goldenRemaining,reward,onBayStart=()=>{},onChange=()=>{}}){
+export function createWorldEvents({now=Date.now,random=Math.random,connected=()=>[],isDestroyed,prepareBay,assignSafety,spawnGolden,expireGolden,goldenRemaining,reward,contestOptions={},onBayStart=()=>{},onChange=()=>{}}){
   let state={version:1,lastGoldenSlot:0,nextBayAt:0,bay:null,golden:null},reconcile=true,lastObservedAt=now();
-  const save=()=>onChange(structuredClone(state));
+  const checkpoint=()=>structuredClone({...state,...(contest.checkpoint()?{contest:contest.checkpoint()}:{})});
+  const save=()=>onChange(checkpoint());
+  const contest=createFoupContest({now,onChange:save,...contestOptions});
   const idsFor=id=>bays[id]?.machines.map(m=>m.id)??[];
   const bayIds=()=>state.bay?idsFor(state.bay.bayId):[];
   const liveBay=()=>state.bay&&['preparing','active'].includes(state.bay.phase);
@@ -42,7 +46,8 @@ export function createWorldEvents({now=Date.now,random=Math.random,connected=()=
   function remember(request,kind,event){
     if(!request)return;
     const receipt={requestId:request,kind,...(kind==='bay'?{bayCount:event.bayLimit??1}:{}),event:{id:event.id,bayId:event.bayId,startsAt:event.startsAt,endsAt:event.endsAt,...(kind==='bay'?{bayLimit:event.bayLimit??1}:{})}};
-    state.manualRequests=[...(state.manualRequests||[]),receipt].slice(-32);
+    const key=kind==='contest'?'contestRequests':'manualRequests';
+    state[key]=[...(state[key]||[]),receipt].slice(-32);
   }
   function beginBay(at,request,bayCount=1){
     const choices=bays.filter(bay=>bay.id!==state.bay?.bayId),bay=choices[Math.min(choices.length-1,Math.floor(random()*choices.length))];
@@ -62,6 +67,7 @@ export function createWorldEvents({now=Date.now,random=Math.random,connected=()=
     const at=now();lastObservedAt=at;
     if(reconcile){expireGolden(state.golden?.id??null,at);if(bayRunning())onBayStart();assignSafety(safetyBays());reconcile=false;}
     if(state.golden&&at>=state.golden.endsAt){expireGolden(null,at);state.golden=null;save();}
+    contest.tick(at);
     const slot=goldenSlot(at);
     if(slot!==null&&slot>state.lastGoldenSlot){
       state.lastGoldenSlot=slot;beginGolden(slot);
@@ -76,20 +82,22 @@ export function createWorldEvents({now=Date.now,random=Math.random,connected=()=
       else if(bayIds().every(isDestroyed))clearBay(at);
     }
     assignSafety(safetyBays());
-    if(!state.golden&&!liveBay()&&at>=state.nextBayAt&&nextGoldenSlot(at)>=at+EVENT_RULES.bayNotice+EVENT_RULES.bayDuration&&connected().length>=EVENT_RULES.bayPlayers){
+    if(!contest.live()&&!state.golden&&!liveBay()&&at>=state.nextBayAt&&nextGoldenSlot(at)>=at+EVENT_RULES.bayNotice+EVENT_RULES.bayDuration&&connected().length>=EVENT_RULES.bayPlayers){
       beginBay(at);
     }
   }
   function startManual(kind,requestId,bayCount=1){
-    if(!['bay','golden'].includes(kind)||![1,2].includes(bayCount)||kind==='golden'&&bayCount!==1||typeof requestId!=='string'||!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(requestId))return {ok:false,status:400,message:'이벤트 요청을 확인해 주세요.'};
-    const previous=state.manualRequests?.find(r=>r.requestId===requestId);
+    if(!['bay','golden','contest'].includes(kind)||![1,2].includes(bayCount)||kind!=='bay'&&bayCount!==1||typeof requestId!=='string'||!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(requestId))return {ok:false,status:400,message:'이벤트 요청을 확인해 주세요.'};
+    const previous=state.manualRequests?.find(r=>r.requestId===requestId)??state.contestRequests?.find(r=>r.requestId===requestId);
     if(previous)return previous.kind===kind&&(previous.bayCount??1)===bayCount?{ok:true,replayed:true,event:previous.event}:{ok:false,status:409,message:'이미 사용한 요청이에요. 다시 눌러 주세요.'};
     update();const at=now();
-    if(state.golden||liveBay())return {ok:false,status:409,message:'이미 진행 중인 이벤트가 있어요. 종료 후 시작해 주세요.'};
-    const needed=kind==='bay'?EVENT_RULES.bayNotice+EVENT_RULES.bayDuration:EVENT_RULES.goldenDuration;
-    if(nextGoldenSlot(at)<at+needed)return {ok:false,status:409,message:`정기 황금 FOUP까지 ${kind==='bay'?'2':'10'}분이 남지 않아 지금은 시작할 수 없어요.`};
-    if(kind==='bay')beginBay(at,requestId,bayCount);else beginGolden(at,requestId);
-    return {ok:true,replayed:false,event:state.manualRequests.at(-1).event};
+    if(state.golden||liveBay()||contest.live())return {ok:false,status:409,message:'이미 진행 중인 이벤트가 있어요. 종료 후 시작해 주세요.'};
+    const needed={bay:EVENT_RULES.bayNotice+EVENT_RULES.bayDuration,golden:EVENT_RULES.goldenDuration,contest:CONTEST_RULES.recruitMs+CONTEST_RULES.playMs}[kind];
+    if(nextGoldenSlot(at)<at+needed)return {ok:false,status:409,message:'다음 정기 황금 FOUP 시간과 겹쳐 지금은 시작할 수 없어요.'};
+    if(kind==='contest'){remember(requestId,kind,contest.start(at));save();}
+    else if(kind==='bay')beginBay(at,requestId,bayCount);else beginGolden(at,requestId);
+    const receipts=kind==='contest'?state.contestRequests:state.manualRequests;
+    return {ok:true,replayed:false,event:receipts.at(-1).event};
   }
   function restore(saved){
     if(saved===undefined)return;
@@ -102,15 +110,17 @@ export function createWorldEvents({now=Date.now,random=Math.random,connected=()=
     if(r&&(!b||r.seriesId!==b.id||!bays[r.bayId]||r.phase!=='success'||!Number.isFinite(r.finishedAt)||!Number.isInteger(r.clearedCount)||r.clearedCount<1||r.clearedCount>(b.bayLimit??1)||r.id!==(r.clearedCount===1?b.id:b.id+':clear:'+r.clearedCount)))throw Error('Invalid bay reward checkpoint');
     if(g&&(g.id!=='gold:'+g.startsAt||g.endsAt-g.startsAt!==EVENT_RULES.goldenDuration||!Array.isArray(g.recordIds)||g.recordIds.length>EVENT_RULES.goldenCount||new Set(g.recordIds).size!==g.recordIds.length))throw Error('Invalid golden event checkpoint');
     if(saved.manualRequests!==undefined&&(!Array.isArray(saved.manualRequests)||saved.manualRequests.length>32||saved.manualRequests.some(r=>!r||!['bay','golden'].includes(r.kind)||typeof r.requestId!=='string'||!r.event||!Number.isFinite(r.event.startsAt)||!Number.isFinite(r.event.endsAt))))throw Error('Invalid manual event checkpoint');
+    if(saved.contestRequests!==undefined&&(!Array.isArray(saved.contestRequests)||saved.contestRequests.length>32||saved.contestRequests.some(r=>r?.kind!=='contest'||typeof r.requestId!=='string'||!Number.isFinite(r.event?.startsAt)||!Number.isFinite(r.event?.endsAt))))throw Error('Invalid contest request checkpoint');
     state=structuredClone(saved);reconcile=true;
+    contest.restore(state.contest);delete state.contest;
   }
   function view(){
     const at=lastObservedAt,b=state.bay,g=state.golden;
     return {serverNow:at,bay:b&&(liveBay()||at-(b.finishedAt??0)<EVENT_RULES.resultDuration)?{...b,total:bays[b.bayId].machines.length,remaining:bayIds().filter(id=>!isDestroyed(id)).length,reward:EVENT_RULES.bayReward}:null,
-      lastResult:recentResult()?structuredClone(state.lastResult):null,
+      lastResult:recentResult()?structuredClone(state.lastResult):null, contest:contest.view(at),
       golden:g?{id:g.id,startsAt:g.startsAt,endsAt:g.endsAt,total:g.recordIds.length,remaining:goldenRemaining(g.id)}:null};
   }
-  return {update,restore,view,startManual,bayRunning,controlState:()=>({...view(),serverNow:now(),nextGoldenAt:nextGoldenSlot(now())}),checkpoint:()=>structuredClone(state),
+  return {update,restore,view,startManual,bayRunning,contest,controlState:()=>({...view(),serverNow:now(),nextGoldenAt:nextGoldenSlot(now())}),checkpoint,
     preparing:id=>state.bay?.phase==='preparing'&&bays[state.bay.bayId].machines.some(m=>m.id===id),
     protectedIds:()=>[...new Set([...safetyBays().flatMap(idsFor),...(state.bay?.phase==='success'&&now()-state.bay.finishedAt<EVENT_RULES.resultDuration?bayIds():[])])],
     travel:id=>liveBay()&&id===state.bay.id?{x:Math.sign(bays[state.bay.bayId].x)*4,z:bays[state.bay.bayId].z,bayId:state.bay.bayId}:null,

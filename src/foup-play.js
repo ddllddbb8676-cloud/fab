@@ -29,7 +29,7 @@ export function supportHeight(x, z) {
 }
 
 // A FOUP keeps the same identity across port, hands, throw and ground states.
-export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () => {}, showOriginal = () => {}, isDestroyed = () => false, onImpact = () => {}, onShatter = () => {}, onChange = () => {}, seedStockers=false, canSupplyStocker=()=>true, onStockerOut=()=>{} }) {
+export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () => {}, showOriginal = () => {}, isDestroyed = () => false, onImpact = () => {}, onShatter = () => {}, onChange = () => {}, seedStockers=false, canSupplyStocker=()=>true, canPickup=()=>true, onStockerOut=()=>{} }) {
   const byPort = new Map(ports.map(p => [p.id, p])), records = new Map(), occupancy = new Map();
   const hands = new Map();
   let stockersSeeded=false;
@@ -109,7 +109,7 @@ export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () 
   function pickup(id, owner = 'player') {
     const record = records.get(id);
     if(record?.gold&&owner.startsWith('resident:'))return false;
-    if (hands.has(owner) || !record || !['port', 'ground','stocker-out'].includes(record.mode)) return false;
+    if (hands.has(owner) || !record || !['port', 'ground','stocker-out'].includes(record.mode) || !canPickup(record,owner)) return false;
     if (record.portId && atPort(record.portId) !== record) return false;
     const sourceStocker=record.mode==='stocker-out'?stockerById.get(record.stockerId):null;
     if (record.original) { hideOriginal(record.portId); record.original = false; }
@@ -118,7 +118,7 @@ export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () 
     delete record.stockerId;delete record.stockSlot;delete record.stockAge;delete record.stockCue;
     record.portId = null; record.mode = 'carried'; record.owner = owner; hands.set(owner, id);
     if(sourceStocker)refillStocker(sourceStocker);
-    onChange();return true;
+    onChange(record);return true;
   }
   function place(portId, owner = 'player') {
     const record = records.get(hands.get(owner)), p = byPort.get(portId);
@@ -291,7 +291,7 @@ export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () 
         if (Math.abs(record.vy) > 1) onImpact(record, Math.abs(record.vy));
         record.y = .225;
         if (Math.abs(record.vy) > 1 && record.bounce++ < 2) { record.vy = -record.vy * .25; record.vx *= .4; record.vz *= .4; }
-        else { const spot = floorSpot(record, .24); if (spot) Object.assign(record, spot); record.mode = 'ground'; onChange(); }
+        else { const spot = floorSpot(record, .24); if (spot) Object.assign(record, spot); record.mode = 'ground'; onChange(record); }
       }
     }
   }

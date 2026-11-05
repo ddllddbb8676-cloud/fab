@@ -125,7 +125,7 @@ export class FabRoom extends DurableObject {
     this.growthMetrics=createGrowthRelay({binding:env.FAB_ANALYTICS,waitUntil:p=>ctx.waitUntil(p),ownerId:env.FAB_OWNER_VISITOR_ID,excludedIds});this.lastGrowthPresence=0;
     this.activityMetrics=createActivityMetrics({excludedIds});this.profileMetrics=createProfileMetrics({ownerId:env.FAB_OWNER_VISITOR_ID,excludedIds});
     this.metricProfiles=new Map();this.paidItems=new Set(cosmeticItems.filter(item=>item.price>0).map(item=>item.id));this.lastMetricsFlush=Date.now();
-    this.profiles=createProfileStore(ctx.storage,{ownerId:env.FAB_OWNER_VISITOR_ID,onProfileObserved:p=>this.observeProfile(p),onProfileRemoved:id=>{this.profileMetrics.remove(id);this.metricProfiles.delete(id);}});
+    this.profiles=createProfileStore(ctx.storage,{ownerId:env.FAB_OWNER_VISITOR_ID,onProfileObserved:p=>this.observeProfile(p),onProfileRemoved:id=>{this.room?.forgetContestProfile(id);this.profileMetrics.remove(id);this.metricProfiles.delete(id);}});
     this.httpPeers=new Map();this.connectionOrders=new Map();
     this.room=createRoom({ownerId:env.FAB_OWNER_VISITOR_ID,eventExcludedIds:excludedIds,onEventsChange:s=>this.profiles.saveEvents(s),nicknameAvailable:(...args)=>this.profiles.nicknameAvailable(...args),replaceNickname:(...args)=>this.profiles.replaceNickname(...args),claimName:(...args)=>this.profiles.claimName(...args),getHistoricalScores:()=>this.profiles.ranking(),onEquipmentChange:s=>this.profiles.saveEquipment(s),onFoupChange:s=>this.profiles.saveFoups(s),onProfileChange:p=>this.profiles.save(p),onReward:event=>this.trackGrowth(()=>this.growthMetrics.reward(event.id,event.kind,event.amount)),onRosterChange:()=>{this.rosterDirty=true;},onCatch:event=>{
       for(const [ws,s] of this.sockets)if(s.id===event.guardId)this.send(ws,{type:'safety-catch',...event});
@@ -142,6 +142,7 @@ export class FabRoom extends DurableObject {
       const foups=await this.profiles.getFoups();
       if(foups!==undefined)this.room.restoreFoups(foups);else this.profiles.saveFoups(this.room.store.checkpoint());
       this.room.worldEvents.restore(await this.profiles.getEvents());
+      this.room.worldEvents.contest.reconcile(this.room.store.records);
       await this.checkpoint();
       await this.profiles.loadRanking();
       for(const p of [...this.room.residents.people,...this.room.safety.people])p.name=this.profiles.claimName(p.id,p.role.startsWith('safety-')?'safety':'visitor',p.name);
@@ -165,6 +166,7 @@ export class FabRoom extends DurableObject {
     this.trackGrowth(()=>this.growthMetrics.presence([...this.room.players.values()].map(p=>({id:p.id,hidden:p.hidden,phase:p.phase,role:p.role,penalty:p.penalty}))));
   }
   observeProfile(p){
+    this.room?.rememberContestProfile(p);
     this.trackGrowth(()=>this.growthMetrics.observeProfile(p));
     try{
       this.profileMetrics.observe(p);

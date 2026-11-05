@@ -6,7 +6,7 @@ import {items as catalog} from '../src/cosmetics-catalog.js';
 // histogram estimates in milliseconds. No account or page identifiers escape.
 export const GROWTH_LIMITS=Object.freeze({accounts:8000,pages:2048,eventsPerPage:128,baselines:512,days:30,activeGapMs:30000,relayLagMs:60000,valueBytes:100*1024});
 const PREFIX='growth:v1:',DAY=86400000,KST=32400000,ACTIONS=['move','emote','destroy','repair','throw','clean','board','equip'];
-const SOURCES=['destroy','repair','throw','clean','oht','golden-deposit','golden-throw','golden-clean','bay-event'],CLIENT=['page_start','scene_ready','connected','reconnect','connect_error','page_end','shop_open','try_on','client_error'];
+const SOURCES=['destroy','repair','throw','clean','oht','golden-deposit','golden-throw','golden-clean','bay-event','contest-event'],CLIENT=['page_start','scene_ready','connected','reconnect','connect_error','page_end','shop_open','try_on','client_error'];
 const BINS=[250,500,1000,2000,5000,10000,30000,60000,120000,300000,900000,3600000,86400000];
 const FLAGS={visit:1,active:2,shop:4,try:8,purchase:16,insufficient:32,firstAction:64};
 const day=t=>Math.floor((t+KST)/DAY),start=d=>d*DAY-KST,label=d=>new Date(start(d)+KST).toISOString().slice(0,10);
