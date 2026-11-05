@@ -2,6 +2,7 @@ import {createNicknameUI,createNicknameModeration} from './nickname-ui.js';
 import {createAdminVisit} from './admin-visit.js';
 import {createWorldEventsUI} from './world-events-ui.js';
 import {createContestUI,createContestZones} from './foup-contest-view.js';
+import {createContestPhotos} from './contest-photos.js';
 import {createSpeechBubbles,createSpeechComposer} from './owner-speech-ui.js';
 import {contestOutfit} from './foup-contest.js';
 import {createEventCamera} from './event-camera.js';
@@ -739,9 +740,16 @@ worldEventsUI=createWorldEventsUI({command:(...args)=>onlineLink.command(...args
 });
 const paintPlayingOutfit=()=>appearance.setOutfit(contestOutfit(currentWallet?.equipped,contestTeam),contestTeam?'visitor':safetyState.role);
 const setContestZones=createContestZones(THREE,scene);
+const contestPhotos=createContestPhotos({THREE,renderer,scene,batches:spatialBatches,overview:open=>{
+  const top=open||mode==='overview'||eventCamera.active;
+  roof.visible=walls.visible=!top;airShower.root.visible=!top;
+  bayLighting.setOverview(top);restAreaView.setOverview(top);bayWhiteMask.setOverview(top);
+  railOverview.visible=!open&&top;scene.fog.density=top?.0015:.0063;
+}});
 contestUI=createContestUI({command:(...args)=>onlineLink.command(...args),toast,getId:()=>multiplayer?.id,
   ready:()=>!entry.active&&!nicknameUI.isOpen&&!wardrobe.isOpen&&!captureTime?.isOpen&&!photoMode.isOpen&&!document.hidden,
-  onTeam:next=>{contestTeam=next;paintPlayingOutfit();},setZones:visible=>{walkwaysPaused=visible;setContestZones(visible);},
+  onTeam:next=>{contestTeam=next;paintPlayingOutfit();},setZones:(visible,live)=>{walkwaysPaused=live;setContestZones(visible);},
+  onResult:id=>contestPhotos.request(id),cancelPhotos:()=>contestPhotos.cancel(),
   onGather:point=>{
     const {heading,yaw}=explorer.state;
     if(!explorer.arriveAtEvent(point))return false;
@@ -1059,7 +1067,7 @@ function animate(now) {
   catchReaction.render(camera,!entry.active&&!photoMode.isOpen&&!captureTime?.isOpen);
   if(now>=nextSafetyCheck){
     const person={...explorer.state.position,id:multiplayer?.id??'self',...safetyState,hidden:entry.active||nicknameUI.isOpen||mode==='overview',phase:explorer.state.repairInteraction?.phase==='repair'?'repair':playActions.state.phase};
-    const warning=safetyProximity(person,remotePeople?.safetyActors??safetyPatrols?.people??[],nearSafety);
+    const warning=contestUI.safetyPaused?{near:false,strength:0}:safetyProximity(person,remotePeople?.safetyActors??safetyPatrols?.people??[],nearSafety);
     nearSafety=warning.near;nextSafetyCheck=now+200;
     $('safety-proximity').classList.toggle('hidden',!nearSafety);$('safety-warning').classList.toggle('hidden',!nearSafety);
     $('safety-proximity').style.setProperty('--danger-strength',warning.strength.toFixed(2));
@@ -1096,11 +1104,13 @@ function animate(now) {
   audio.update({ jet: entry.active ? entry.state.jet : 0, hidden: false });
   if (now >= nextMapAt) { if (viewControls.mapVisible) drawMap(); updateZone(); nextMapAt = now + 125; }
   sceneDepth.update(mode === 'overview'||eventCamera.active);
+  scene.updateMatrixWorld();
+  for (const batch of movingBatches.values()) { batch.sources.forEach((source, i) => batch.instance.setMatrixAt(i, source.matrixWorld)); batch.instance.instanceMatrix.needsUpdate = true; }
+  contestPhotos.renderNext();
   camera.updateMatrixWorld();
   viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); viewFrustum.setFromProjectionMatrix(viewProjection);
   for (const batch of spatialBatches) batch.update(viewFrustum, camera.position);
   scene.updateMatrixWorld();
-  for (const batch of movingBatches.values()) { batch.sources.forEach((source, i) => batch.instance.setMatrixAt(i, source.matrixWorld)); batch.instance.instanceMatrix.needsUpdate = true; }
   renderer.render(scene, camera);
   movingWalkways.overview(camera,(mode==='overview'||eventCamera.active)&&!photoMode.isOpen,innerWidth,innerHeight);
   if(captureFrame){const draw=captureFrame;captureFrame=null;draw(renderer.domElement);}

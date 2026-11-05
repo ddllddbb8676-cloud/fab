@@ -20,7 +20,7 @@ export function canCatch(guard, person, time) {
   if(guard.id?.startsWith('safety:')&&(guard.avoidBayIds??[guard.avoidBayId]).some(id=>isEventBay(person,id,1)))return false;
   return isSafety(guard.role) && !guard.hidden && !person.hidden && !isSafety(person.role) && !isRestArea(person) && !isRestArea(guard) &&
     !person.penalty && time >= (person.safeUntil || 0) && !['repair','riding','climb'].includes(person.phase) &&
-    !['riding','climb','repair'].includes(guard.phase) && distance(guard,person) < .95 && canWalkSegment(guard,person);
+    !['riding','climb','repair','event-rest'].includes(guard.phase) && distance(guard,person) < .95 && canWalkSegment(guard,person);
 }
 export function isEventBay(point,id,margin=0){
   const bay=bays[id];return Boolean(bay&&Math.abs(point.x-bay.x)<=27.5+margin&&Math.abs(point.z-bay.z)<=BAY_PITCH/2+margin);
@@ -40,7 +40,7 @@ export function avoidsEventBay(a,b,id){
 // Four extra residents share the same corridor routing as visitors.
 export function createSafetyPatrols({random=Math.random,excludedNames=[]}={}) {
   const names=[...excludedNames],people=[];let planner=0;
-  let eventBays=[];
+  let eventBays=[],paused=false;
   const inEventBay=(p,margin=0)=>eventBays.some(id=>isEventBay(p,id,margin));
   const canPatrolTraverse=(a,b)=>canSafetyTraverse(a,b)&&eventBays.every(id=>avoidsEventBay(a,b,id));
   function leaveEventBay(p,index){
@@ -57,7 +57,12 @@ export function createSafetyPatrols({random=Math.random,excludedNames=[]}={}) {
     if(next.length===eventBays.length&&next.every((n,i)=>n===eventBays[i]))return;eventBays=next;
     people.forEach((p,i)=>{delete p.eventBayId;delete p.eventSlot;delete p.avoidBayId;delete p.avoidBayIds;p.chasingId=null;p.path=[];p.nextThink=0;if(next.length){p.avoidBayId=next[0];p.avoidBayIds=[...next];leaveEventBay(p,i);}});
   }
+  function setPaused(value){
+    value=Boolean(value);if(paused===value)return;paused=value;
+    for(const p of people)Object.assign(p,{phase:paused?'event-rest':'patrol',speed:0,path:[],chasingId:null,nextThink:0});
+  }
   function update(dt,visitors,time) {
+    if(paused)return;
     const neighbors=[...people,...visitors.filter(p=>p.id?.startsWith('resident:'))];
     for(const p of people) {
       leaveEventBay(p,people.indexOf(p));
@@ -76,5 +81,5 @@ export function createSafetyPatrols({random=Math.random,excludedNames=[]}={}) {
     if(candidates.length){const target=candidates.find(v=>!people.some(other=>other!==p&&other.chasingId===v.id))??candidates[0];p.chasingId=target.id;p.path=findWalkPath(p,target,{canTraverse:canPatrolTraverse})||[];p.phase='chase';}
     else if(!p.path.length||p.phase==='chase'){p.chasingId=null;const choices=bays.filter(b=>!eventBays.includes(b.id)),bay=choices[Math.min(choices.length-1,Math.floor(random()*choices.length))];let target={x:bay.x+(random()-.5)*36,z:bay.z+(random()-.5)*1.8};if(isRestArea(target,SAFETY_CLEARANCE))target=restAreaExit(target);p.path=findWalkPath(p,target,{canTraverse:canPatrolTraverse})||[];p.phase='patrol';}
   }
-  return {people,update,setEventBay};
+  return {people,update,setEventBay,setPaused};
 }

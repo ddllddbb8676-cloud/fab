@@ -25,7 +25,8 @@ import {markCatch} from '../src/catch-reaction.js';
 import {canSelectTitle,restoreTitlePreference,destructionTitle,npcDestructionTitle,OPERATOR_TITLE} from '../src/destruction-titles.js';
 import {isRestArea,canSafetyTraverse,restAreaExit,SAFETY_CLEARANCE} from '../src/rest-area.js';
 import {createWorldEvents} from './world-events.js';
-import {contestOutfit, gatheringPoint} from '../src/foup-contest.js';
+import {contestOutfit, gatheringPoint, contestZone} from '../src/foup-contest.js';
+import {planContestRepairs} from './contest-preparation.js';
 
 const distance=(a,b)=>Math.hypot(a.x-b.x,a.z-b.z);
 const finite=(n,a,b)=>Number.isFinite(n)&&n>=a&&n<=b;
@@ -107,18 +108,17 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
     const p=players.get(id);
     if(!p)return;
     if(isSafety(p.role))finishDuty(p,p.optOut);
-    const held=store.getCarried(id);
-    if(held)store.launch(held,{x:p.x,y:.82,z:p.z,yaw:p.heading},{x:0,y:0,z:0});
-    release(p);
     const point=gatheringPoint(index);
+    const held=store.getCarried(id);
+    if(held)store.launch(held,{...point,y:.82,yaw:p.heading},{x:0,y:0,z:0});
+    release(p);
     Object.assign(p,point,{y:0,speed:0,posture:'stand',carrying:false,contestGather:{...point,token}});
     p.groundPosition={...point,y:0,heading:p.heading};
     changed(p);
   }
   function contestRosterChanged(finishedMembers=[]) {
     if(worldEvents?.contest.live()){
-      const operator=players.get(ownerId);
-      if(operator&&isSafety(operator.role))finishDuty(operator,operator.optOut);
+      for(const p of players.values())if(isSafety(p.role))finishDuty(p,p.optOut);
     }else{
       contestProfiles.clear();
       for(const p of players.values())delete p.contestGather;
@@ -128,7 +128,7 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
         if(p)p.assignAfter=Math.max(p.assignAfter,time+SAFETY_DUTY.handover);
       }
     }
-    rosterChanged();
+    safety.setPaused(worldEvents?.contest.safetyPaused());rosterChanged();
   }
   function awardContest(id,amount,eventId) {
     if(!amount)return;
@@ -142,11 +142,21 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
   }
   worldEvents=createWorldEvents({now,random,onChange:onEventsChange,
     contestOptions:{ownerId,gather:gatherContestant,rosterChanged:contestRosterChanged,award:awardContest,
+      planRepairs:()=>planContestRepairs(destruction.isDestroyed,id=>!leases.has(id)&&!broken.get(id)?.owner),
+      repair:id=>{if(!leases.has(id)&&!broken.get(id)?.owner){residents.yieldMachine(id);destruction.reset(id);}},
+      clearZones:()=>{
+        for(const p of players.values())if(p.phase==='cleaning'){const r=store.records.get(p.cleanTargetId);if(r&&contestZone(r.x,r.z))release(p);}
+        store.clearFloorArea(contestZone);
+      },
       ready:id=>{const p=players.get(id);return Boolean(p&&!p.hidden&&!excludedEvents.has(id));}},
     onBayStart:()=>{for(const p of players.values())if(isSafety(p.role))finishDuty(p,p.optOut);},
     connected:()=>[...players.keys()].filter(id=>/^visitor:[a-f0-9]{64}$/.test(id)&&!excludedEvents.has(id)),isDestroyed:destruction.isDestroyed,
     prepareBay:bayId=>{for(const m of machines)if(m.bayId===bayId){const p=players.get(leases.get(m.id)?.owner);if(p)release(p);residents.yieldMachine(m.id);destruction.reset(m.id);}},
-    assignSafety:bayId=>{safety.setEventBay(bayId);if(worldEvents?.bayRunning())cartReturner.update(0);residents.setEventBays(bayId);},spawnGolden:(event,count)=>store.spawnGolden(event,count),expireGolden:(id,at)=>store.expireGolden(id,at),
+    assignSafety:bayId=>{
+      safety.setEventBay(bayId);const paused=worldEvents?.contest.safetyPaused();safety.setPaused(paused);
+      if(paused)for(const p of players.values())if(isSafety(p.role))finishDuty(p,p.optOut);
+      if(worldEvents?.bayRunning())cartReturner.update(0);residents.setEventBays(bayId);
+    },spawnGolden:(event,count)=>store.spawnGolden(event,count),expireGolden:(id,at)=>store.expireGolden(id,at),
     goldenRemaining:id=>[...store.records.values()].filter(r=>r.gold?.eventId===id&&!r.gold.throwPaid&&!['broken','cleared'].includes(r.mode)).length,
     reward:(id,amount,eventId,seriesId)=>{const p=players.get(id);if(p&&credit(p,amount,'bay-event',{eventId,seriesId}))changed(p);}});
   function finishDuty(p,optOut=false) {
@@ -161,7 +171,7 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
     onCatch({guardId:guard.id,targetId:target.id,targetName:target.name,...details,caught,goal:SAFETY_DUTY.goal,completed});
   }
   function assignSafetyDuty() {
-    if(worldEvents.bayRunning()||time<nextSafetyAt||[...players.values()].some(p=>isSafety(p.role)))return;
+    if(worldEvents.bayRunning()||worldEvents.contest.safetyPaused()||time<nextSafetyAt||[...players.values()].some(p=>isSafety(p.role)))return;
     const candidates=[...players.values()].filter(p=>!worldEvents.contest.team(p.id)&&!p.hidden&&!isRestArea(p,SAFETY_CLEARANCE)&&!p.optOut&&!p.penalty&&p.phase==='idle'&&p.targetId==null&&p.posture==='stand'&&!p.carrying&&time-p.lastSeen<12&&
       p.activeSeconds>=Math.max(SAFETY_DUTY.warmup,p.eligibleAfter)&&time>=p.assignAfter&&(Math.abs(p.x)>6||p.z<70));
     candidates.sort((a,b)=>a.safetyTurns-b.safetyTurns||a.joinOrder-b.joinOrder);
@@ -211,7 +221,7 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
     p.titlePreference=restoreTitlePreference(saved?.titlePreference,p.brokenCount);
     p.chipUnlimited=hasUnlimitedChips(id,ownerId);p.nicknameChoiceVersion=p.chipUnlimited?NICKNAME_CHOICE_VERSION:(saved?.nicknameChoiceVersion||0);p.nicknameChoiceKind=saved?.nicknameChoiceKind||(saved?'existing':'new');p.wallet=restoreWallet(saved||{});p.rideSeconds=0;
     if(p.groundPosition&&!isBlocked(p.groundPosition.x,p.groundPosition.z,.295))Object.assign(p,p.groundPosition);else p.groundPosition=null;
-    const endDutyForEvent=isSafety(p.role)&&(worldEvents.bayRunning()||worldEvents.contest.team(id));
+    const endDutyForEvent=isSafety(p.role)&&(worldEvents.bayRunning()||worldEvents.contest.safetyPaused());
     if(!endDutyForEvent&&isSafety(p.role)&&isRestArea(p,SAFETY_CLEARANCE)){Object.assign(p,restAreaExit(p));p.groundPosition={x:p.x,y:0,z:p.z,heading:p.heading};}
     players.set(id,p);revision++;
     // Restored safety profiles must become visitors before the welcome packet,
@@ -286,6 +296,7 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
     if(kind==='say'||kind==='owner-say')return speech.send(p,data.text);
     worldEvents.update();
     if(kind==='contest-join')return worldEvents.contest.join(id,data.eventId);
+    if(kind==='contest-visit')return worldEvents.contest.visit(id,data.eventId);
     if(kind==='bay-travel'){
       const destination=worldEvents.travel(data.eventId);
       if(!destination)return fail('지금은 진행 중인 베이 이벤트가 없어요');
@@ -469,7 +480,7 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
     }
     assignSafetyDuty();
     const visitors=[...players.values()],targets=[...visitors,...residents.people];safety.update(dt,targets,time);
-    for(const guard of [...safety.people,...visitors.filter(p=>isSafety(p.role))])for(const p of targets)if(canCatch(guard,p,time)&&!worldEvents.contest.team(p.id)) {
+    if(!worldEvents.contest.safetyPaused())for(const guard of [...safety.people,...visitors.filter(p=>isSafety(p.role))])for(const p of targets)if(canCatch(guard,p,time)&&!worldEvents.contest.team(p.id)) {
       if(players.has(p.id))catchPlayer(p,guard);
       else if(residents.beginSafetyLap(p)){markCatch(guard,p);recordCatch(guard,p,{penalty:3});}
     }

@@ -2,7 +2,7 @@ import {BAY_CENTERS} from './layout.js';
 
 export const CONTEST_NAME = '흑백 풉 쟁탈전';
 export const CONTEST_RULES = Object.freeze({recruitMs:30_000, playMs:180_000, resultMs:12_000, radius:2.45, win:30, lose:15, tie:20});
-export const CONTEST_ZONES = Object.freeze([1, 2, 3, 5, 6, 7].map((bay, i) =>
+export const CONTEST_ZONES = Object.freeze([4, 5].map((bay, i) =>
   Object.freeze({x:0, z:BAY_CENTERS[bay], team:i % 2 ? 'white' : 'black'})));
 const suits = {white:'suit-default', black:'suit-black', referee:'suit-blue'};
 
@@ -15,5 +15,11 @@ export function contestZone(x, z) {
 }
 
 export function gatheringPoint(index) {
-  return {x:((index % 8) - 3.5) * .64, z:(Math.floor(index / 8) - 3) * .72};
+  const middle=(CONTEST_ZONES[0].z+CONTEST_ZONES[1].z)/2;
+  return {x:((index % 8) - 3.5) * .64, z:middle+(Math.floor(index / 8) - 6) * .5};
+}
+
+export function contestRewards(match) {
+  return Object.fromEntries(['black','white'].map(team=>[team,
+    match[team]*(match.winner==='tie'?CONTEST_RULES.tie:match.winner===team?CONTEST_RULES.win:CONTEST_RULES.lose)]));
 }

@@ -192,6 +192,18 @@ export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () 
     }
     onChange();return result;
   }
+  function clearFloorArea(contains) {
+    let count=0;
+    for(const r of records.values()){
+      if(r.gold||!['ground','broken','flying'].includes(r.mode)||!contains(r.x,r.z))continue;
+      // Keep the same carrier and break sequence. This is event preparation,
+      // not a player's cleanup action and never earns chips.
+      Object.assign(r,{mode:'cleared',portId:null,cleaner:null,cleanProgress:0,refillIn:0,shatter:false,damageAge:0});
+      delete r.goal;delete r.owner;restock(r,false);count++;
+    }
+    if(count)onChange();
+    return count;
+  }
   function expireGolden(currentId,at){
     let changed=false;
     for(const r of records.values())if(r.gold&&(r.gold.eventId!==currentId||at>=r.gold.expiresAt)){r.gold=null;changed=true;}
@@ -357,7 +369,7 @@ export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () 
     }
   }
   function interpolate(dt) {const f=1-Math.exp(-dt*16);for(const r of records.values()){if(r.goal){for(const k of ['x','y','z'])r[k]+=(r.goal[k]-r[k])*f;r.yaw=r.goal.yaw;}if(r.mode==='broken')r.damageAge=Math.min(2,(r.damageAge||0)+dt);if(['stocking','retrieving'].includes(r.mode)){r.stockAge=Math.min(STOCKER_TRANSFER_SECONDS,(r.stockAge||0)+Math.max(0,dt));Object.assign(r,stockerRecordPose(r));}}}
-  return { records,carts,cartItems,loadCart,takeCart,moveCart, atPort, adopt, pickup:(id,owner)=>pickup(id,owner), place, launch, step, reset, synchronize, interpolate, checkpoint, restore, beginCleanup, cancelCleanup, finishCleanup,stockerState,stockerPut,stockerGet,initializeStockers,spawnGolden,expireGolden,consumeGolden,notifyChange:onChange, occupied: id => occupancy.has(id),
+  return { records,carts,cartItems,loadCart,takeCart,moveCart, atPort, adopt, pickup:(id,owner)=>pickup(id,owner), place, launch, step, reset, synchronize, interpolate, checkpoint, restore, beginCleanup, cancelCleanup, finishCleanup,stockerState,stockerPut,stockerGet,initializeStockers,spawnGolden,expireGolden,consumeGolden,clearFloorArea,notifyChange:onChange, occupied: id => occupancy.has(id),
     getCarried: owner => records.get(hands.get(owner)) ?? null,
     get carried() { return records.get(hands.get('player')) ?? null; },
     get state() { return { carriedId: hands.get('player') ?? null, managed: records.size, moved: [...records.values()].filter(r => !r.original).map(r => ({ id: r.id, mode: r.mode, owner: r.owner, portId: r.portId, x: r.x, y: r.y, z: r.z })) }; }

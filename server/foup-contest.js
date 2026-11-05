@@ -1,13 +1,16 @@
-import {CONTEST_RULES as rules, contestZone} from '../src/foup-contest.js';
+import {CONTEST_RULES as rules, contestZone, contestRewards} from '../src/foup-contest.js';
 
 const visitor = /^visitor:[a-f0-9]{64}$/;
 const carrier = /^(port:\d{1,3}:\d|vehicle:\d{1,2})$/;
 const side = index => index % 2 ? 'black' : 'white';
 const deny = message => ({ok:false, message});
 
-export function createFoupContest({now, ownerId, ready, gather, rosterChanged, award, onChange}) {
+export function createFoupContest({now, ownerId, ready, gather, rosterChanged, award, onChange,
+  planRepairs=()=>[], repair=()=>{}, clearZones=()=>{}}) {
   let match = null;
+  let lastVisit=-Infinity;
   const live = () => match?.phase === 'recruiting' || match?.phase === 'active';
+  const safetyPaused = () => live() || match?.phase==='finished' && now()<match.finishedAt+rules.resultMs;
   function team(id) {
     if (!live()) return null;
     const index = match.members.indexOf(id);
@@ -17,9 +20,17 @@ export function createFoupContest({now, ownerId, ready, gather, rosterChanged, a
   function start(at) {
     const startsAt = at + rules.recruitMs;
     match = {id:'contest:'+at, phase:'recruiting', startsAt, endsAt:startsAt+rules.playMs,
-      members:[], balls:{}, black:0, white:0};
+      members:[], balls:{}, black:0, white:0, repairs:planRepairs(), nextRepairAt:at+1500};
     rosterChanged();
+    if(ownerId&&ready(ownerId))gather(ownerId,100,match.id+':referee-lobby');
     return match;
+  }
+  function visit(id,eventId) {
+    if(!ownerId||id!==ownerId||!live()||match.id!==eventId||team(id)!=='referee'||!ready(id))
+      return deny('관전 중인 운영자만 함께 이동할 수 있어요.');
+    if(now()-lastVisit<2000)return deny('잠시 후 다시 이동해 주세요.');
+    lastVisit=now();gather(id,100,match.id+':visit:'+now());
+    return {ok:true,team:'referee'};
   }
   function join(id, eventId) {
     if (!match || match.id !== eventId || match.phase !== 'recruiting' || now() >= match.startsAt)
@@ -40,6 +51,9 @@ export function createFoupContest({now, ownerId, ready, gather, rosterChanged, a
     onChange();
   }
   function tick(at) {
+    if(match?.phase==='recruiting'&&at<match.startsAt&&match.repairs?.length&&at>=match.nextRepairAt){
+      repair(match.repairs.shift());match.nextRepairAt=at+1500;onChange();
+    }
     if (match?.phase === 'recruiting' && at >= match.startsAt) {
       if (at >= match.endsAt) return cancel(at, '모집 시간이 지나 이번 경기는 마쳤어요.');
       match.members = match.members.filter(ready);
@@ -48,8 +62,11 @@ export function createFoupContest({now, ownerId, ready, gather, rosterChanged, a
         if (!ownerId || !ready(ownerId)) return cancel(at, '홀수 팀을 맞추려면 세미가 팹 안에 있어야 해요.');
         match.members.push(ownerId);
       }
-      match.phase = 'active';
       match.members.forEach((id, index) => gather(id, index, match.id+':start'));
+      if(!match.members.includes(ownerId)&&ready(ownerId))gather(ownerId,100,match.id+':referee-start');
+      // All participants have left their previous positions before old floor
+      // carriers are recycled. No pre-existing carrier scores for either side.
+      clearZones();match.repairs=[];match.phase = 'active';
       rosterChanged();
       onChange();
     }
@@ -58,8 +75,7 @@ export function createFoupContest({now, ownerId, ready, gather, rosterChanged, a
       Object.assign(match, {phase:'finished', finishedAt:match.endsAt, winner});
       match.members.forEach((id, index) => {
         const colour = side(index);
-        const rate = winner === 'tie' ? rules.tie : winner === colour ? rules.win : rules.lose;
-        award(id, match[colour] * rate, match.id);
+        award(id, contestRewards(match)[colour], match.id);
       });
       rosterChanged(match.members);
       onChange();
@@ -87,7 +103,8 @@ export function createFoupContest({now, ownerId, ready, gather, rosterChanged, a
   function view(at) {
     if (!match || (!live() && at >= match.finishedAt+rules.resultMs)) return null;
     const {id, phase, startsAt, endsAt, black, white, winner, reason} = match;
-    return {id, phase, startsAt, endsAt, black, white, winner, reason, joined:match.members.length};
+    return {id, phase, startsAt, endsAt, black, white, winner, reason, joined:match.members.length,
+      ...(phase==='finished'?{rewards:contestRewards(match)}:{})};
   }
   function restore(saved) {
     if (!saved) { match = null; return; }
@@ -102,9 +119,12 @@ export function createFoupContest({now, ownerId, ready, gather, rosterChanged, a
         ['black','white'].some(t=>saved[t] !== entries.filter(([,v])=>v===t).length) ||
         (['finished','cancelled'].includes(saved.phase) && !Number.isFinite(saved.finishedAt)))
       throw Error('Invalid FOUP contest score');
+    if(saved.repairs!==undefined&&(!Array.isArray(saved.repairs)||saved.repairs.length>16||
+        saved.repairs.some(id=>!Number.isInteger(id)||id<0||id>=360)||new Set(saved.repairs).size!==saved.repairs.length||!Number.isFinite(saved.nextRepairAt)))
+      throw Error('Invalid FOUP contest preparation');
     match = structuredClone(saved);
   }
-  return {start, join, tick, live, team, playing, moved, track, view, restore,
+  return {start, join, visit, tick, live, safetyPaused, team, playing, moved, track, view, restore,
     hasMember:id=>live() && match.members.includes(id),
     protects:id=>match?.phase === 'active' && Object.hasOwn(match.balls, id),
     reconcile:records=>{if(match?.phase==='active')for(const id of Object.keys(match.balls)){const r=records.get(id);if(r)moved(r);}},

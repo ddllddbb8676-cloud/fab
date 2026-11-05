@@ -1,8 +1,8 @@
-import {isSafety} from './safety-team.js?v=30012f0754d1';
-import {isRestArea} from './rest-area.js?v=30012f0754d1';
+import {isSafety} from './safety-team.js?v=1b5f80f35e53';
+import {isRestArea} from './rest-area.js?v=1b5f80f35e53';
 
 export function safetyProximity(person,guards,previous=false){
-  const protectedPhases=['repair','riding','climb'];
+  const protectedPhases=['repair','riding','climb','event-rest'];
   if(person.hidden||person.penalty||isSafety(person.role)||isRestArea(person)||protectedPhases.includes(person.phase))return {near:false,strength:0};
   let distance=Infinity;
   for(const guard of guards){

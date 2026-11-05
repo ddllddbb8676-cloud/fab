@@ -20,7 +20,7 @@ test('the legacy operator command remains limited to the configured operator',()
   assert.equal(say(visitor,'권한 사칭').ok,false);assert.equal(say(owner,'입장 전').ok,false);
   enter(owner);const profile=room.profile(owner),world=room.worldEvents.checkpoint();
   assert.equal(say(owner,'시작!').ok,true);
-  assert.equal(say(owner,'시작하자').ok,false);
+  assert.equal(say(owner,'지금바로시작').ok,false);
   assert.equal(say(visitor,'덮어쓰기').ok,false);
   assert.equal(room.snapshot(true).ownerSpeech.text,'시작!');
   assert.deepEqual(room.profile(owner),profile);assert.deepEqual(room.worldEvents.checkpoint(),world);
@@ -44,8 +44,8 @@ test('Korean and emoji use a bounded single line, preserve literal markup, and r
   assert.equal(readSpeech('  안\n  녕 ').text,'안 녕');
   assert.equal(readSpeech('<b>').text,'<b>');
   for(const character of ['팹','🍀','🧑🏽‍🚀','🇰🇷','❤️','가'.normalize('NFD')]){
-    assert.equal(readSpeech(character.repeat(3)).length,3);
-    assert.equal(readSpeech(character.repeat(3)).ok,true);assert.equal(readSpeech(character.repeat(4)).ok,false);
+    assert.equal(readSpeech(character.repeat(5)).length,5);
+    assert.equal(readSpeech(character.repeat(5)).ok,true);assert.equal(readSpeech(character.repeat(6)).ok,false);
   }
   for(const v of [null,{},' \n ','\u200b\u200d','ab'.repeat(300)])assert.equal(readSpeech(v).ok,false);
 });
@@ -64,7 +64,7 @@ test('room speech uses each actual session and updates only that speaker, regard
   const profile=room.profile(visitor),world=room.worldEvents.checkpoint();
   assert.equal(speak(owner,'가자!').ok,true);advance(4000);
   assert.equal(speak(visitor,'네').ok,true);assert.equal(speak(visitor,'출발!').ok,true);
-  assert.equal(speak(visitor,'가'.repeat(4)).ok,false);assert.equal(speak(owner,'가'.repeat(4)).ok,false);
+  assert.equal(speak(visitor,'가'.repeat(6)).ok,false);assert.equal(speak(owner,'가'.repeat(6)).ok,false);
   const next=room.snapshot(true);
   assert.deepEqual(next.speech.bubbles.map(b=>[b.speaker,b.text]),[[owner,'가자!'],[visitor,'출발!']]);
   assert.equal(next.ownerSpeech.text,'가자!');assert.deepEqual(room.snapshot().speech,next.speech);

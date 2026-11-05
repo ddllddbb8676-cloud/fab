@@ -1,4 +1,4 @@
-export const SPEECH_LIMIT = 3;
+export const SPEECH_LIMIT = 5;
 export const SPEECH_DURATION_MS = 8000;
 const limitMessage = `${SPEECH_LIMIT}자 이내로 입력해 주세요.`;
 let segmenter;
