@@ -101,7 +101,7 @@ function createOneCart({THREE,scene,explorer,avatar,store,network,getId,ready,to
   function update(){
     if(isDriver()&&before){
       const state=explorer.state,next=pullCart(c,before,state.position,isBlocked);
-      if(next&&Math.hypot(state.position.x-c.x,state.position.z-c.z)>=.85){Object.assign(c,{x:next.x,z:next.z,yaw:next.yaw});}
+      if(next&&Math.hypot(state.position.x-next.x,state.position.z-next.z)>=.85){Object.assign(c,{x:next.x,z:next.z,yaw:next.yaw});}
       else{state.position.x=before.x;state.position.z=before.z;state.speed=0;avatar.root.position.copy(state.position);if(performance.now()>collisionAt){toast('카트가 지나가기엔 좁아요. 넓은 통로로 돌아가 주세요');collisionAt=performance.now()+5000;}}
       state.posture='stand';
     }

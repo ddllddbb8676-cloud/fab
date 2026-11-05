@@ -18,10 +18,15 @@ export function pullCart(c,from,to,blocked,{maxDistance=4}={}){
   const distance=Math.hypot(to.x-from.x,to.z-from.z);
   if(!Number.isFinite(distance)||distance>maxDistance)return null;
   const next={...c},steps=Math.max(1,Math.ceil(distance/.10));
+  const stepX=(to.x-from.x)/steps,stepZ=(to.z-from.z)/steps;
   for(let i=1;i<=steps;i++){
     const x=from.x+(to.x-from.x)*i/steps,z=from.z+(to.z-from.z)*i/steps;
     const dx=x-next.x,dz=z-next.z,length=Math.hypot(dx,dz);
-    if(length>CART_SIZE.tow){
+    const previousX=dx-stepX,previousZ=dz-stepZ,previousLength=Math.hypot(previousX,previousZ);
+    const handleSide=previousX*Math.sin(next.yaw)+previousZ*Math.cos(next.yaw);
+    // A held handle must also move the cart when backing out of a corner.
+    const reversing=length>1e-7&&length<previousLength-1e-7&&handleSide>previousLength*.5;
+    if(length>CART_SIZE.tow||reversing){
       const angle=Math.atan2(dx,dz),delta=Math.atan2(Math.sin(angle-next.yaw),Math.cos(angle-next.yaw));
       // Keep turns gradual, including a player changing direction beside a wall.
       next.yaw+=Math.max(-.12,Math.min(.12,delta));

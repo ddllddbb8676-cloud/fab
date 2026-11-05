@@ -1,4 +1,4 @@
-import {EMOTES,EMOTE_SECONDS,HEART_PATH,HEART_COLOR} from './emotes.js?v=9063703070a2';
+import {EMOTES,EMOTE_SECONDS,HEART_PATH,HEART_COLOR} from './emotes.js?v=30012f0754d1';
 
 // Small textures are created on demand and shared by all visitors.
 const textures=new Map();let users=0;
