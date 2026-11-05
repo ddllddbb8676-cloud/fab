@@ -3,5 +3,18 @@
 @media(max-height:740px){.wardrobe-preview{height:210px}.wardrobe-items{max-height:175px}.wardrobe header{padding:8px 14px}.wardrobe-modes{padding-top:8px}}
 .wardrobe-nickname{display:flex;align-items:center;gap:10px;border-top:1px solid #d9e6e1;margin-top:12px;padding-top:12px}.wardrobe-nickname[hidden]{display:none}.wardrobe-nickname>div{flex:1;min-width:0}.wardrobe-nickname b{font-size:13px}.wardrobe-nickname small{display:block;font-size:11px;color:#617b7b;line-height:1.5}.wardrobe-nickname button{font-size:12px;min-height:44px;padding:8px;flex-shrink:0}
 .wardrobe-modes{grid-template-columns:repeat(3,minmax(0,1fr))}.wardrobe [hidden]{display:none!important}
+.wardrobe[open]{display:flex;flex-direction:column;height:min(720px,calc(100dvh - 24px));overflow:hidden}
+.wardrobe header,.wardrobe-modes,.wardrobe-slots,.wardrobe footer{flex-shrink:0}
+.wardrobe-preview{height:clamp(110px,23dvh,180px);flex-shrink:0}
+.wardrobe-slots{grid-template-columns:repeat(6,minmax(0,1fr));gap:4px;padding:4px 12px 8px}
+.wardrobe-slots button{font-size:12px;white-space:nowrap;padding:4px 1px}
+.wardrobe-items,.wardrobe-titles{flex:1;min-height:0;max-height:none;overflow:auto}
+.wardrobe-items{grid-auto-rows:max-content;align-content:start}
+.wardrobe-item-mode[open]{height:fit-content}
+.wardrobe-supplies{padding:0 14px 10px;overflow:auto;min-height:0}
+.wardrobe-supplies .wardrobe-nickname{margin:0 0 8px;padding:12px 10px;border:1px solid #d9e6e1;border-radius:12px;background:#fff;gap:8px}
+.wardrobe-supplies .wardrobe-nickname small{margin-top:4px}
+.wardrobe-supplies .wardrobe-pass-buy{border-color:#286c6b;background:#286c6b;color:#fff}
+.shop-menu-entry{background:#e5f1ee!important;color:#246562!important;font-weight:700}
 .wardrobe-titles{padding:0 14px 14px}.title-progress{font-size:12px;line-height:1.5;margin:8px 0 10px}.title-options,.title-choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.title-options{margin-bottom:9px}.title-options:empty{display:none}.title-options button,.title-choices button{display:flex;flex-direction:column;justify-content:center;align-items:center;gap:4px;min-height:52px;padding:8px 4px;font-size:12px}.title-options small,.title-choices small{font-size:10px;color:#617b7b}.title-choices{max-height:235px;overflow:auto}.title-choices b{font-size:12px;white-space:nowrap}.title-choices button:disabled{opacity:.65}.title-choices button[aria-pressed=true]:disabled{opacity:1}.title-options [aria-pressed=true],.title-choices [aria-pressed=true]{border:2px solid #347d78;background:#edf7f3}.title-message{min-height:18px;font-size:11px;line-height:1.5;color:#536e70;margin:10px 0 0}
 @media(max-height:740px){.title-choices{max-height:175px}}

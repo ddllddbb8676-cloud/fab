@@ -1,5 +1,5 @@
-import { WALK_SPEED } from './locomotion.js?v=935ae134356b';
-import { stepWalker } from './walking.js?v=935ae134356b';
+import { WALK_SPEED } from './locomotion.js?v=9063703070a2';
+import { stepWalker } from './walking.js?v=9063703070a2';
 
 // The 5.2 m centre aisle keeps a normal strip down the middle and open sides.
 // Stop before the entrance rest area; these surfaces are never colliders.

@@ -1,7 +1,7 @@
-import { machines } from './layout.js?v=935ae134356b';
-import { getEmoApproach, planEmoApproach } from './emo-interaction.js?v=935ae134356b';
-import { getRuntimeObstacles } from './runtime-obstacles.js?v=935ae134356b';
-import { createWalkPlanner } from './walking.js?v=935ae134356b';
+import { machines } from './layout.js?v=9063703070a2';
+import { getEmoApproach, planEmoApproach } from './emo-interaction.js?v=9063703070a2';
+import { getRuntimeObstacles } from './runtime-obstacles.js?v=9063703070a2';
+import { createWalkPlanner } from './walking.js?v=9063703070a2';
 
 const machineById = new Map(machines.map(m => [m.id, m]));
 const compare = (a, b) => a.distance - b.distance || a.item.id - b.item.id;
@@ -26,7 +26,7 @@ export function pendingRepairEquipment(equipment, position) {
 }
 
 export function startRepairRanking(equipment, position, { onComplete, onError = () => {}, onProgress = () => {},
-  createWorker = () => new Worker(new URL('./repair-ranking-worker.js?v=935ae134356b', import.meta.url), { type: 'module' }) } = {}) {
+  createWorker = () => new Worker(new URL('./repair-ranking-worker.js?v=9063703070a2', import.meta.url), { type: 'module' }) } = {}) {
   let worker = null, timer = null, cancelled = false, fallingBack = false;
   const stopWorker = () => { worker?.terminate(); worker = null; };
   function complete(rows) {

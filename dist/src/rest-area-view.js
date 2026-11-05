@@ -1,5 +1,5 @@
 import {RectAreaLightUniformsLib} from 'three/addons/lights/RectAreaLightUniformsLib.js';
-import {REST_AREAS} from './rest-area.js?v=935ae134356b';
+import {REST_AREAS} from './rest-area.js?v=9063703070a2';
 
 export function createRestAreaView(THREE,scene) {
   RectAreaLightUniformsLib.init();

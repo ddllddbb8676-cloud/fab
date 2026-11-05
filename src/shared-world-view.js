@@ -2,11 +2,14 @@ import { ports } from './layout.js';
 import { actorFromPacket,foupFromPacket } from './shared-protocol.js';
 
 export function createSharedWorldView({fleet,store,destruction,onPeople,onCue,onCount,onSelf=()=>{}}) {
-  const portMap=new Map(ports.map(p=>[p.id,p])), targets=new Map();let selfId=null,lastTime=-1,renderTime=null,totals={};
-  function welcome(id){selfId=id;lastTime=-1;renderTime=null;store.reset();targets.clear();}
+  const portMap=new Map(ports.map(p=>[p.id,p])), targets=new Map();let selfId=null,lastTime=-1,renderTime=null,totals={},bufferDelay=.3;
+  function welcome(id,{transport='websocket'}={}){selfId=id;lastTime=-1;renderTime=null;bufferDelay=transport==='https'?.9:.3;store.reset();targets.clear();}
   function apply(frame,initial=false) {
-    if(!frame||frame.t<lastTime)return;lastTime=frame.t;
-    if(renderTime===null)renderTime=frame.t-.3;
+    if(!frame||frame.t<lastTime)return;
+    // Resume a stale stream from recent samples, not an old, expired timeline.
+    if(lastTime>=0&&frame.t-lastTime>3){renderTime=null;targets.clear();}
+    lastTime=frame.t;
+    if(renderTime===null)renderTime=frame.t-bufferDelay;
     const wanted=new Set(frame.broken.map(r=>r[0]));
     for(const id of destruction.state.destroyedIds)if(!wanted.has(id))destruction.reset(id);
     for(const [id,age,progress,owner] of frame.broken) {
@@ -30,10 +33,11 @@ export function createSharedWorldView({fleet,store,destruction,onPeople,onCue,on
     const people=frame.people.map(actorFromPacket);onPeople(people.filter(p=>p.id!==selfId));onSelf(people.find(p=>p.id===selfId));onCount(frame.count,people.length);totals=frame.totals;
     if(!initial)for(const [kind,x,z] of frame.events)onCue(kind,{x,z});
   }
-  function update(dt) {
-    // Render between timestamped samples, 300 ms behind the server. Chasing each
-    // 5 Hz packet with damping made constant-speed cars accelerate then brake.
-    if(renderTime!==null)renderTime=Math.min(lastTime,renderTime+Math.max(0,dt));
+  function update(dt,elapsed=dt) {
+    // Playback uses real frame time, not the bounded physics step. Otherwise
+    // slow devices fall behind the retained samples and jump on every packet.
+    // HTTP responses arrive in wider batches, so that connection buffers more.
+    if(renderTime!==null)renderTime=Math.min(lastTime,renderTime+Math.max(0,Number.isFinite(elapsed)?elapsed:0));
     for(const v of fleet.vehicles){const samples=targets.get(v.id);if(!samples?.length)continue;
       while(samples.length>2&&samples[1].t<=renderTime)samples.shift();
       const a=samples[0],b=samples[1]??a,f=b.t>a.t?Math.max(0,Math.min(1,(renderTime-a.t)/(b.t-a.t))):0;
@@ -45,5 +49,5 @@ export function createSharedWorldView({fleet,store,destruction,onPeople,onCue,on
     }
     store.interpolate(dt);
   }
-  return {welcome,apply,update,get totals(){return totals;}};
+  return {welcome,apply,update,get totals(){return totals;},get playback(){return {bufferDelay,lag:renderTime===null?null:lastTime-renderTime};}};
 }

@@ -1,7 +1,7 @@
-import { machines, bays, BAY_CENTERS, TOOL_WIDTH, isBlocked } from './layout.js?v=935ae134356b';
-import { canTraverseRuntimeObstacles, getRuntimeObstacles } from './runtime-obstacles.js?v=935ae134356b';
-import { stockerPorts, STOCKER_WALK_OUTER_X } from './stocker-layout.js?v=935ae134356b';
-import { ENTRANCE } from './entrance-layout.js?v=935ae134356b';
+import { machines, bays, BAY_CENTERS, TOOL_WIDTH, isBlocked } from './layout.js?v=9063703070a2';
+import { canTraverseRuntimeObstacles, getRuntimeObstacles } from './runtime-obstacles.js?v=9063703070a2';
+import { stockerPorts, STOCKER_WALK_OUTER_X } from './stocker-layout.js?v=9063703070a2';
+import { ENTRANCE } from './entrance-layout.js?v=9063703070a2';
 export const WALK_RADIUS = .295;
 export function canWalkSegment(a, b) {
   if (!canTraverseRuntimeObstacles(a, b, WALK_RADIUS)) return false;
