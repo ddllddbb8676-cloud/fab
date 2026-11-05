@@ -1,4 +1,4 @@
-import {canWalkSegment} from './walking.js?v=1b5f80f35e53';
+import {canWalkSegment} from './walking.js?v=dcdcc120d004';
 
 export const ADMIN_VISIT_STORAGE_KEY='fab-admin-visit-v1';
 const INTENT_MS=120000,REPLAN_MS=1500,STALL_MS=3000,ARRIVAL_DISTANCE=1.1;

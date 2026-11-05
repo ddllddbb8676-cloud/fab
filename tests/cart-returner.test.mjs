@@ -7,15 +7,15 @@ import {CART_HOMES,cartFits} from '../src/cart-layout.js';
 import {ports,isBlocked} from '../src/layout.js';
 import {createRoom} from '../server/room-engine.js';
 
-function setup(position={x:0,z:55,yaw:Math.PI}){
+function setup(position={x:0,z:55,yaw:Math.PI},cartId='CART01'){
   let clock=0,enabled=true;
   const store=createFoupStore({ports,initialPortIds:ports.slice(0,8).map(p=>p.id)}),players=new Map();
   const carts=createFoupCarts({store,players,now:()=>clock});
-  const c=store.carts.get('CART01');Object.assign(c,position);
+  const c=store.carts.get(cartId);Object.assign(c,position);
   const actor={id:'resident:0',role:'thrower',x:0,z:58,y:0,heading:0,phase:'idle',path:[],posture:'stand',speed:0,vehicleId:null};
   const residents={people:[actor],reserveCart(p){p.cartTask=true;return true;},releaseCart(p){delete p.cartTask;p.phase='idle';p.path=[];p.speed=0;}};
   const cues=[],returner=createCartReturner({store,carts,residents,players,now:()=>clock,canRun:()=>enabled,onCue:(kind)=>cues.push(kind)});
-  function fill(id='CART01'){
+  function fill(id=cartId){
     return [0,1,2,3].map(slot=>{const r=[...store.records.values()].find(r=>r.mode==='port');assert.ok(store.pickup(r.id,'loader'));assert.ok(store.loadCart(id,slot,'loader',r.id));return r;});
   }
   function step(n=1){for(let i=0;i<n;i++){clock+=.1;store.step(.1);returner.update(.1);carts.step();}}
@@ -68,6 +68,38 @@ test('retrieval crosses a bay corner through broad aisles without cutting throug
     for(let i=0;i<2800;i++){s.step();assert.ok(cartFits(s.c,isBlocked));if(cargo.every(r=>r.mode==='stored')&&!s.returner.state)break;}
     assert.ok(cargo.every(r=>r.mode==='stored'),JSON.stringify({position,phase:s.returner.state?.phase,cart:{x:s.c.x,z:s.c.z}}));
   }
+});
+
+test('carts parked at narrow aisle edges roll clear before turning and return all original cargo',()=>{
+  for(const position of [{id:'CART01',x:-2.229,z:-20.383,yaw:-43.374},{id:'CART02',x:38.749,z:51.852,yaw:13.659}]){
+    const s=setup(position,position.id),cargo=s.fill(),ids=cargo.map(r=>r.id),count=s.store.records.size;
+    s.jump(121);let escaped=false,previous={...s.c};
+    for(let i=0;i<2800;i++){
+      s.step();escaped ||= s.returner.state?.phase==='escape';
+      assert.ok(cartFits(s.c,isBlocked),'cart never cuts through equipment');
+      assert.ok(Math.hypot(s.c.x-previous.x,s.c.z-previous.z)<=.121,'recovery stays at walking speed');
+      previous={...s.c};
+      if(cargo.every(r=>r.mode==='stored')&&!s.returner.state)break;
+    }
+    assert.ok(escaped,'blocked rotation uses a visible straight clearance move');
+    const home=CART_HOMES.find(h=>h.id===s.c.id);
+    assert.ok(Math.hypot(s.c.x-home.x,s.c.z-home.z)<.03);
+    assert.ok(cargo.every(r=>r.mode==='stored'&&r.stockerId===home.stockerId&&r.breakSeq===0));
+    assert.deepEqual(cargo.map(r=>r.id),ids);assert.equal(s.store.records.size,count);
+    assert.equal(s.c.driver,null);assert.equal(s.actor.cartTask,undefined);
+  }
+});
+
+test('a visitor blocking the clearance move makes the NPC wait without moving through them',()=>{
+  const s=setup({x:-2.229,z:-20.383,yaw:-43.374});s.fill();s.jump(121);
+  for(let i=0;i<1000&&s.returner.state?.phase!=='escape';i++)s.step();
+  assert.equal(s.returner.state.phase,'escape');
+  const before={x:s.c.x,z:s.c.z};
+  s.players.set('person',{id:'person',x:s.c.x,z:s.c.z,y:0,hidden:false});
+  s.step(20);assert.equal(s.c.x,before.x);assert.equal(s.c.z,before.z);
+  s.players.clear();
+  for(let i=0;i<2000&&s.returner.state;i++)s.step();
+  assert.equal(s.returner.state,null);assert.ok(Math.hypot(s.c.x-1.5,s.c.z-82)<.03);
 });
 
 test('a returning visitor cancels collection before pickup; event cancellation and a full stocker preserve cargo',()=>{

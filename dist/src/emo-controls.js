@@ -1,5 +1,5 @@
-import { TOOL_SCALE_X } from './layout.js?v=1b5f80f35e53';
-import { getRuntimeObstacles } from './runtime-obstacles.js?v=1b5f80f35e53';
+import { TOOL_SCALE_X } from './layout.js?v=dcdcc120d004';
+import { getRuntimeObstacles } from './runtime-obstacles.js?v=dcdcc120d004';
 
 export const EMO_MAX_DISTANCE = 12;
 export const EMO_HIT_SIZE = Object.freeze({ width: .48, height: .48 });

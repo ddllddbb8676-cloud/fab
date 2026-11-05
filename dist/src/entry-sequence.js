@@ -1,5 +1,5 @@
-import { AIR_SHOWER } from './air-shower.js?v=1b5f80f35e53';
-import { CHASE_CAMERA } from './locomotion.js?v=1b5f80f35e53';
+import { AIR_SHOWER } from './air-shower.js?v=dcdcc120d004';
+import { CHASE_CAMERA } from './locomotion.js?v=dcdcc120d004';
 
 const clamp = t => Math.max(0, Math.min(1, t));
 const smooth = t => { t = clamp(t); return t * t * (3 - 2 * t); };

@@ -32,6 +32,28 @@ export function createCartReturner({store,carts,residents,players,now,canRun=()=
     }
     return findWalkPath(c,target,{canTraverse:clear});
   }
+  function clearTurn(c,yaw){
+    const angle=turn(c.yaw,yaw),steps=Math.max(1,Math.ceil(Math.abs(angle)/.06));
+    for(let i=1;i<=steps;i++){
+      const pose={...c,yaw:c.yaw+angle*i/steps},handle=cartPoint(pose,0,0,CART_SIZE.tow);
+      if(!cartFits(pose,isBlocked)||isBlocked(handle.x,handle.z,.295))return false;
+    }
+    return true;
+  }
+  function escapeRoute(c,home,target){
+    // A valid aisle route may require a turn that the parked cart cannot make.
+    // Roll along its current axis first, checking the complete cart and handle,
+    // then turn in clear space. Plan only after a blocked turn, never per frame.
+    for(const sign of [1,-1])for(let i=1;i<=40;i++){
+      const candidate={x:c.x+Math.sin(c.yaw)*sign*i*.1,z:c.z+Math.cos(c.yaw)*sign*i*.1,yaw:c.yaw};
+      const handle=cartPoint(candidate,0,0,CART_SIZE.tow);
+      if(!cartFits(candidate,isBlocked)||isBlocked(handle.x,handle.z,.295))break;
+      if(i%5||!clearTurn(candidate,Math.atan2(target.x-candidate.x,target.z-candidate.z)))continue;
+      const path=cartRoute(candidate,home),first=path?.[0];
+      if(first&&clearTurn(candidate,Math.atan2(first.x-candidate.x,first.z-candidate.z)))return {target:candidate,path};
+    }
+    return null;
+  }
   function heldPose(actor){
     const held=store.getCarried(actor.id);if(!held)return;
     const lift=actor.phase==='cart-unload'?Math.min(1,actor.time/.8):0;
@@ -106,8 +128,22 @@ export function createCartReturner({store,carts,residents,players,now,canRun=()=
       const next={x:c.x+Math.sin(desired)*travel,z:c.z+Math.cos(desired)*travel,yaw};
       const handle=cartPoint(next,0,0,CART_SIZE.tow);
       const blocked=[...players.values()].some(p=>!p.hidden&&(p.y||0)<.5&&(distance(p,next)<.85||distance(p,handle)<.65));
-      if(!blocked&&carts.moveNpc(c,actor,next,dt))job.stuck=0;else{job.stuck+=dt;actor.speed=0;}
+      if(!blocked&&carts.moveNpc(c,actor,next,dt))job.stuck=0;else{
+        job.stuck+=dt;actor.speed=0;
+        if(!blocked&&job.stuck>.5&&!job.escapeTried){
+          job.escapeTried=true;
+          const escape=escapeRoute(c,home,target);
+          if(escape){job.escape=escape;job.phase='escape';job.stuck=0;}
+        }
+      }
       if(distance(c,target)<.02)job.path.shift();
+    }else if(job.phase==='escape'){
+      const target=job.escape.target,d=distance(c,target),travel=Math.min(d,dt*1.2);
+      const next={x:c.x+(target.x-c.x)/Math.max(d,.0001)*travel,z:c.z+(target.z-c.z)/Math.max(d,.0001)*travel,yaw:c.yaw};
+      const handle=cartPoint(next,0,0,CART_SIZE.tow);
+      const blocked=[...players.values()].some(p=>!p.hidden&&(p.y||0)<.5&&(distance(p,next)<.85||distance(p,handle)<.65));
+      if(!blocked&&carts.moveNpc(c,actor,next,dt))job.stuck=0;else{job.stuck+=dt;actor.speed=0;}
+      if(distance(c,target)<.02){job.path=job.escape.path;job.escape=null;job.phase='return';job.escapeTried=false;}
     }else if(job.phase==='fetch'){
       if(walk(dt)){
         actor.phase='idle';

@@ -1,12 +1,13 @@
-import { WALK_SPEED } from './locomotion.js?v=1b5f80f35e53';
-import { stepWalker } from './walking.js?v=1b5f80f35e53';
+import { WALK_SPEED } from './locomotion.js?v=dcdcc120d004';
+import { stepWalker } from './walking.js?v=dcdcc120d004';
 
 // The 5.2 m centre aisle keeps a normal strip down the middle and open sides.
 // Stop before the entrance rest area; these surfaces are never colliders.
+// Right-hand traffic: facing into the fab (-Z), the right lane is at +X.
 export const WALKWAY_SPEED = WALK_SPEED * 2;
 export const WALKWAY_LANES = Object.freeze([
-  Object.freeze({ id: 'outbound', x: -1.05, width: 1.35, minZ: -78, maxZ: 72, direction: -1, label: '팹 안쪽', colour: '#3d817e' }),
-  Object.freeze({ id: 'inbound', x: 1.05, width: 1.35, minZ: -78, maxZ: 72, direction: 1, label: '입구', colour: '#4b7395' })
+  Object.freeze({ id: 'outbound', x: 1.05, width: 1.35, minZ: -78, maxZ: 72, direction: -1, label: '팹 안쪽', colour: '#3d817e' }),
+  Object.freeze({ id: 'inbound', x: -1.05, width: 1.35, minZ: -78, maxZ: 72, direction: 1, label: '입구', colour: '#4b7395' })
 ]);
 export function walkwayAt(p) {
   if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.z) || (p.y ?? 0) > .15) return null;

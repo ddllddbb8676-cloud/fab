@@ -9,11 +9,12 @@ import {createExplorer} from '../src/explorer.js';
 import {createRoom} from '../server/room-engine.js';
 import {CART_SIZE,cartPoint,cartSeatPose,cartCargoPose,cartFits} from '../src/cart-layout.js';
 
-const state=(x=-1.05,z=0)=>({mode:'walk',position:{x,y:0,z},posture:'stand',path:[],heading:.34,yaw:.75,speed:0});
+const state=(x=1.05,z=0)=>({mode:'walk',position:{x,y:0,z},posture:'stand',path:[],heading:.34,yaw:.75,speed:0});
 function carry(s,dt=1/60,options={}){return applyWalkwayMotion(s,{...s.position,routed:!!s.path.length},dt,options);}
-test('both straight belts carry an idle person at exactly twice normal speed at 30/60/120 Hz',()=>{
+test('both right-hand belts carry an idle person at exactly twice normal speed at 30/60/120 Hz',()=>{
   assert.equal(WALKWAY_SPEED,WALK_SPEED*2);
   for(const lane of WALKWAY_LANES)for(const hz of [30,60,120]){
+    assert.ok(lane.x*lane.direction<0,'each belt stays to the right of its travel direction');
     const s=state(lane.x);
     for(let i=0;i<hz*2;i++)carry(s,1/hz);
     assert.ok(Math.abs(s.position.z-lane.direction*12.8)<1e-8);
@@ -37,7 +38,7 @@ test('walking forward never triples belt speed, side exit restores ordinary move
   const s=state(),dt=.05;
   for(let i=0;i<20;i++){const before={...s.position};s.position.z-=WALK_SPEED*dt;applyWalkwayMotion(s,before,dt);}
   assert.ok(Math.abs(s.position.z+WALKWAY_SPEED)<1e-8);
-  for(let i=0;i<20;i++){const before={...s.position};s.position.x-=WALK_SPEED*dt;applyWalkwayMotion(s,before,dt);}
+  for(let i=0;i<20;i++){const before={...s.position};s.position.x+=WALK_SPEED*dt;applyWalkwayMotion(s,before,dt);}
   const z=s.position.z;carry(s);assert.equal(s.position.z,z);assert.equal(walkwayAt(s.position),null);
 });
 test('protected zones, modal lock, seated riders, height, cleanup and disabled events cannot drift',()=>{
@@ -51,7 +52,7 @@ test('protected zones, modal lock, seated riders, height, cleanup and disabled e
 });
 test('tap targets never overshoot; crossing and reverse routes retain their normal path',()=>{
   const s=state();s.path=[{x:s.position.x,z:-.02}];carry(s,.05);assert.equal(s.position.z,-.02);
-  for(const target of [{x:2,z:-3},{x:-1.05,z:3}]){const q=state();q.path=[target];carry(q,.05);assert.equal(q.position.z,0);assert.deepEqual(q.path,[target]);}
+  for(const target of [{x:2,z:-3},{x:1.05,z:3}]){const q=state();q.path=[target];carry(q,.05);assert.equal(q.position.z,0);assert.deepEqual(q.path,[target]);}
 });
 test('real explorer carries both directions while keeping chosen view and allows leaving with the joystick',()=>{
   const old={document:globalThis.document,window:globalThis.window},events=new Map();
@@ -62,14 +63,14 @@ test('real explorer carries both directions while keeping chosen view and allows
     const camera=new THREE.PerspectiveCamera(72,390/844,.08,420);
     const explorer=createExplorer({THREE,scene,camera,avatar,colliders:[],vehicles:[],orbit:{target:new THREE.Vector3(),update(){}},
       canvas:{addEventListener:(k,v)=>events.set(k,v),setPointerCapture(){},getBoundingClientRect:()=>({left:0,top:0,width:390,height:844})},onMode(){},onInspect(){},onToast(){},onGroundMotion:applyWalkwayMotion});
-    const s=explorer.state;s.position.set(-1.05,0,20);s.yaw=0;s.manualLook=true;explorer.update(0);
+    const s=explorer.state;s.position.set(1.05,0,20);s.yaw=0;s.manualLook=true;explorer.update(0);
     const yaw=s.yaw,elevation=s.elevation,distance=s.distance;
     for(let i=0;i<60;i++)explorer.update(1/60);
     assert.ok(Math.abs(s.position.z-13.6)<1e-8);assert.equal(s.yaw,yaw);assert.equal(s.elevation,elevation);assert.equal(s.distance,distance);
     explorer.beginJoystick();explorer.moveJoystick(1,0);for(let i=0;i<65;i++)explorer.update(1/60);explorer.endJoystick();
     const z=s.position.z;assert.equal(walkwayAt(s.position),null);for(let i=0;i<60;i++)explorer.update(1/60);assert.equal(s.position.z,z);
     // Crossing the centre onto the opposite strip works without mounting buttons.
-    s.position.set(1.05,0,0);for(let i=0;i<60;i++)explorer.update(1/60);assert.ok(Math.abs(s.position.z-6.4)<1e-8);
+    s.position.set(-1.05,0,0);for(let i=0;i<60;i++)explorer.update(1/60);assert.ok(Math.abs(s.position.z-6.4)<1e-8);
     assert.equal(avatar.root.position.z,s.position.z);
   }finally{Object.assign(globalThis,old);}
 });
@@ -94,7 +95,7 @@ test('server cart pose accepts two-times travel with all four original cargo IDs
 });
 test('a one-second delayed cart pose stays attached only on the same forward belt',()=>{
   const room=createRoom({random:()=>.5,now:()=>Date.UTC(2026,10,5,4,0)}),id='visitor:'+'d'.repeat(64),c=room.store.carts.get('CART01');
-  Object.assign(c,{x:-1.05,z:20,yaw:Math.PI});room.join(id,{hasEntered:true,optOut:true});room.pose(id,{x:-1.05,y:0,z:18.5,heading:Math.PI,posture:'stand'});
+  Object.assign(c,{x:1.05,z:20,yaw:Math.PI});room.join(id,{hasEntered:true,optOut:true});room.pose(id,{x:1.05,y:0,z:18.5,heading:Math.PI,posture:'stand'});
   assert.ok(room.command(id,'cart-pull',{id:c.id}).ok);const p=room.players.get(id),start=p.z;
   for(let i=0;i<10;i++)room.step(.1);
   room.pose(id,{x:p.x,y:0,z:start-6.4,heading:Math.PI,posture:'stand',speed:0});assert.equal(c.driver,id);assert.ok(Math.abs(c.z-13.6)<1e-8);

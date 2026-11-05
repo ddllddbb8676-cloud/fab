@@ -1,7 +1,7 @@
-import { isBlocked, machines, bays, SEATED_FOUP_Y } from './layout.js?v=1b5f80f35e53';
-import {entranceBounds} from './entrance-layout.js?v=1b5f80f35e53';
-import {CART_HOMES,cartCargoPose,cartFits,cartPoint} from './cart-layout.js?v=1b5f80f35e53';
-import {stockers,stockerById,stockerBounds,stockerSlot,stockerRecordPose,STOCKER_CAPACITY,STOCKER_TRANSFER_SECONDS,STOCKER_OUT_CUE_AT} from './stocker-layout.js?v=1b5f80f35e53';
+import { isBlocked, machines, bays, SEATED_FOUP_Y } from './layout.js?v=dcdcc120d004';
+import {entranceBounds} from './entrance-layout.js?v=dcdcc120d004';
+import {CART_HOMES,cartCargoPose,cartFits,cartPoint} from './cart-layout.js?v=dcdcc120d004';
+import {stockers,stockerById,stockerBounds,stockerSlot,stockerRecordPose,STOCKER_CAPACITY,STOCKER_TRANSFER_SECONDS,STOCKER_OUT_CUE_AT} from './stocker-layout.js?v=dcdcc120d004';
 const stockModes=new Set(['stored','stocking','retrieving','stocker-out']);
 // Accept the retired units only while reading older saved worlds.
 const retiredStockers=new Set(['STK03','STK04','STK05','STK06']);
