@@ -13,7 +13,7 @@ export function eventPresentation(data,at){
   const preparing=b.phase==='preparing',left=seconds(preparing?b.startsAt:b.endsAt,at);
   const round=b.round??1,progress=round>1?`${round-1}개 성공! · `:'';
   return {golden,bay:progress+(preparing?`${b.bayId+1}번 BAY · ${time(left)} 후 시작`:`${b.bayId+1}번 BAY · 남은 ${b.remaining}대 · ${time(left)}`),
-    detail:preparing?`${b.bayLimit===2?'2개 베이 모드 · 전체 60초':'1개 베이 모드 · 60초'} · 베이당 +200칩`:round>1?`누적 ${(round-1)*200}칩 · 남은 시간에 추가 +200칩`:'함께 부숴요! · 성공하면 모두 +200칩',button:round>1?`다음 베이로 바로 가기 · ${b.bayId+1}번`:`${b.bayId+1}번 BAY로 가기`,
+    detail:preparing?`${b.bayLimit===2?'전체 60초 안에 베이마다':'60초 안에 해당 베이의'} 장비 20대를 전부 부수세요! · ${b.bayLimit===2?'베이당':'성공하면 모두'} +200칩`:round>1?`남은 시간 안에 다음 베이 장비 20대 전부! · 누적 ${(round-1)*200}칩`:'장비 20대를 전부 부수면 성공! · 모두 +200칩',button:round>1?`다음 베이로 바로 가기 · ${b.bayId+1}번`:`${b.bayId+1}번 BAY로 가기`,
     countdown:preparing?(left>0&&left<=3?String(left):left===0?'시작 확인 중':''):(at-b.startsAt<1200?'시작!':'')};
 }
 export function createWorldEventsUI({document:doc=globalThis.document,root=doc.body,now=()=>performance.now(),command,onTravel,onVictory,toast=()=>{},ready=()=>true,canCelebrate=()=>true}){
@@ -62,7 +62,7 @@ export function createWorldEventsUI({document:doc=globalThis.document,root=doc.b
       suppressSuccess=initial&&Boolean(result());
       if(suppressSuccess)shown.add(result().id);
       if(next.golden?.id&&lastGold!==next.golden.id){lastGold=next.golden.id;if(ready())toast('황금 FOUP 찾기! 10분 안에 에어샤워실 앞 스토커 IN으로 가져오면 +200칩',6000);}
-      if(next.bay?.phase==='preparing'&&lastBay!==next.bay.id){lastBay=next.bay.id;const left=seconds(next.bay.startsAt,next.serverNow);if(ready())toast(`${next.bay.bayLimit??1}개 베이 뿌시기! ${next.bay.bayId+1}번 BAY · ${left===60?'1분':left+'초'} 뒤 시작 · 전체 60초`,5000);}
+      if(next.bay?.phase==='preparing'&&lastBay!==next.bay.id){lastBay=next.bay.id;const left=seconds(next.bay.startsAt,next.serverNow);if(ready())toast(`${next.bay.bayId+1}번 BAY · ${left===60?'1분':left+'초'} 뒤 시작! 60초 안에 장비 20대를 전부 부수세요!${next.bay.bayLimit===2?' 성공하면 남은 시간에 다음 베이까지!':''}`,6500);}
       if(next.bay?.phase==='failed'&&!initial&&!shown.has(next.bay.id)){shown.add(next.bay.id);const wins=next.bay.clearedCount??0;if(ready())toast(wins?`${wins}개 베이 성공으로 연속 도전 종료! 이미 받은 칩은 그대로예요`:'60초 종료! 다음에 다시 도전해요',5000);}
       update();
     },

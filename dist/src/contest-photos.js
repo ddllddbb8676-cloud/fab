@@ -1,4 +1,4 @@
-import {CONTEST_ZONES} from './foup-contest.js?v=dcdcc120d004';
+import {CONTEST_ZONES} from './foup-contest.js?v=7b8510f06761';
 
 // Exactly two small renders per result, one per frame, with asynchronous GPU
 // readback. The canvases live only in the result UI; no uploads or saved photos.

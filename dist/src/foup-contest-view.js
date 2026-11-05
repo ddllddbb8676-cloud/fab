@@ -1,4 +1,4 @@
-import {CONTEST_NAME, CONTEST_RULES, CONTEST_ZONES, contestRewards} from './foup-contest.js?v=dcdcc120d004';
+import {CONTEST_NAME, CONTEST_RULES, CONTEST_ZONES, contestRewards} from './foup-contest.js?v=7b8510f06761';
 
 // Two instanced floor decals, allocated only when a match is announced.
 export function createContestZones(THREE, scene) {
@@ -48,6 +48,7 @@ export function createContestZones(THREE, scene) {
 }
 
 const teamName = {black:'흑팀',white:'백팀',referee:'파란 심판'};
+const teamGoal = {black:'검정 방진복 → 검정 원',white:'흰 방진복 → 흰 원'};
 const clock = ms => {
   const seconds=Math.max(0,Math.ceil(ms/1000));
   return Math.floor(seconds/60)+':'+String(seconds%60).padStart(2,'0');
@@ -120,9 +121,9 @@ export function createContestUI({doc=document, now=()=>performance.now(), comman
     score.hidden=recruiting||match.phase==='cancelled';
     black.textContent='● 흑팀 '+match.black;white.textContent='○ 백팀 '+match.white;
     if(recruiting){
-      detail.textContent=(team?teamName[team]+' · ':'')+`우리 원에 풉을 던져 넣으세요! 상대 풉도 뺏을 수 있어요. 시작 때 원을 비우고 3분간 대결! 안전팀은 쉬어요. · ${match.joined}명 참가`;
+      detail.textContent=(teamGoal[team]?teamGoal[team]+'! ':'내 방진복과 같은 색 원에 ')+`풉을 모으세요! 던져 넣기·상대 풉 뺏기도 가능 · 3분 대결 · ${match.joined}명 참가`;
     }else if(active){
-      detail.textContent=team==='referee'?'파란 심판 · 관전 중':team?teamName[team]+' · 우리 원에 던져 넣으세요!':'관전 중';
+      detail.textContent=team==='referee'?'파란 심판 · 관전 중':teamGoal[team]?teamGoal[team]+' · 풉을 옮겨 넣으세요! 던져도 돼요':'관전 중';
     }else if(match.phase==='cancelled')detail.textContent=match.reason;
     else detail.textContent=amount?`내 보상 +${amount}칩 적립`:'최종 집계';
     const referee=team==='referee'&&(recruiting||active);

@@ -1,12 +1,12 @@
-import { TOUR_POINTS, HALL, TOOL_WIDTH, bays, isBlocked } from './layout.js?v=dcdcc120d004';
-import { findWalkPath, stepWalker, resolveWalkTap } from './walking.js?v=dcdcc120d004';
-import { createTourRoute } from './tour-route.js?v=dcdcc120d004';
-import { createTransferSession, updateTransferSession, transferCameraFrame, transferTransitFrame } from './transfer-view.js?v=dcdcc120d004';
-import { getRuntimeObstacles } from './runtime-obstacles.js?v=dcdcc120d004';
-import { planEmoApproach, emoPressCameraFrame, EMO_REACH_SECONDS, EMO_HOLD_SECONDS, EMO_CONTACT_TOLERANCE } from './emo-interaction.js?v=dcdcc120d004';
-import { findRestHeading } from './posture.js?v=dcdcc120d004';
-import {isRestArea,REST_AREA_MESSAGE} from './rest-area.js?v=dcdcc120d004';
-import { WALK_SPEED, CHASE_CAMERA, stickVector, cameraRelativeMove } from './locomotion.js?v=dcdcc120d004';
+import { TOUR_POINTS, HALL, TOOL_WIDTH, bays, isBlocked } from './layout.js?v=7b8510f06761';
+import { findWalkPath, stepWalker, resolveWalkTap } from './walking.js?v=7b8510f06761';
+import { createTourRoute } from './tour-route.js?v=7b8510f06761';
+import { createTransferSession, updateTransferSession, transferCameraFrame, transferTransitFrame } from './transfer-view.js?v=7b8510f06761';
+import { getRuntimeObstacles } from './runtime-obstacles.js?v=7b8510f06761';
+import { planEmoApproach, emoPressCameraFrame, EMO_REACH_SECONDS, EMO_HOLD_SECONDS, EMO_CONTACT_TOLERANCE } from './emo-interaction.js?v=7b8510f06761';
+import { findRestHeading } from './posture.js?v=7b8510f06761';
+import {isRestArea,REST_AREA_MESSAGE} from './rest-area.js?v=7b8510f06761';
+import { WALK_SPEED, CHASE_CAMERA, stickVector, cameraRelativeMove } from './locomotion.js?v=7b8510f06761';
 
 export const REPAIR_SECONDS = 5;
 
