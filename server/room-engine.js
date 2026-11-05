@@ -1,6 +1,7 @@
 import {checkNickname,NICKNAME_CHOICE_VERSION,NICKNAME_TICKET_PRICE} from '../src/nickname-policy.js';
 import {nicknameKey} from '../src/visitor-name.js';
 import {restoreWallet,grantChips,wardrobeCommand,walletView} from './chip-wallet.js';
+import {safetyPassCommand} from './safety-pass.js';
 import {npcOutfit} from '../src/npc-outfits.js';
 import { machines, ports, isBlocked } from '../src/layout.js';
 import { AIR_SHOWER } from '../src/air-shower.js';
@@ -98,7 +99,7 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
   }
   const residents=createResidentSimulation({fleet,store,destruction,detachCargo,random,getNeighbors:()=>safety.people,protectedIds:()=>[...leases.keys(),...(worldEvents?.protectedIds()??[])],onCue:emit});
   const safety=createSafetyPatrols({random,excludedNames:residents.people.map(p=>p.name)});
-  const cartReturner=createCartReturner({store,carts,residents,players,now:()=>time,canRun:()=>!worldEvents?.contest.live(),onCue:emit});
+  const cartReturner=createCartReturner({store,carts,residents,players,now:()=>time,canRun:()=>!worldEvents?.contest.live()&&!worldEvents?.bayRunning()&&!worldEvents?.view().lastResult,onCue:emit});
   function rememberContestProfile(saved) {
     if(worldEvents?.contest.hasMember(saved.id))contestProfiles.set(saved.id,saved);
   }
@@ -145,7 +146,7 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
     onBayStart:()=>{for(const p of players.values())if(isSafety(p.role))finishDuty(p,p.optOut);},
     connected:()=>[...players.keys()].filter(id=>/^visitor:[a-f0-9]{64}$/.test(id)&&!excludedEvents.has(id)),isDestroyed:destruction.isDestroyed,
     prepareBay:bayId=>{for(const m of machines)if(m.bayId===bayId){const p=players.get(leases.get(m.id)?.owner);if(p)release(p);residents.yieldMachine(m.id);destruction.reset(m.id);}},
-    assignSafety:bayId=>safety.setEventBay(bayId),spawnGolden:(event,count)=>store.spawnGolden(event,count),expireGolden:(id,at)=>store.expireGolden(id,at),
+    assignSafety:bayId=>{safety.setEventBay(bayId);if(worldEvents?.bayRunning())cartReturner.update(0);residents.setEventBays(bayId);},spawnGolden:(event,count)=>store.spawnGolden(event,count),expireGolden:(id,at)=>store.expireGolden(id,at),
     goldenRemaining:id=>[...store.records.values()].filter(r=>r.gold?.eventId===id&&!r.gold.throwPaid&&!['broken','cleared'].includes(r.mode)).length,
     reward:(id,amount,eventId,seriesId)=>{const p=players.get(id);if(p&&credit(p,amount,'bay-event',{eventId,seriesId}))changed(p);}});
   function finishDuty(p,optOut=false) {
@@ -299,6 +300,11 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
       if(!canSelectTitle(data.preference,p.brokenCount))return fail('아직 획득하지 못한 칭호예요.');
       if(p.titlePreference!==data.preference){p.titlePreference=data.preference;changed(p);}
       return {ok:true,titles:titleState(id)};
+    }
+    if(kind==='safety-pass-buy'||kind==='safety-pass-use') {
+      const result=safetyPassCommand(p,kind,data,time);
+      if(result.ok){if(result.penaltyCleared)release(p);changed(p);}
+      return result;
     }
     if(kind==='nickname-ticket-buy') {
       if(p.chipUnlimited)return fail('이 계정의 지정 닉네임은 유지됩니다.');

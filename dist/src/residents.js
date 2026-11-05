@@ -1,18 +1,19 @@
-import { machines, bays, ports, BAY_CENTERS } from './layout.js?v=3b5478afa86e';
-import { NPC_WALK_SPEED, NPC_REPAIR_SPEED } from './locomotion.js?v=3b5478afa86e';
-import { findWalkPath } from './walking.js?v=3b5478afa86e';
-import {stepNpc,rerouteNpc,npcDestination} from './npc-navigation.js?v=3b5478afa86e';
-import { getEmoApproach } from './emo-interaction.js?v=3b5478afa86e';
-import { findRestHeading } from './posture.js?v=3b5478afa86e';
-import { createVisitorName, createVisitorBadge } from './visitor-name.js?v=3b5478afa86e';
-import {npcDestructionTitle} from './destruction-titles.js?v=3b5478afa86e';
-import { createAvatar } from './avatar.js?v=3b5478afa86e';
-import {createAvatarAppearance} from './avatar-appearance.js?v=3b5478afa86e';
-import {npcOutfit} from './npc-outfits.js?v=3b5478afa86e';
-import { floorSpot } from './foup-play.js?v=3b5478afa86e';
-import { reservedPortIds } from './network-transport.js?v=3b5478afa86e';
+import { machines, bays, ports, BAY_CENTERS } from './layout.js?v=935ae134356b';
+import { NPC_WALK_SPEED, NPC_REPAIR_SPEED } from './locomotion.js?v=935ae134356b';
+import { findWalkPath } from './walking.js?v=935ae134356b';
+import {stepNpc,rerouteNpc,npcDestination} from './npc-navigation.js?v=935ae134356b';
+import { getEmoApproach } from './emo-interaction.js?v=935ae134356b';
+import { findRestHeading } from './posture.js?v=935ae134356b';
+import { createVisitorName, createVisitorBadge } from './visitor-name.js?v=935ae134356b';
+import {npcDestructionTitle} from './destruction-titles.js?v=935ae134356b';
+import { createAvatar } from './avatar.js?v=935ae134356b';
+import {createAvatarAppearance} from './avatar-appearance.js?v=935ae134356b';
+import {npcOutfit} from './npc-outfits.js?v=935ae134356b';
+import { floorSpot } from './foup-play.js?v=935ae134356b';
+import { reservedPortIds } from './network-transport.js?v=935ae134356b';
+import {isEventBay,avoidsEventBay} from './safety-team.js?v=935ae134356b';
 
-import { RESIDENT_ROLES } from './room-population.js?v=3b5478afa86e';
+import { RESIDENT_ROLES } from './room-population.js?v=935ae134356b';
 export { RESIDENT_ROLES };
 export const REPAIR_STOCK=Object.freeze({minimum:50,target:60,repairGraceSeconds:45});
 const distance = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -25,6 +26,9 @@ export function createResidentSimulation({ fleet, store, destruction, detachCarg
   const totals = { throws: 0, repairs: 0, breaks: 0, pickups: 0, placements: 0 };
   const recentRepairs=new Map();let previousDamage=new Set(destruction.state.destroyedIds);
   let elapsed = 0, planner = 0;
+  let eventBays=[];
+  const inEventBay=p=>eventBays.some(id=>isEventBay(p,id,.32));
+  const canTraverse=(a,b)=>eventBays.every(id=>avoidsEventBay(a,b,id));
   const choose = items => items[Math.min(items.length - 1, Math.floor(random() * items.length))];
   for (const [role, count] of Object.entries(RESIDENT_ROLES)) for (let i = 0; i < count; i++) {
     const index = people.length, bay = bays[(index * 7 + 8) % bays.length];
@@ -59,20 +63,43 @@ export function createResidentSimulation({ fleet, store, destruction, detachCarg
   function yieldMachine(id) {
     for (const actor of people) if (actor.targetId === id) { release(actor); actor.wait = 4; }
   }
+  function evacuate(actor){
+    const bayId=eventBays.find(id=>isEventBay(actor,id,.32));if(bayId===undefined)return;
+    if(actor.role==='rider'&&actor.vehicleId!=null){
+      const v=fleet.vehicles.find(v=>v.id===actor.vehicleId);actor.eventVehicle=actor.vehicleId;
+      if(v?.residentId===actor.id){fleet.leavePassenger(v.id);delete v.residentId;}actor.vehicleId=null;
+    }
+    release(actor);delete actor.lap;actor.penalty=0;actor.pressed=false;
+    Object.assign(actor,{x:0,y:0,z:bays[bayId].z+(actor.index%7-3)*.65,speed:0,posture:'stand',wait:2});
+    if(actor.role==='resting'){actor.phase='rest';actor.posture='sit';}
+    const held=store.getCarried(actor.id);if(held)Object.assign(held,{x:actor.x,y:.82,z:actor.z});
+  }
+  function setEventBays(ids){
+    const next=[...new Set((Array.isArray(ids)?ids:[ids]).filter(id=>Number.isInteger(id)&&bays[id]))];
+    if(next.length===eventBays.length&&next.every((id,i)=>id===eventBays[i]))return;
+    eventBays=next;
+    for(const actor of people){
+      if(inEventBay(actor)){evacuate(actor);continue;}
+      let previous=actor;const crosses=actor.path.some(p=>{const blocked=!canTraverse(previous,p);previous=p;return blocked;});
+      if(crosses||actor.targetId!==null&&eventBays.includes(machines[actor.targetId]?.bayId)){
+        release(actor);if(actor.lap){delete actor.lap;actor.penalty=0;}actor.wait=1;
+      }
+    }
+  }
   function reserveCart(actor){
     if(!people.includes(actor)||actor.cartTask||actor.penalty||actor.caughtLeft>0||actor.vehicleId!=null||store.getCarried(actor.id)||!['idle','patrol','rest'].includes(actor.phase))return false;
     release(actor);actor.cartTask=true;actor.posture='stand';actor.y=0;actor.speed=0;return true;
   }
   function releaseCart(actor){delete actor.cartTask;release(actor);actor.wait=3;actor.speed=0;}
   function go(actor, destination, phase) {
-    if(['caught-lap','patrol'].includes(phase))destination=npcDestination(actor,destination,[...people,...getNeighbors()]);
-    const path = findWalkPath(actor, destination);
+    if(['caught-lap','patrol'].includes(phase))destination=npcDestination(actor,destination,[...people,...getNeighbors()],{canTraverse});
+    const path = findWalkPath(actor, destination,{canTraverse});
     if (!path) return false;
     actor.path = path; actor.phase = phase; actor.time = 0; actor.posture = 'stand'; return true;
   }
   function cue(actor, kind) { onCue(kind, actor); }
   function patrol(actor) {
-    const bay = choose(bays), destination = { x: bay.x + (random() - .5) * 40, z: bay.z+(random()-.5)*1.8 };
+    const bay = choose(bays.filter(b=>!eventBays.includes(b.id))), destination = { x: bay.x + (random() - .5) * 40, z: bay.z+(random()-.5)*1.8 };
     if (!go(actor, destination, 'patrol')) actor.wait = 2;
   }
   function beginSafetyLap(actor) {
@@ -185,10 +212,16 @@ export function createResidentSimulation({ fleet, store, destruction, detachCarg
     const neighbors=[...people,...getNeighbors()];
     for (const actor of people) {
       if(actor.cartTask)continue;
+      if(inEventBay(actor))evacuate(actor);
       actor.time += dt; actor.wait = Math.max(0, actor.wait - dt); actor.speed = 0;
       if (actor.role === 'rider') {
-        const car = fleet.vehicles.find(v => v.id === actor.vehicleId).state.car;
-        Object.assign(actor, { x: car.x, z: car.z, heading: car.yaw }); continue;
+        if(actor.eventVehicle!==undefined){
+          const v=fleet.vehicles.find(v=>v.id===actor.eventVehicle);
+          if(!eventBays.length&&v&&!v.playerId&&!v.residentId){actor.vehicleId=v.id;v.residentId=actor.id;fleet.boardPassenger(v.id);delete actor.eventVehicle;actor.phase='riding';actor.y=2.16;}
+          else continue;
+        }
+        const car = fleet.vehicles.find(v => v.id === actor.vehicleId)?.state.car;
+        if(car){Object.assign(actor, { x: car.x, z: car.z, heading: car.yaw });if(inEventBay(actor))evacuate(actor);}continue;
       }
       if (actor.role === 'resting' && !actor.lap) {
         if (!actor.wait) { const next = actor.posture === 'sit' ? 'lie' : 'sit', heading = findRestHeading(actor, actor.heading, next);
@@ -200,7 +233,8 @@ export function createResidentSimulation({ fleet, store, destruction, detachCarg
       if (actor.path.length) {
         const target = actor.path[0], length = distance(actor, target);
         if (length > .0001) {
-          const next = stepNpc(actor,target,dt,actor.role==='repairer'?NPC_REPAIR_SPEED:NPC_WALK_SPEED,neighbors);
+          if(!canTraverse(actor,target)){release(actor);actor.wait=1;continue;}
+          const next = stepNpc(actor,target,dt,actor.role==='repairer'?NPC_REPAIR_SPEED:NPC_WALK_SPEED,neighbors,{canTraverse});
           const moved = distance(actor,next); if(moved>.0001)actor.heading = Math.atan2(next.x-actor.x,next.z-actor.z);
           Object.assign(actor,next); actor.speed = moved / dt; actor.stepDistance += moved;
           if (actor.stepDistance > .86) { actor.stepDistance = 0; cue(actor,'step'); }
@@ -252,9 +286,9 @@ export function createResidentSimulation({ fleet, store, destruction, detachCarg
     }
     // At most one path search per rendered frame, regardless of population.
     const next=people[planner++ % people.length];
-    if(!next.cartTask&&!rerouteNpc(next,neighbors,elapsed))think(next);
+    if(!next.cartTask&&!rerouteNpc(next,neighbors,elapsed,{canTraverse}))think(next);
   }
-  return { people, update, yieldMachine, beginSafetyLap, reserveCart, releaseCart,
+  return { people, update, yieldMachine, beginSafetyLap, reserveCart, releaseCart,setEventBays,
     get state() { return { total: people.length, simulated: true, roles: { ...RESIDENT_ROLES }, actions: { ...totals },
       people: people.map(p => ({ id:p.id, name:p.name, role:p.role, phase:p.phase, posture:p.posture, x:p.x,y:p.y,z:p.z,targetId:p.targetId,vehicleId:p.vehicleId,actions:p.actions,penalty:p.penalty||0 })) }; }
   };

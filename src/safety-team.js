@@ -25,7 +25,7 @@ export function canCatch(guard, person, time) {
 export function isEventBay(point,id,margin=0){
   const bay=bays[id];return Boolean(bay&&Math.abs(point.x-bay.x)<=27.5+margin&&Math.abs(point.z-bay.z)<=BAY_PITCH/2+margin);
 }
-function avoidsEventBay(a,b,id){
+export function avoidsEventBay(a,b,id){
   const bay=bays[id];if(!bay)return true;
   let near=0,far=1;
   for(const [axis,half]of [['x',27.5],['z',BAY_PITCH/2]]){

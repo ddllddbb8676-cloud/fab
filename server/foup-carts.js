@@ -1,6 +1,7 @@
 import {isBlocked} from '../src/layout.js';
 import {floorSpot} from '../src/foup-play.js';
 import {cartPoint,cartSeatPose,cartFits,pullCart,CART_SIZE} from '../src/cart-layout.js';
+import {walkwayAt,WALKWAY_SPEED} from '../src/moving-walkway.js';
 
 const fail=message=>({ok:false,message});
 export function createFoupCarts({store,players,now=()=>0}){
@@ -32,8 +33,12 @@ export function createFoupCarts({store,players,now=()=>0}){
     const c=membership(p.id);if(!c)return data;
     if(data.hidden){leave(p);return {...data,x:p.x,y:0,z:p.z};}
     if(c.driver!==p.id)return {...data,...cartSeatPose(c,c.riders.indexOf(p.id))};
-    if(data.y>.15||Math.hypot(data.x-p.x,data.z-p.z)>4){leave(p);return data;}
-    const next=pullCart(c,p,data,isBlocked);
+    // A slow HTTP pose can span over 4 m at belt speed. Permit only a bounded,
+    // forward segment on the same belt, scaled to server-observed elapsed time.
+    const lane=walkwayAt(p),sameBelt=lane&&walkwayAt(data)?.id===lane.id&&(data.z-p.z)*lane.direction>=0;
+    const maxDistance=sameBelt?Math.max(4,WALKWAY_SPEED*Math.min(2,Math.max(0,now()-p.lastSeen))+.5):4;
+    if(data.y>.15||Math.hypot(data.x-p.x,data.z-p.z)>maxDistance){leave(p);return data;}
+    const next=pullCart(c,p,data,isBlocked,{maxDistance});
     if(!next||Math.hypot(data.x-c.x,data.z-c.z)<.85)return {...data,x:p.x,y:0,z:p.z,speed:0,posture:'stand'};
     if(Math.hypot(next.x-c.x,next.z-c.z)>.0001||Math.abs(next.yaw-c.yaw)>.0001){Object.assign(c,{x:next.x,z:next.z,yaw:next.yaw});store.moveCart(c);placeRiders(c);dirty=true;touch(c,p);}
     return {...data,y:0,posture:'stand'};

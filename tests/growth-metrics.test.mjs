@@ -102,6 +102,13 @@ test('profile baselines do not backfill history, exact deltas count completed ac
   assert.equal(current.economy.earnedChips,11);assert.equal(current.economy.earnedBySource.throw,1);assert.equal(current.economy.earnedBySource.clean,2);
 });
 
+test('repeat safety-pass purchases count actual spend once, consumption is not another purchase',()=>{
+  const {metrics}=setup(),p=profile(1);metrics.connect(p.id);metrics.observeProfile(p);
+  p.wallet.safetyPassPurchases=2;p.wallet.safetyPasses=2;p.wallet.chips-=60;metrics.observeProfile(p);metrics.observeProfile(p);
+  assert.equal(row(metrics).economy.purchases,2);assert.equal(row(metrics).economy.spentChips,60);assert.equal(row(metrics).funnel.purchased,1);
+  assert.deepEqual(row(metrics).economy.items,[{id:'safety-pass',name:'안전팀 패널티 해제 쿠폰',price:30,copies:2,spentChips:60}]);
+  p.wallet.safetyPasses--;p.wallet.safetyPassUses=1;metrics.observeProfile(p);assert.equal(row(metrics).economy.purchases,2);assert.equal(row(metrics).economy.spentChips,60);
+});
 test('ambiguous multi-item profile deltas do not invent per-item sale prices; reset baselines remain non-retroactive',()=>{
   const {metrics}=setup();const p=profile(1);metrics.connect(id(1));metrics.observeProfile(p);
   p.wallet.owned.push('sprout','suit-pink');p.wallet.chips-=80;metrics.observeProfile(p);

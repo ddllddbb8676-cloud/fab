@@ -1,4 +1,5 @@
 import {items as catalog} from '../src/cosmetics-catalog.js';
+import {SAFETY_PASS_PRICE} from '../src/safety-pass.js';
 
 // Public contract: daily visits/retention/activity/economy/funnel/quality/safety;
 // action rows are {count,accounts}; ratios are 0..1. The first three funnel
@@ -85,7 +86,7 @@ export function createGrowthMetrics({now=Date.now,ownerId='',excludedIds=[]}={})
     for(const [date] of days)if(date<cutoff){days.delete(date);mark(key('day',date));}
     for(const [f,a] of accounts){if(day(a.lastSeen)<cutoff&&!present.has(f)){accounts.delete(f);active.delete(f);alerts.delete(f);baselines.delete(f);mark(key('account',f));continue;}for(let i=a.days.length-4;i>=0;i-=4)if(a.days[i]<cutoff){a.days.splice(i,4);mark(key('account',f));}}
   }
-  function profileValue(p){const w=p.wallet;if(!w||!Array.isArray(w.owned))return null;return {broken:safe(p.brokenCount),repaired:safe(p.repairedCount),earned:safe(w.earnedChips),chips:safe(w.chips),tickets:safe(w.nicknamePurchases),owned:new Set(w.owned.filter(id=>paid.has(id)).slice(0,96))};}
+  function profileValue(p){const w=p.wallet;if(!w||!Array.isArray(w.owned))return null;return {broken:safe(p.brokenCount),repaired:safe(p.repairedCount),earned:safe(w.earnedChips),chips:safe(w.chips),tickets:safe(w.nicknamePurchases),passes:safe(w.safetyPassPurchases),owned:new Set(w.owned.filter(id=>paid.has(id)).slice(0,96))};}
   function segment(b,group,labelValue){
     const values=b.quality[group];let name=tag(labelValue);
     if(!Object.hasOwn(values,name)&&Object.keys(values).length>=16){name='other';limited('segment-cap',b.day);}
@@ -150,12 +151,14 @@ export function createGrowthMetrics({now=Date.now,ownerId='',excludedIds=[]}={})
       baselines.delete(f);baselines.set(f,value);if(baselines.size>GROWTH_LIMITS.baselines)baselines.delete(baselines.keys().next().value);
       const a=accounts.get(f);if(!previous||!a)return false;
       const earned=Math.max(0,value.earned-previous.earned),added=[...value.owned].filter(id=>!previous.owned.has(id)),tickets=Math.max(0,value.tickets-previous.tickets);
-      const spent=(added.length||tickets)?Math.max(0,previous.chips+earned-value.chips):0,b=bucket(day(tick()));
-      b.economy.earnedChips+=earned;b.economy.spentChips+=spent;b.economy.purchases+=added.length;b.economy.nicknamePurchases+=tickets;
+      const passes=Math.max(0,value.passes-previous.passes);
+      const spent=(added.length||tickets||passes)?Math.max(0,previous.chips+earned-value.chips):0,b=bucket(day(tick()));
+      b.economy.earnedChips+=earned;b.economy.spentChips+=spent;b.economy.purchases+=added.length+passes;b.economy.nicknamePurchases+=tickets;
       for(const [kind,n] of [['destroy',Math.max(0,value.broken-previous.broken)],['repair',Math.max(0,value.repaired-previous.repaired)]])if(n)noteActivity(a,kind,n);
-      if(added.length){once(a,b.day,FLAGS.purchase,row=>row.funnel.purchased++);noteActivity(a,null,0);}
-      for(const id of added){const item=paid.get(id),row=b.economy.items[id]??={id,name:item.name,price:item.price,copies:0,spentChips:0};row.copies++;if(added.length===1&&!tickets&&row.spentChips!==null)row.spentChips+=spent;else row.spentChips=null;}
-      if(added.length>1||added.length&&tickets)b.economy.unattributedSpend+=spent;
+      if(added.length||passes){once(a,b.day,FLAGS.purchase,row=>row.funnel.purchased++);noteActivity(a,null,0);}
+      for(const id of added){const item=paid.get(id),row=b.economy.items[id]??={id,name:item.name,price:item.price,copies:0,spentChips:0};row.copies++;if(added.length===1&&!tickets&&!passes&&row.spentChips!==null)row.spentChips+=spent;else row.spentChips=null;}
+      if(passes){const row=b.economy.items['safety-pass']??={id:'safety-pass',name:'안전팀 패널티 해제 쿠폰',price:SAFETY_PASS_PRICE,copies:0,spentChips:0};row.copies+=passes;if(!added.length&&!tickets&&row.spentChips!==null)row.spentChips+=spent;else row.spentChips=null;}
+      if(added.length>1||added.length&&(tickets||passes)||passes&&tickets)b.economy.unattributedSpend+=spent;
       mark(key('day',b.day));return true;
     },
     purchaseRejected(id,itemId){const a=obtain(id);if(!a||!paid.has(itemId))return false;once(a,day(tick()),FLAGS.insufficient,b=>b.funnel.insufficientChips++);return true;},

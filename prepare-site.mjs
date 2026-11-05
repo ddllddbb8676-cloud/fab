@@ -26,6 +26,8 @@ for (const name of ['main.js', 'layout.js', 'transport.js', 'rail-network.js', '
 await copyFile(new URL('src/residents.js', root), new URL('src/residents.js', dist));
 for(const name of ['catch-reaction.js','cart-layout.js','cart-controls.js','cart-view.js','stocker-layout.js','stocker-view.js','entrance-layout.js','world-events-ui.js','foup-contest.js','foup-contest-view.js','event-camera.js','world-events.css'])await copyFile(new URL('src/'+name,root),new URL('src/'+name,dist));
 for(const name of ['owner-speech.js','owner-speech-ui.js'])await copyFile(new URL('src/'+name,root),new URL('src/'+name,dist));
+for(const name of ['moving-walkway.js','moving-walkway-view.js'])await copyFile(new URL('src/'+name,root),new URL('src/'+name,dist));
+await copyFile(new URL('src/safety-pass.js',root),new URL('src/safety-pass.js',dist));
 await mkdir(new URL('audio/entertainer/',dist),{recursive:true});
 await copyFile(new URL('audio/entertainer/fab-entertainer-stocker.mp3',root),new URL('audio/entertainer/fab-entertainer-stocker.mp3',dist));
 await copyFile(new URL('src/admin-visit.js',root),new URL('src/admin-visit.js',dist));

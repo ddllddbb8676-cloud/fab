@@ -19,6 +19,9 @@ import { network, railPaths } from './rail-network.js';
 import { createFleet, reservedPortIds } from './network-transport.js';
 import { createAvatar } from './avatar.js';
 import { createExplorer } from './explorer.js';
+import { applyWalkwayMotion, walkwayAt } from './moving-walkway.js';
+import { createMovingWalkwayView, drawWalkwayMap } from './moving-walkway-view.js';
+import { createSafetyPassControl } from './safety-pass.js';
 import { createTouchJoystick } from './touch-joystick.js';
 import { CHASE_CAMERA } from './locomotion.js';
 import { WALK_CLIPPING, createSceneDepth, createFloorFoundation } from './scene-depth.js';
@@ -67,7 +70,7 @@ delete window.__fabConnectionConfig;
 window.__fabPreparedRoom ||= prepareRoomConnection(connectionConfig);
 await startupStep('graphics');
 let multiplayer = null, sharedWorld = null, remotePeople = null, realVisitorCount = 0, totalCharacterCount = 0, adminVisit = null;
-let eventCamera=null,worldEventsUI=null,contestUI=null,contestTeam=null;
+let eventCamera=null,worldEventsUI=null,contestUI=null,contestTeam=null,walkwaysPaused=false,walkwayMotion=null,safetyPassControl=null;
 const personalStats = { brokenCount: 0, repairedCount: 0 };
 let personalStatsLoaded=false;
 if(connectionConfig)for(const id of ['personal-broken','personal-repaired'])document.getElementById(id).textContent='…';
@@ -179,6 +182,7 @@ const floorTexture = canvasTexture(512, 512, (ctx, w, h) => {
 floorTexture.wrapS = floorTexture.wrapT = THREE.RepeatWrapping; floorTexture.repeat.set(WIDTH / 1.2, LENGTH / 1.2);
 const floorBase = new THREE.Mesh(new THREE.PlaneGeometry(WIDTH, LENGTH), new THREE.MeshStandardMaterial({ map: floorTexture, roughness: .43, metalness: .28 }));
 floorBase.rotation.x = -Math.PI / 2; floorBase.position.y = -.02; scene.add(floorBase);
+const movingWalkways = createMovingWalkwayView(THREE,scene);
 // The shared room environment supplies a soft floor sheen in one render pass.
 // A second live mirror pass over the entire 21,600 m² hall is unnecessary here.
 scene.add(createFloorFoundation(THREE, M.dark, WIDTH, LENGTH));
@@ -513,6 +517,10 @@ function showMachine(item) {
 }
 await startupStep('controls');
 const explorer = createExplorer({ THREE, camera, scene, canvas: renderer.domElement, avatar, orbit, colliders, vehicles,
+  onGroundMotion:(state,before,dt)=>{walkwayMotion=applyWalkwayMotion(state,before,dt,{
+    enabled:!walkwaysPaused&&!entry.active&&!cartControls?.riding&&!cartControls?.state.open&&!catchReaction?.active&&!eventCamera?.active&&!photoMode.isOpen&&!nicknameUI.isOpen&&!wardrobe.isOpen&&!captureTime?.isOpen&&!speechComposer.isOpen&&!playActions?.busy&&(!connectionConfig||Boolean(multiplayer?.connected)),
+    canTraverse:(a,b)=>!isSafety(safetyState.role)||canSafetyTraverse(a,b)
+  });},
   canTraverse:(a,b)=>!isSafety(safetyState.role)||canSafetyTraverse(a,b),
   isEquipmentVisible: id => equipmentVisibility.isVisible(id),
   pickRepairTarget: (ray, options) => destruction?.pick(ray, options),
@@ -590,7 +598,7 @@ window.addEventListener('blur',()=>adminVisit?.cancel());
 
 const entryUi = [...document.querySelectorAll('#controls-toggle,#controls-panel,#map-panel,.view-label,#posture-controls')];
 const entryCopy = {
-  ready: ['세미툰 | 팹뿌', 'ㄱㄱㄱㄱㄱ'],
+  ready: ['세미툰 | 팹뿌', '하고싶었던거 다하자 ㄱㄱㄱ!!'],
   shower: ['깨끗한 바람으로 준비 중', '양옆 노즐에서 바람이 나옵니다. 잠시만 기다려주세요.'],
   settle: ['에어샤워 완료', '바람이 잦아들면 앞문이 열립니다.'],
   opening: ['자동문이 열립니다.', '문 너머로 넓은 팹이 펼쳐집니다.'],
@@ -730,9 +738,10 @@ worldEventsUI=createWorldEventsUI({command:(...args)=>onlineLink.command(...args
   onVictory:id=>{if(Number.isInteger(id))eventCamera.start(id);audio.playChipReward();}
 });
 const paintPlayingOutfit=()=>appearance.setOutfit(contestOutfit(currentWallet?.equipped,contestTeam),contestTeam?'visitor':safetyState.role);
+const setContestZones=createContestZones(THREE,scene);
 contestUI=createContestUI({command:(...args)=>onlineLink.command(...args),toast,getId:()=>multiplayer?.id,
   ready:()=>!entry.active&&!nicknameUI.isOpen&&!wardrobe.isOpen&&!captureTime?.isOpen&&!photoMode.isOpen&&!document.hidden,
-  onTeam:next=>{contestTeam=next;paintPlayingOutfit();},setZones:createContestZones(THREE,scene),
+  onTeam:next=>{contestTeam=next;paintPlayingOutfit();},setZones:visible=>{walkwaysPaused=visible;setContestZones(visible);},
   onGather:point=>{
     const {heading,yaw}=explorer.state;
     if(!explorer.arriveAtEvent(point))return false;
@@ -782,15 +791,18 @@ function updateSafetyState(next) {
     explorer.cancelEmo('safety');playActions.clearPending();explorer.state.posture='stand';
     if(directory.isOpen)directory.close();explorer.setMode('walk');$('tool-card').classList.add('hidden');
     toast(PENALTY_MESSAGE);
-  } else if(previous.penalty && !safetyState.penalty) { safetyGrace=elapsed+12;toast('장비 3대 수리 완료! 다시 팹뿌를 즐겨주세요.'); }
+  } else if(previous.penalty && !safetyState.penalty) { safetyGrace=elapsed+12;toast('패널티 해제! 다시 팹뿌를 즐겨주세요.'); }
   const guard=isSafety(safetyState.role),penalty=safetyState.penalty;
-  $('safety-panel').classList.toggle('hidden',!guard&&(!penalty||isRestArea(explorer.state.position)));
+  $('safety-panel').classList.toggle('hidden',!guard&&!penalty);
   $('safety-title').textContent=penalty?`안전팀 패널티 · 수리 ${3-penalty} / 3`:`${safetyState.role==='safety-red'?'빨간':'주황'} 안전팀 · 잡기 ${safetyState.caught} / ${SAFETY_CATCH_GOAL}`;
   $('safety-description').textContent=penalty?`장비를 ${penalty}대 더 고쳐야 다시 팹뿌를 하실 수 있습니다.`:`서로 다른 ${SAFETY_CATCH_GOAL}명을 잡으면 복귀 · 수리 중 / OHT 탑승 중 제외`;
   $('safety-repairs').classList.toggle('hidden',!penalty);$('safety-restart').classList.toggle('hidden',!guard);
+  safetyPassControl?.refresh();
   updateEmoCard();
 }
 $('safety-repairs').addEventListener('click',()=>directory.open({ids:destruction.state.destroyedIds}));
+safetyPassControl=createSafetyPassControl({button:$('safety-pass-use'),command:(...args)=>onlineLink.command(...args),getWallet:()=>currentWallet,getPenalty:()=>safetyState.penalty,connected:()=>Boolean(multiplayer?.connected),onMessage:toast,
+  onUsed:()=>{explorer.cancelEmo('safety-pass');catchReaction.reset();toast('쿠폰 1장을 사용했어요. 패널티 해제!');}});
 $('safety-restart').addEventListener('click',async()=>{
   $('safety-restart').disabled=true;
   try{const result=await onlineLink?.command('civilian');if(result?.ok){toast('안전팀을 그만뒀어요. 이름과 기록은 그대로예요.');}}
@@ -927,6 +939,7 @@ function drawMap() {
   ctx.strokeStyle = '#397e8c88'; ctx.lineWidth = .8;
   for (const path of railPaths) { if (path.kind === 'switch') continue; ctx.beginPath(); path.points.forEach((p, i) => i ? ctx.lineTo(mx(p.x), mz(p.z)) : ctx.moveTo(mx(p.x), mz(p.z))); ctx.stroke(); }
   ctx.fillStyle='#35b36f';for(const area of REST_AREAS)ctx.fillRect(mx(area.minX),mz(area.minZ),Math.max(3,sx*(area.maxX-area.minX)),Math.max(3,sz*(area.maxZ-area.minZ)));
+  drawWalkwayMap(ctx,mx,mz,sx,sz);
   mapBaseReady = true;
   }
   ctx = mapCtx; ctx.clearRect(0, 0, w, h); ctx.drawImage(mapBase, 0, 0);
@@ -940,7 +953,8 @@ function drawMap() {
 }
 function updateZone() {
   const restingHere=!entry.active&&isRestArea(explorer.state.position)&&!isSafety(safetyState.role);
-  $('safety-panel').classList.toggle('hidden',!isSafety(safetyState.role)&&(!safetyState.penalty||restingHere));
+  $('safety-panel').classList.toggle('hidden',!isSafety(safetyState.role)&&!safetyState.penalty);
+  safetyPassControl?.refresh();
   const repair = explorer.state.repairInteraction;
   const play = playActions.state;
   $('oht-dismount').classList.toggle('hidden', !playActions.busy || play.phase==='cleaning');
@@ -970,6 +984,8 @@ function updateZone() {
     else if (offsetZ > 2.6 && offsetZ < 8.2 && Math.abs(focus.x) < 54.8) { text = '옆 장비 사이 통로'; sub = 'TOOL SIDE CLEARANCE · 0.65m'; }
   }
   if(isRestArea(focus)){text='초록 휴식 구역';sub='안전팀 출입 금지 · 편하게 쉬세요';}
+  const belt=walkwayAt(focus);
+  if(mode==='walk'&&belt){text=walkwaysPaused?'무빙워크 · 잠시 정지':`무빙워크 · ${belt.label} 2배속`;sub=walkwaysPaused?'흑백 풉 쟁탈전 중':'옆으로 언제든 내려요 · 카트도 함께 타요';}
   if (mode === 'ride') { const v = vehicles[explorer.state.followId]; text = 'OHT ' + String(explorer.state.followId + 1).padStart(2, '0') + ' · ' + v.state.label; sub = 'BAY ' + (v.state.origin.bayId + 1) + ' → BAY ' + (v.state.destination.bayId + 1); }
   if (mode === 'transfer') { const v = observedVehicle(); text = 'FOUP 반송 · OHT ' + String(explorer.state.transferVehicleId + 1).padStart(2, '0'); sub = 'BAY ' + String(focus.bayId + 1).padStart(2, '0') + ' · ' + (explorer.state.transferLabel || v.state.label); }
   if (text !== currentZone) { currentZone = text; $('view-title').textContent = text; $('map-location').textContent = mode === 'ride' ? 'OHT ' + String(explorer.state.followId + 1).padStart(2, '0') : text.split(' · ')[0]; }
@@ -1023,7 +1039,8 @@ function animate(now) {
   if(photoMode.isOpen&&(entry.active||nicknameUI.isOpen||wardrobe.isOpen))photoMode.close();
   adminVisit.update(dt,{connected:Boolean(multiplayer?.connected),ready:!entry.active&&!nicknameUI.isOpen&&!captureTime?.isOpen&&!document.hidden});
   joystick.setEnabled(movementStyle === 'joystick' && !cartControls.riding && !catchReaction.active && !photoMode.isOpen && !entry.active && !document.hidden && !explorer.state.locked && (!playActions.busy||playActions.state.phase==='cleaning') && $('help').classList.contains('hidden') && $('tool-card').classList.contains('hidden') && ['walk','tour','blast'].includes(mode));
-  worldEventsUI.update();contestUI.update();cartControls.prepare(dt);catchReaction.prepare(dt);eventCamera.restore();explorer.update(dt);cartControls.update();eventCamera.apply();restAreaView.update(viewFocus());
+  worldEventsUI.update();contestUI.update();cartControls.prepare(dt);catchReaction.prepare(dt);eventCamera.restore();walkwayMotion=null;explorer.update(dt);cartControls.update();eventCamera.apply();restAreaView.update(viewFocus());
+  movingWalkways.update(dt,walkwaysPaused,reducedMotion);
   if(now>=nextRefreshReminder&&!nearSafety&&!entry.active&&!explorer.state.emoInteraction&&!explorer.state.repairInteraction&&!playActions.busy&&!directory.isOpen&&!$('zone-toast').classList.contains('visible')&&$('help').classList.contains('hidden')){
     toast('가끔 새로고침해 최신 업데이트를 받아보세요. 이름과 기록은 이어져요.',4500);nextRefreshReminder=now+15*60*1000;
   }
@@ -1085,6 +1102,7 @@ function animate(now) {
   scene.updateMatrixWorld();
   for (const batch of movingBatches.values()) { batch.sources.forEach((source, i) => batch.instance.setMatrixAt(i, source.matrixWorld)); batch.instance.instanceMatrix.needsUpdate = true; }
   renderer.render(scene, camera);
+  movingWalkways.overview(camera,(mode==='overview'||eventCamera.active)&&!photoMode.isOpen,innerWidth,innerHeight);
   if(captureFrame){const draw=captureFrame;captureFrame=null;draw(renderer.domElement);}
   visitorBadge.updateScreen(camera);
   speechBubble.update(camera);
@@ -1099,6 +1117,7 @@ function animate(now) {
     updateSoundButton();
     $('world').dataset.diagnostics = JSON.stringify({ ready: true, revision: 'fab-reward-after-blast-nameplate-1', movementStyle, joystickActive: explorer.state.joystickActive, cameraFov: camera.fov, safety: safetyState, safetyPatrols: safetyPeople?.state.people, mode, audio: audio.state, multiplayer: multiplayer ? {status:multiplayer.status,id:multiplayer.id,count:realVisitorCount,total:totalCharacterCount,capacity:ROOM_CAPACITY,visitorCapacity:MAX_VISITORS} : null, residents: residents?.state ?? {total:AUTOMATED_COUNT,simulated:true,actions:sharedWorld.totals,people:remotePeople.state.people.filter(p=>p.id.startsWith('resident:')||p.id.startsWith('safety:'))}, remotePlayers:remotePeople?.state.people.filter(p=>!p.id.startsWith('resident:')&&!p.id.startsWith('safety:')), destruction: destruction.state, equipmentVisibility: equipmentVisibility.state, emoInteraction: explorer.state.emoInteraction, repairInteraction: explorer.state.repairInteraction, posture: explorer.state.posture, play: playActions.state, caught:catchReaction.active, cart:cartControls.state, cartTarget:new URLSearchParams(location.search).has('qa')?cartControls.target(camera,innerWidth,innerHeight):undefined, actionTargets: new URLSearchParams(location.search).has('qa') ? playActions.targets(camera, { width: innerWidth, height: innerHeight }) : undefined, visitorName: visitorBadge.name, controlsOpen: viewControls.isOpen, mapVisible: viewControls.mapVisible, emoButtons: layoutMachines.length, amberBays: bayLighting.bayIds.map(id => id + 1), amberLights: bayLighting.lights.length, amberLightsVisible: bayLighting.root.visible, entry: { active: entry.active, ...entry.state }, width: WIDTH, length: LENGTH, ceiling: HEIGHT,
       equipmentCount: equipment.length, equipmentFamilies: families.length, uniqueEquipmentCodes: new Set(equipment.map(e => e.code)).size, selectedEquipment: selectedEquipment?.code ?? null,
+      walkway:walkwayMotion,walkwaysPaused,
       machines: machinePositions.length, bays: bays.length, toolsPerRow: 10, loadports: layoutMachines.length * 3,
       frontAisle: AISLE, rearAisle: SERVICE_AISLE, sideGap: SIDE_GAP, vehicles: vehicles.length, junctions: network.junctions.length,
       networkNodes: network.nodes.length, networkEdges: network.edges.length, traffic: fleet.stats, instances: staticInstances, fps: displayedFPS,

@@ -14,9 +14,9 @@ export function cartFits(c,blocked,clearance=.12){
   for(const x of [-.48,0,.48])for(const z of [-1,-.5,0,.5,.8,1.2]){const p=cartPoint(c,x,0,z);if(blocked(p.x,p.z,clearance))return false;}
   return true;
 }
-export function pullCart(c,from,to,blocked){
+export function pullCart(c,from,to,blocked,{maxDistance=4}={}){
   const distance=Math.hypot(to.x-from.x,to.z-from.z);
-  if(!Number.isFinite(distance)||distance>4)return null;
+  if(!Number.isFinite(distance)||distance>maxDistance)return null;
   const next={...c},steps=Math.max(1,Math.ceil(distance/.10));
   for(let i=1;i<=steps;i++){
     const x=from.x+(to.x-from.x)*i/steps,z=from.z+(to.z-from.z)*i/steps;

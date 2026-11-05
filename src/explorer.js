@@ -44,7 +44,7 @@ export function destructionCameraFrame(machine, aspect = 1, baseFov = 64) {
   return { position, target, landmarks, fov: Math.atan(tangent) * 360 / Math.PI };
 }
 
-export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, colliders, vehicles, onMode, onInspect, onToast, onManualMove = () => {}, onActionTap = () => false, pickRepairTarget = () => null, isEquipmentVisible = () => true, canTraverse = () => true }) {
+export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, colliders, vehicles, onMode, onInspect, onToast, onManualMove = () => {}, onActionTap = () => false, pickRepairTarget = () => null, isEquipmentVisible = () => true, canTraverse = () => true, onGroundMotion = () => {} }) {
   const $ = id => document.getElementById(id);
   const state = { mode: 'walk', position: new THREE.Vector3(TOUR_POINTS[0][0], 0, TOUR_POINTS[0][1]),
     yaw: Math.PI / 2, elevation: CHASE_CAMERA.elevation, distance: CHASE_CAMERA.distance, heading: -Math.PI / 2, speed: 0,
@@ -336,10 +336,12 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
     if (state.joystickActive && (state.locked || helpVisible || document.hidden)) endJoystick();
     if (emoSession && (state.locked || helpVisible || document.hidden)) cancelEmo(state.locked ? 'locked' : helpVisible ? 'help' : 'hidden');
     if (!state.locked) state.speed = 0;
+    const groundStart = { x:state.position.x, z:state.position.z, routed:state.path.length>0 };
     if (!state.locked && !helpVisible) {
       if (state.mode === 'walk' && !Number.isFinite(state.cleaningTime) && state.posture === 'stand' && !avatar.root.userData.resting && (!emoSession || emoSession.phase === 'approach')) walk(dt);
       if (state.mode === 'tour' && !pointers.size) tour(dt);
     }
+    if (!state.locked && !helpVisible && !document.hidden && !emoSession && !avatar.root.userData.resting) onGroundMotion(state,groundStart,dt);
     updateEmo(dt);
     const repairing = emoSession?.phase === 'repair';
     const repairTarget = repairing ? { ...emoSession.plan.button, y: .96 + .16 * Math.sin(emoSession.elapsed * 15), z: emoSession.plan.button.z + emoSession.plan.button.sign * .09 } : null;

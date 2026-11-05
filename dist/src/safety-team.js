@@ -1,10 +1,10 @@
-import { bays, BAY_PITCH } from './layout.js?v=3b5478afa86e';
-import { NPC_SAFETY_SPEED } from './locomotion.js?v=3b5478afa86e';
-import { canWalkSegment, findWalkPath } from './walking.js?v=3b5478afa86e';
-import {stepNpc,rerouteNpc} from './npc-navigation.js?v=3b5478afa86e';
-import { VISITOR_ADJECTIVES, createUniqueNickname } from './visitor-name.js?v=3b5478afa86e';
-import { SAFETY_PATROL_ROLES } from './room-population.js?v=3b5478afa86e';
-import {isRestArea,canSafetyTraverse,restAreaExit,SAFETY_CLEARANCE} from './rest-area.js?v=3b5478afa86e';
+import { bays, BAY_PITCH } from './layout.js?v=935ae134356b';
+import { NPC_SAFETY_SPEED } from './locomotion.js?v=935ae134356b';
+import { canWalkSegment, findWalkPath } from './walking.js?v=935ae134356b';
+import {stepNpc,rerouteNpc} from './npc-navigation.js?v=935ae134356b';
+import { VISITOR_ADJECTIVES, createUniqueNickname } from './visitor-name.js?v=935ae134356b';
+import { SAFETY_PATROL_ROLES } from './room-population.js?v=935ae134356b';
+import {isRestArea,canSafetyTraverse,restAreaExit,SAFETY_CLEARANCE} from './rest-area.js?v=935ae134356b';
 
 export const PENALTY_MESSAGE = '안전팀에게 걸려 패널티를 부여받았습니다. 장비를 3대 고쳐야 다시 팹뿌를 하실 수 있습니다.';
 export const SAFETY_CATCH_GOAL=3;
@@ -25,7 +25,7 @@ export function canCatch(guard, person, time) {
 export function isEventBay(point,id,margin=0){
   const bay=bays[id];return Boolean(bay&&Math.abs(point.x-bay.x)<=27.5+margin&&Math.abs(point.z-bay.z)<=BAY_PITCH/2+margin);
 }
-function avoidsEventBay(a,b,id){
+export function avoidsEventBay(a,b,id){
   const bay=bays[id];if(!bay)return true;
   let near=0,far=1;
   for(const [axis,half]of [['x',27.5],['z',BAY_PITCH/2]]){

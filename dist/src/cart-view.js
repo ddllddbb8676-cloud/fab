@@ -1,4 +1,4 @@
-import {CART_SIZE} from './cart-layout.js?v=3b5478afa86e';
+import {CART_SIZE} from './cart-layout.js?v=935ae134356b';
 
 export function createCartView(THREE,scene,id='CART01'){
   const root=new THREE.Group();root.name=`FOUP trolley ${id}`;scene.add(root);
