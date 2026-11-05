@@ -17,6 +17,7 @@ import { ROOM_CAPACITY } from '../src/room-population.js';
 import {isEmote,EMOTE_SECONDS} from '../src/emotes.js';
 import {rankScores} from '../src/leaderboard.js';
 import {configuredOwnerId,hasUnlimitedChips} from './owner-privileges.js';
+import {createOwnerSpeech} from './owner-speech.js';
 import {canSelectTitle,restoreTitlePreference,destructionTitle,npcDestructionTitle,OPERATOR_TITLE} from '../src/destruction-titles.js';
 import {isRestArea,canSafetyTraverse,restAreaExit,SAFETY_CLEARANCE} from '../src/rest-area.js';
 import {createWorldEvents} from './world-events.js';
@@ -28,6 +29,7 @@ export const SAFETY_DUTY={warmup:300,handover:15,cooldown:600,goal:SAFETY_CATCH_
 const SAFETY_DUTY_VERSION=2,LEGACY_SAFETY_COOLDOWN=90;
 export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()=>{},onReward=()=>{},onRosterChange=()=>{},getHistoricalScores=()=>[],onEquipmentChange=()=>{},onFoupChange=()=>{},onEventsChange=()=>{},eventExcludedIds=[],claimName=(id,kind,preferred,excluded)=>(kind==='safety'?createSafetyName:createVisitorName)(random,excluded,preferred),now=Date.now,nicknameAvailable=null,replaceNickname=null,ownerId=''}={}) {
   ownerId=configuredOwnerId(ownerId);
+  const ownerSpeech=createOwnerSpeech(ownerId,now);
   const players=new Map(), broken=new Map(), leases=new Map(), events=[], foupVersions=new Map();
   const fleet=createFleet(), byPort=new Map(ports.map(p=>[p.id,p]));
   const excludedEvents=new Set(eventExcludedIds);let worldEvents=null;
@@ -174,6 +176,7 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
   }
   function remove(id) {
     const p=players.get(id);if(!p)return;
+    ownerSpeech.leave(id);
     const held=store.getCarried(id);
     if(held)store.launch(held,{x:p.x,y:Math.max(.5,p.y+.82),z:p.z,yaw:p.heading},{x:0,y:0,z:.5});
     release(p);changed(p);rememberContestProfile(profile(p));players.delete(id);revision++;
@@ -269,6 +272,7 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
     if(data.vehicleId!==undefined&&!Number.isInteger(data.vehicleId))return fail('잘못된 대상이에요');
     if(time-p.rateAt>1){p.rate=0;p.rateAt=time;} if(++p.rate>12)return fail('잠시 후 다시 눌러주세요');
     p.lastSeen=time;
+    if(kind==='owner-say')return ownerSpeech.send(p,data.text);
     worldEvents.update();
     if(kind==='contest-join')return worldEvents.contest.join(id,data.eventId);
     if(kind==='bay-travel'){
@@ -456,11 +460,12 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
   });}
   function ranking(){return rankScores([...getHistoricalScores(),...residents.people,...safety.people,...[...players.values()].map(p=>({...p,name:p.civilianName||p.name}))]);}
   function snapshot(full=false) {
+    const speech=ownerSpeech.snapshot(full);
     const foups=[];
     for(const r of store.records.values())if(!r.original){const row=foupPacket(r),key=JSON.stringify(row);if(full||foupVersions.get(r.id)!==key)foups.push(row);if(!full)foupVersions.set(r.id,key);}
     const leaderboard=ranking(),rankingKey=JSON.stringify(leaderboard),includeRanking=full||rankingKey!==lastRanking;
     if(!full)lastRanking=rankingKey;
-    return {type:'frame',v:PROTOCOL,t:round(time),rev:revision,count:players.size,...(includeRanking?{leaderboard}:{}),people:[...residents.people,...safety.people,...players.values()].map(p=>actorPacket({...p,carrying:Boolean(store.getCarried(p.id)),titleId:players.has(p.id)?titleState(p.id).titleId:npcDestructionTitle(p.id,p.role)?.id??''})),
+    return {type:'frame',v:PROTOCOL,t:round(time),rev:revision,count:players.size,...(speech?{ownerSpeech:speech}:{}),...(includeRanking?{leaderboard}:{}),people:[...residents.people,...safety.people,...players.values()].map(p=>actorPacket({...p,carrying:Boolean(store.getCarried(p.id)),titleId:players.has(p.id)?titleState(p.id).titleId:npcDestructionTitle(p.id,p.role)?.id??''})),
       broken:[...broken.values()].map(r=>[r.id,round(time-r.at),r.progress??null,r.owner??null]),foups,
       fleet:fleet.vehicles.map(v=>{const s=v.state;return [v.id,round(s.car.x),round(s.car.z),round(s.car.yaw),round(s.foup.x),round(s.foup.y),round(s.foup.z),round(s.foup.yaw),round(s.gripperY),s.phase,s.parked,round(s.lowered),s.target.id,s.destination.id,Boolean(v.cargoDetached),Boolean(v.passenger),Boolean(v.boardingHold),v.residentId??v.playerId??null,s.waiting,s.delivered];}),
       events:full?[]:events.splice(0),totals:residents.state.actions,worldEvents:{...worldEvents.view(),...(worldEvents.contest.live()?{gather:[...players.values()].filter(p=>p.contestGather).map(p=>[p.id,p.contestGather])}:{})}};

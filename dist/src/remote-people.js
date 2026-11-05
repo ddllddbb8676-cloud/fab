@@ -1,13 +1,13 @@
-import {createAvatarAppearance} from './avatar-appearance.js?v=eeab61e402c0';
-import {suitColor} from './cosmetics-catalog.js?v=eeab61e402c0';
-import {isSafety} from './safety-team.js?v=eeab61e402c0';
-import { createAvatar } from './avatar.js?v=eeab61e402c0';
-import { createVisitorBadge } from './visitor-name.js?v=eeab61e402c0';
-import { getEmoApproach } from './emo-interaction.js?v=eeab61e402c0';
-import { machines } from './layout.js?v=eeab61e402c0';
-import { safetyColor, isSuitMesh } from './safety-team.js?v=eeab61e402c0';
-import {createEmoteView} from './emote-view.js?v=eeab61e402c0';
-import {npcDestructionTitle} from './destruction-titles.js?v=eeab61e402c0';
+import {createAvatarAppearance} from './avatar-appearance.js?v=a1b1f19e3a26';
+import {suitColor} from './cosmetics-catalog.js?v=a1b1f19e3a26';
+import {isSafety} from './safety-team.js?v=a1b1f19e3a26';
+import { createAvatar } from './avatar.js?v=a1b1f19e3a26';
+import { createVisitorBadge } from './visitor-name.js?v=a1b1f19e3a26';
+import { getEmoApproach } from './emo-interaction.js?v=a1b1f19e3a26';
+import { machines } from './layout.js?v=a1b1f19e3a26';
+import { safetyColor, isSuitMesh } from './safety-team.js?v=a1b1f19e3a26';
+import {createEmoteView} from './emote-view.js?v=a1b1f19e3a26';
+import {npcDestructionTitle} from './destruction-titles.js?v=a1b1f19e3a26';
 
 // A shared pool of articulated bodies; distant visitors use two tiny instances.
 export function createRemotePeople({THREE,scene,store,fleet=null,maxDetailed=40}) {
@@ -84,6 +84,18 @@ export function createRemotePeople({THREE,scene,store,fleet=null,maxDetailed=40}
     }
     proxy.count=n;if(n){proxy.instanceMatrix.needsUpdate=true;proxy.instanceColor.needsUpdate=true;}
   }
-  return {setRoster,synchronize,setViewerPrivileges,update,get safetyActors(){return [...actors.values()].filter(a=>a.role==='safety-red'||a.role==='safety-orange');},get state(){return {total:actors.size,details:pool.filter(p=>p.actor).length,people:[...actors.values()].map(a=>({id:a.id,name:a.name,role:a.role,x:a.x,y:a.y,z:a.z,phase:a.phase,posture:a.posture}))};},
+  function speechAnchor(id,point,overview) {
+    const a=actors.get(id);
+    if(!a||a.hidden||(!overview&&a.distance>=95))return null;
+    const slot=pool.find(s=>s.actor===a);
+    if(slot){
+      point.copy(slot.badge.sprite.position);
+      return (a.titleId?48:30)+(slot.emote.sprite.visible?40:0);
+    }
+    const head=a.posture==='lie'?.67:a.posture==='sit'?1.21:1.75;
+    point.set(a.x,a.y+head,a.z);
+    return 12;
+  }
+  return {setRoster,synchronize,setViewerPrivileges,update,speechAnchor,get safetyActors(){return [...actors.values()].filter(a=>a.role==='safety-red'||a.role==='safety-orange');},get state(){return {total:actors.size,details:pool.filter(p=>p.actor).length,people:[...actors.values()].map(a=>({id:a.id,name:a.name,role:a.role,x:a.x,y:a.y,z:a.z,phase:a.phase,posture:a.posture}))};},
     dispose(){for(const g of groups.values()){g.instance.removeFromParent();g.instance.dispose();}for(const s of pool){s.badge.dispose();s.emote.dispose();s.appearance.dispose();s.avatar.dispose();}proxy.removeFromParent();proxy.dispose();ball.dispose();softMaterial.dispose();}};
 }

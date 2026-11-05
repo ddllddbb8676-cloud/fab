@@ -296,4 +296,14 @@ body.entering .joystick-zone { display:none; }
 .visitor-nickname-label{position:fixed;left:0;top:0;z-index:6;pointer-events:none;user-select:none;white-space:nowrap;color:#204e55;font:700 16px/1.2 "Noto Sans KR",system-ui,sans-serif;text-shadow:-1px -1px 0 #f4fbf8,1px -1px 0 #f4fbf8,-1px 1px 0 #f4fbf8,1px 1px 0 #f4fbf8,0 1px 3px #f4fbf8;will-change:transform}
 .visitor-nickname-label[hidden]{display:none}
 .visitor-nickname-label{text-align:center}
+.owner-speech-bubble{position:fixed;left:0;top:0;z-index:7;width:max-content;max-width:min(228px,calc(100vw - 16px));box-sizing:border-box;padding:8px 12px;border:1px solid #abc9c8;border-radius:15px;background:#fffefa;color:#163f47;box-shadow:0 2px 8px #173e4826;font:650 15px/1.4 "Noto Sans KR",system-ui,sans-serif;text-align:center;overflow-wrap:anywhere;pointer-events:none;user-select:none}
+.owner-speech-bubble::after{content:"";position:absolute;width:9px;height:9px;left:var(--speech-tail,50%);bottom:-6px;border:solid #abc9c8;border-width:0 1px 1px 0;background:#fffefa;transform:translateX(-50%) rotate(45deg)}
+.owner-speech-bubble.speech-below::after{top:-6px;bottom:auto;transform:translateX(-50%) rotate(225deg)}
+.speech-dialog{width:min(320px,calc(100vw - 28px));box-sizing:border-box;padding:18px;border:1px solid #cbdcdb;border-radius:18px;color:#204a51;background:#fcfffe;box-shadow:0 10px 35px #193b4b22}
+.speech-dialog::backdrop{background:#123a4640}
+.speech-dialog h2{margin:0 0 4px;font-size:17px}.speech-dialog p{margin:0 0 13px;color:#536d73;font-size:13px}
+.speech-dialog label{display:block;margin-bottom:4px;font-size:13px;font-weight:650}
+.speech-dialog input{box-sizing:border-box;width:100%;padding:9px 10px;border:1px solid #a0b9b9;border-radius:9px;background:white;color:#153f48;font:inherit;font-size:16px;user-select:text;-webkit-user-select:text}
+.speech-feedback,.speech-actions{display:flex;align-items:center;justify-content:space-between;gap:8px}.speech-feedback{min-height:28px;font-size:12px;color:#764a42}.speech-feedback small{margin-left:auto;color:#536d73;white-space:nowrap}
+.speech-actions{justify-content:flex-end}.speech-actions button{padding:8px 15px;border-radius:9px;background:#e9f0ef;color:#254c53}.speech-actions [type=submit]{background:#285d65;color:white}.speech-actions button:disabled{opacity:.5}
 .visitor-nickname-label[data-title]:not([data-title=""])::before{content:attr(data-title);display:block;margin-bottom:2px;color:var(--title-color);font-size:12px;line-height:1.3;font-weight:700}

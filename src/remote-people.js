@@ -84,6 +84,18 @@ export function createRemotePeople({THREE,scene,store,fleet=null,maxDetailed=40}
     }
     proxy.count=n;if(n){proxy.instanceMatrix.needsUpdate=true;proxy.instanceColor.needsUpdate=true;}
   }
-  return {setRoster,synchronize,setViewerPrivileges,update,get safetyActors(){return [...actors.values()].filter(a=>a.role==='safety-red'||a.role==='safety-orange');},get state(){return {total:actors.size,details:pool.filter(p=>p.actor).length,people:[...actors.values()].map(a=>({id:a.id,name:a.name,role:a.role,x:a.x,y:a.y,z:a.z,phase:a.phase,posture:a.posture}))};},
+  function speechAnchor(id,point,overview) {
+    const a=actors.get(id);
+    if(!a||a.hidden||(!overview&&a.distance>=95))return null;
+    const slot=pool.find(s=>s.actor===a);
+    if(slot){
+      point.copy(slot.badge.sprite.position);
+      return (a.titleId?48:30)+(slot.emote.sprite.visible?40:0);
+    }
+    const head=a.posture==='lie'?.67:a.posture==='sit'?1.21:1.75;
+    point.set(a.x,a.y+head,a.z);
+    return 12;
+  }
+  return {setRoster,synchronize,setViewerPrivileges,update,speechAnchor,get safetyActors(){return [...actors.values()].filter(a=>a.role==='safety-red'||a.role==='safety-orange');},get state(){return {total:actors.size,details:pool.filter(p=>p.actor).length,people:[...actors.values()].map(a=>({id:a.id,name:a.name,role:a.role,x:a.x,y:a.y,z:a.z,phase:a.phase,posture:a.posture}))};},
     dispose(){for(const g of groups.values()){g.instance.removeFromParent();g.instance.dispose();}for(const s of pool){s.badge.dispose();s.emote.dispose();s.appearance.dispose();s.avatar.dispose();}proxy.removeFromParent();proxy.dispose();ball.dispose();softMaterial.dispose();}};
 }
