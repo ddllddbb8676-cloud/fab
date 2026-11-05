@@ -22,7 +22,7 @@ export function createCartReturner({store,carts,residents,players,now,canRun=()=
     const cache=new Map();
     function clear(a,b){
       const key=`${a.x},${a.z}:${b.x},${b.z}`;if(cache.has(key))return cache.get(key);
-      const length=distance(a,b),yaw=length>.001?Math.atan2(b.x-a.x,b.z-a.z):c.yaw;
+      const length=distance(a,b),yaw=length>.001?Math.atan2(b.x-a.x,b.z-a.z)+Math.PI:c.yaw;
       const count=Math.max(1,Math.ceil(length/.45));let ok=true;
       for(let n=0;n<=count;n++){
         const p={x:a.x+(b.x-a.x)*n/count,z:a.z+(b.z-a.z)*n/count,yaw},handle=cartPoint(p,0,0,CART_SIZE.tow);
@@ -80,7 +80,8 @@ export function createCartReturner({store,carts,residents,players,now,canRun=()=
     if(state.items.length>=STOCKER_CAPACITY){finish();return;}
     job.slot=r.cartSlot;job.recordId=r.id;job.stocker=s;job.wait=0;
     // Visit a side of the shelf so the pickup is visible before walking to IN.
-    const pickup=floorSpot(cartPoint(c,home.x>0?1.05:-1.05,0,r.cartSlot%2?.44:-.44));
+    const side=Math.sign(home.x)*Math.sign(Math.cos(c.yaw)||1);
+    const pickup=floorSpot(cartPoint(c,side*1.05,0,r.cartSlot%2?.44:-.44));
     if(!pickup||!route(actor,pickup,'cart-fetch-walk')){finish();return;}
     job.phase='fetch';
   }
@@ -100,10 +101,10 @@ export function createCartReturner({store,carts,residents,players,now,canRun=()=
     }else if(job.phase==='return'){
       const target=job.path[0];
       if(!target){carts.leave(actor);nextCargo();return;}
-      const d=distance(c,target),desired=d>.01?Math.atan2(target.x-c.x,target.z-c.z):c.yaw;
+      const d=distance(c,target),direction=d>.01?Math.atan2(target.x-c.x,target.z-c.z):c.yaw+Math.PI,desired=direction+Math.PI;
       const angle=turn(c.yaw,desired),yaw=c.yaw+Math.max(-dt*1.35,Math.min(dt*1.35,angle));
       const travel=Math.abs(angle)<.15?Math.min(d,dt*1.2):0;
-      const next={x:c.x+Math.sin(desired)*travel,z:c.z+Math.cos(desired)*travel,yaw};
+      const next={x:c.x+Math.sin(direction)*travel,z:c.z+Math.cos(direction)*travel,yaw};
       const handle=cartPoint(next,0,0,CART_SIZE.tow);
       const blocked=[...players.values()].some(p=>!p.hidden&&(p.y||0)<.5&&(distance(p,next)<.85||distance(p,handle)<.65));
       if(!blocked&&carts.moveNpc(c,actor,next,dt))job.stuck=0;else{job.stuck+=dt;actor.speed=0;}

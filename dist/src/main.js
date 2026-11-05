@@ -1,62 +1,62 @@
-import {createNicknameUI,createNicknameModeration} from './nickname-ui.js?v=f76ad48afa43';
-import {createAdminVisit} from './admin-visit.js?v=f76ad48afa43';
-import {createWorldEventsUI} from './world-events-ui.js?v=f76ad48afa43';
-import {createContestUI,createContestZones} from './foup-contest-view.js?v=f76ad48afa43';
-import {createSpeechBubbles,createSpeechComposer} from './owner-speech-ui.js?v=f76ad48afa43';
-import {contestOutfit} from './foup-contest.js?v=f76ad48afa43';
-import {createEventCamera} from './event-camera.js?v=f76ad48afa43';
-import {createChipRewardTracker,createChipRewardView,createDestructionRewardQueue} from './chip-rewards.js?v=f76ad48afa43';
-import {npcOutfit} from './npc-outfits.js?v=f76ad48afa43';
-import {createWardrobeNotice,WARDROBE_NOTICE,WARDROBE_NOTICE_DURATION} from './wardrobe-notice.js?v=f76ad48afa43';
-import {createAvatarAppearance} from './avatar-appearance.js?v=f76ad48afa43';
-import {createWardrobe} from './wardrobe-ui.js?v=f76ad48afa43';
-import {destructionTitle,findTitle} from './destruction-titles.js?v=f76ad48afa43';
+import {createNicknameUI,createNicknameModeration} from './nickname-ui.js?v=aed74b929a2a';
+import {createAdminVisit} from './admin-visit.js?v=aed74b929a2a';
+import {createWorldEventsUI} from './world-events-ui.js?v=aed74b929a2a';
+import {createContestUI,createContestZones} from './foup-contest-view.js?v=aed74b929a2a';
+import {createSpeechBubbles,createSpeechComposer} from './owner-speech-ui.js?v=aed74b929a2a';
+import {contestOutfit} from './foup-contest.js?v=aed74b929a2a';
+import {createEventCamera} from './event-camera.js?v=aed74b929a2a';
+import {createChipRewardTracker,createChipRewardView,createDestructionRewardQueue} from './chip-rewards.js?v=aed74b929a2a';
+import {npcOutfit} from './npc-outfits.js?v=aed74b929a2a';
+import {createWardrobeNotice,WARDROBE_NOTICE,WARDROBE_NOTICE_DURATION} from './wardrobe-notice.js?v=aed74b929a2a';
+import {createAvatarAppearance} from './avatar-appearance.js?v=aed74b929a2a';
+import {createWardrobe} from './wardrobe-ui.js?v=aed74b929a2a';
+import {destructionTitle,findTitle} from './destruction-titles.js?v=aed74b929a2a';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { machines as layoutMachines, bays, columns, TOUR_POINTS, isBlocked, TOOL_SCALE_X, TOOL_WIDTH, SEATED_FOUP_Y, VEHICLE_Y, RAIL_Y, AISLE, SERVICE_AISLE, SIDE_GAP } from './layout.js?v=f76ad48afa43';
-import { network, railPaths } from './rail-network.js?v=f76ad48afa43';
-import { createFleet, reservedPortIds } from './network-transport.js?v=f76ad48afa43';
-import { createAvatar } from './avatar.js?v=f76ad48afa43';
-import { createExplorer } from './explorer.js?v=f76ad48afa43';
-import { createTouchJoystick } from './touch-joystick.js?v=f76ad48afa43';
-import { CHASE_CAMERA } from './locomotion.js?v=f76ad48afa43';
-import { WALK_CLIPPING, createSceneDepth, createFloorFoundation } from './scene-depth.js?v=f76ad48afa43';
-import { createViewControls,createPhotoMode } from './view-controls.js?v=f76ad48afa43';
-import { AIR_SHOWER, createAirShower } from './air-shower.js?v=f76ad48afa43';
-import { createEntrySequence, entryCamera } from './entry-sequence.js?v=f76ad48afa43';
-import { ENTRANCE, entranceBounds } from './entrance-layout.js?v=f76ad48afa43';
-import { processFamilies, buildEquipmentCatalog, getBayPurpose } from './equipment-catalog.js?v=f76ad48afa43';
-import { createEquipmentLabels } from './equipment-labels.js?v=f76ad48afa43';
-import { createEquipmentDirectory } from './equipment-directory.js?v=f76ad48afa43';
-import { createBayLighting, applyBayWhiteLightMask } from './bay-lighting.js?v=f76ad48afa43';
-import { createAmbience } from './ambience.js?v=f76ad48afa43';
-import {stockerBounds} from './stocker-layout.js?v=f76ad48afa43';
-import {createStockerView} from './stocker-view.js?v=f76ad48afa43';
-import { setRuntimeObstacles } from './runtime-obstacles.js?v=f76ad48afa43';
-import { createEquipmentVisibility } from './equipment-visibility.js?v=f76ad48afa43';
-import { createEquipmentDestruction } from './equipment-destruction.js?v=f76ad48afa43';
-import { createEmoControls } from './emo-controls.js?v=f76ad48afa43';
-import { createSpatialBatch } from './spatial-batch.js?v=f76ad48afa43';
-import { createPlayActions } from './play-actions.js?v=f76ad48afa43';
-import { createVisitorName, createVisitorBadge } from './visitor-name.js?v=f76ad48afa43';
-import { createResidents } from './residents.js?v=f76ad48afa43';
-import { multiplayerConfiguration, createMultiplayer } from './multiplayer.js?v=f76ad48afa43';
-import {prepareRoomConnection} from './room-connection.js?v=f76ad48afa43';
-import { createSharedWorldView } from './shared-world-view.js?v=f76ad48afa43';
-import { createRemotePeople } from './remote-people.js?v=f76ad48afa43';
-import {createCartControls} from './cart-controls.js?v=f76ad48afa43';
-import {createCatchReaction} from './catch-reaction.js?v=f76ad48afa43';
-import { createSafetyPatrols, canCatch, isSafety, safetyColor, PENALTY_MESSAGE, SAFETY_CATCH_GOAL, SAFETY_NO_EMO_MESSAGE } from './safety-team.js?v=f76ad48afa43';
-import { ROOM_CAPACITY, MAX_VISITORS, AUTOMATED_COUNT } from './room-population.js?v=f76ad48afa43';
-import {REST_AREAS,isRestArea,canSafetyTraverse,restAreaExit,SAFETY_CLEARANCE} from './rest-area.js?v=f76ad48afa43';
-import {createRestAreaView} from './rest-area-view.js?v=f76ad48afa43';
-import {createLeaderboard} from './leaderboard.js?v=f76ad48afa43';
-import {EMOTE_MENU,HEART_PATH,HEART_COLOR} from './emotes.js?v=f76ad48afa43';
-import {bindEmoteStrip} from './emote-strip.js?v=f76ad48afa43';
-import {createEmoteView} from './emote-view.js?v=f76ad48afa43';
-import {safetyProximity} from './safety-proximity.js?v=f76ad48afa43';
-import {startupStage,startupStep,startupFailure} from './startup-signals.js?v=f76ad48afa43';
+import { machines as layoutMachines, bays, columns, TOUR_POINTS, isBlocked, TOOL_SCALE_X, TOOL_WIDTH, SEATED_FOUP_Y, VEHICLE_Y, RAIL_Y, AISLE, SERVICE_AISLE, SIDE_GAP } from './layout.js?v=aed74b929a2a';
+import { network, railPaths } from './rail-network.js?v=aed74b929a2a';
+import { createFleet, reservedPortIds } from './network-transport.js?v=aed74b929a2a';
+import { createAvatar } from './avatar.js?v=aed74b929a2a';
+import { createExplorer } from './explorer.js?v=aed74b929a2a';
+import { createTouchJoystick } from './touch-joystick.js?v=aed74b929a2a';
+import { CHASE_CAMERA } from './locomotion.js?v=aed74b929a2a';
+import { WALK_CLIPPING, createSceneDepth, createFloorFoundation } from './scene-depth.js?v=aed74b929a2a';
+import { createViewControls,createPhotoMode } from './view-controls.js?v=aed74b929a2a';
+import { AIR_SHOWER, createAirShower } from './air-shower.js?v=aed74b929a2a';
+import { createEntrySequence, entryCamera } from './entry-sequence.js?v=aed74b929a2a';
+import { ENTRANCE, entranceBounds } from './entrance-layout.js?v=aed74b929a2a';
+import { processFamilies, buildEquipmentCatalog, getBayPurpose } from './equipment-catalog.js?v=aed74b929a2a';
+import { createEquipmentLabels } from './equipment-labels.js?v=aed74b929a2a';
+import { createEquipmentDirectory } from './equipment-directory.js?v=aed74b929a2a';
+import { createBayLighting, applyBayWhiteLightMask } from './bay-lighting.js?v=aed74b929a2a';
+import { createAmbience } from './ambience.js?v=aed74b929a2a';
+import {stockerBounds} from './stocker-layout.js?v=aed74b929a2a';
+import {createStockerView} from './stocker-view.js?v=aed74b929a2a';
+import { setRuntimeObstacles } from './runtime-obstacles.js?v=aed74b929a2a';
+import { createEquipmentVisibility } from './equipment-visibility.js?v=aed74b929a2a';
+import { createEquipmentDestruction } from './equipment-destruction.js?v=aed74b929a2a';
+import { createEmoControls } from './emo-controls.js?v=aed74b929a2a';
+import { createSpatialBatch } from './spatial-batch.js?v=aed74b929a2a';
+import { createPlayActions } from './play-actions.js?v=aed74b929a2a';
+import { createVisitorName, createVisitorBadge } from './visitor-name.js?v=aed74b929a2a';
+import { createResidents } from './residents.js?v=aed74b929a2a';
+import { multiplayerConfiguration, createMultiplayer } from './multiplayer.js?v=aed74b929a2a';
+import {prepareRoomConnection} from './room-connection.js?v=aed74b929a2a';
+import { createSharedWorldView } from './shared-world-view.js?v=aed74b929a2a';
+import { createRemotePeople } from './remote-people.js?v=aed74b929a2a';
+import {createCartControls} from './cart-controls.js?v=aed74b929a2a';
+import {createCatchReaction} from './catch-reaction.js?v=aed74b929a2a';
+import { createSafetyPatrols, canCatch, isSafety, safetyColor, PENALTY_MESSAGE, SAFETY_CATCH_GOAL, SAFETY_NO_EMO_MESSAGE } from './safety-team.js?v=aed74b929a2a';
+import { ROOM_CAPACITY, MAX_VISITORS, AUTOMATED_COUNT } from './room-population.js?v=aed74b929a2a';
+import {REST_AREAS,isRestArea,canSafetyTraverse,restAreaExit,SAFETY_CLEARANCE} from './rest-area.js?v=aed74b929a2a';
+import {createRestAreaView} from './rest-area-view.js?v=aed74b929a2a';
+import {createLeaderboard} from './leaderboard.js?v=aed74b929a2a';
+import {EMOTE_MENU,HEART_PATH,HEART_COLOR} from './emotes.js?v=aed74b929a2a';
+import {bindEmoteStrip} from './emote-strip.js?v=aed74b929a2a';
+import {createEmoteView} from './emote-view.js?v=aed74b929a2a';
+import {safetyProximity} from './safety-proximity.js?v=aed74b929a2a';
+import {startupStage,startupStep,startupFailure} from './startup-signals.js?v=aed74b929a2a';
 function recordUsageConnection(method, value) {
   try { window.__fabTelemetry?.[method](value); } catch {}
 }
@@ -690,7 +690,7 @@ $('capture-open').addEventListener('click',async()=>{
   if(entry.active||nicknameUI.isOpen||connectionConfig&&(!multiplayer?.connected||!personalStatsLoaded)){toast('연결을 마친 뒤 캡쳐타임을 열어주세요.');return;}
   captureLoading=true;
   try{
-    if(!captureTime){const {createCaptureTime}=await import('./capture-time.js?v=f76ad48afa43');captureTime=createCaptureTime({
+    if(!captureTime){const {createCaptureTime}=await import('./capture-time.js?v=aed74b929a2a');captureTime=createCaptureTime({
       getRecord:()=>({name:visitorBadge.name,title:findTitle(visitorBadge.titleId)?.name??'',...personalStats}),
       capture:draw=>new Promise((resolve,reject)=>{const timer=setTimeout(()=>{captureFrame=null;reject(Error('capture-timeout'));},2500);captureFrame=canvas=>{clearTimeout(timer);try{resolve(draw(canvas));}catch(error){reject(error);}};}),
       onToggle:open=>{if(open){viewControls.closeAll();directory.close();adminVisit?.cancel();$('help').classList.add('hidden');$('tool-card').classList.add('hidden');joystick.setEnabled(false);}explorer.lock(open||entry.active||nicknameUI.isOpen||wardrobe.isOpen);},

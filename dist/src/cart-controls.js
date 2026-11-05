@@ -1,6 +1,6 @@
-import {CART_HOMES,CART_SIZE,cartPoint,cartSeatPose,pullCart} from './cart-layout.js?v=f76ad48afa43';
-import {isBlocked} from './layout.js?v=f76ad48afa43';
-import {createCartView} from './cart-view.js?v=f76ad48afa43';
+import {CART_HOMES,CART_SIZE,cartPoint,cartSeatPose,pushCart} from './cart-layout.js?v=aed74b929a2a';
+import {isBlocked} from './layout.js?v=aed74b929a2a';
+import {createCartView} from './cart-view.js?v=aed74b929a2a';
 
 export function createCartControls(options){
   let selected=null;
@@ -47,10 +47,10 @@ function createOneCart({THREE,scene,explorer,avatar,store,network,getId,ready,to
     try{
       const result=await network.command(kind,{id:c.id,...data});
       if(!result.ok){toast(result.message??'카트를 다시 눌러주세요');return;}
-      if(result.cartHandle)placeSelf({...result.cartHandle,heading:c.yaw});
+      if(result.cartHandle)placeSelf({...result.cartHandle,heading:c.yaw+Math.PI});
       if(result.cartExit){placeSelf(result.cartExit);explorer.state.posture='stand';}
       if(['cart-pull','cart-board','cart-leave'].includes(kind))close();
-      if(kind==='cart-pull')toast('조이스틱으로 카트를 끌어요 · 놓기를 누르면 멈춰요');
+      if(kind==='cart-pull')toast('조이스틱으로 카트를 밀어요 · 놓기를 누르면 멈춰요');
       if(kind==='cart-board')toast('탑승했어요! 내리기를 누르면 바닥으로 내려와요');
     }catch{toast('연결을 확인하고 카트를 다시 눌러주세요');}finally{busy=false;paint();}
   }
@@ -99,10 +99,10 @@ function createOneCart({THREE,scene,explorer,avatar,store,network,getId,ready,to
   }
   function update(){
     if(isDriver()&&before){
-      const state=explorer.state,next=pullCart(c,before,state.position,isBlocked);
-      if(next&&Math.hypot(state.position.x-c.x,state.position.z-c.z)>=.85){Object.assign(c,{x:next.x,z:next.z,yaw:next.yaw});}
+      const state=explorer.state,next=pushCart(c,before,state.position,isBlocked);
+      if(next){Object.assign(c,{x:next.x,z:next.z,yaw:next.yaw});}
       else{state.position.x=before.x;state.position.z=before.z;state.speed=0;avatar.root.position.copy(state.position);if(performance.now()>collisionAt){toast('카트가 지나가기엔 좁아요. 넓은 통로로 돌아가 주세요');collisionAt=performance.now()+5000;}}
-      state.posture='stand';
+      state.posture='stand';state.heading=c.yaw+Math.PI;
     }
     if(level()>=0){explorer.state.posture='sit';placeSelf(cartSeatPose(c,level()));}
     store.carts.set(c.id,c);store.moveCart(c);view.update(c);
