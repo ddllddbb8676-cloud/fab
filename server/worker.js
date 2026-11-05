@@ -197,7 +197,7 @@ export class FabRoom extends DurableObject {
       .sort((a,b)=>a.name.localeCompare(b.name,'ko'));
   }
   async checkpoint(){do{await this.profiles.flush();}while(this.profiles.hasPending);}
-  welcome(ws,id){const p=this.room.players.get(id);this.send(ws,{type:'welcome',v:PROTOCOL,id,name:p.name,privileges:{unlimitedChips:Boolean(p.chipUnlimited),ownerSpeech:Boolean(p.chipUnlimited)},wallet:this.room.wallet(id),nickname:this.room.nicknameState(id),titles:this.room.titleState(id),resume:p.hasEntered?p.groundPosition:null,roster:this.room.roster(),frame:this.room.snapshot(true)});}
+  welcome(ws,id){const p=this.room.players.get(id);this.send(ws,{type:'welcome',v:PROTOCOL,id,name:p.name,privileges:{unlimitedChips:Boolean(p.chipUnlimited),ownerSpeech:Boolean(p.chipUnlimited),speech:true},wallet:this.room.wallet(id),nickname:this.room.nicknameState(id),titles:this.room.titleState(id),resume:p.hasEntered?p.groundPosition:null,roster:this.room.roster(),frame:this.room.snapshot(true)});}
   sendWallets(){for(const [ws,s] of this.sockets){const player=this.room.players.get(s.id);if(s.ready!==false&&player&&s.walletRevision!==player.wallet.revision){const wallet=this.room.wallet(s.id);this.send(ws,{type:'wallet',wallet});s.walletRevision=wallet.revision;}}}
   broadcastRoster(){const data=JSON.stringify({type:'roster',roster:this.room.roster(),count:this.room.players.size});for(const [ws,s] of this.sockets)if(s.ready!==false)this.send(ws,data);}
   async fetch(request) {
@@ -368,6 +368,12 @@ export class FabRoom extends DurableObject {
     if(data.type==='pose'){this.pose(session.id,data.pose);return;}
     if(data.type==='command'&&Number.isSafeInteger(data.seq)&&typeof data.kind==='string') {
       if(data.pose)this.pose(session.id,data.pose);
+      // Speech is transient. The next shared frame carries it to every peer.
+      if(data.kind==='say'||data.kind==='owner-say'){
+        const result=this.room.command(session.id,data.kind,data.data);
+        this.send(ws,{type:'ack',seq:data.seq,...result});
+        return;
+      }
       const beforePlayer=this.room.players.get(session.id),beforeItem=cosmeticItems.find(item=>item.id===data.data?.itemId);
       const insufficient=data.kind==='purchase'&&beforeItem&&!beforePlayer?.chipUnlimited&&!beforePlayer?.wallet?.owned?.includes(beforeItem.id)&&beforePlayer?.wallet?.chips<beforeItem.price;
       const result=data.kind==='nickname-reset'?await resetInappropriateNickname({actorId:session.id,targetName:data.data?.name,profiles:this.profiles,room:this.room}):this.room.command(session.id,data.kind,data.data);

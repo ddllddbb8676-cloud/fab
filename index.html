@@ -40,7 +40,7 @@
   <section id="controls-panel" class="controls-panel hidden" role="dialog" aria-label="팹 메뉴" tabindex="-1">
     <div class="panel-heading"><h2>팹 메뉴</h2><button id="controls-close" class="panel-close" type="button" aria-label="팹 메뉴 닫기">×</button></div>
     <div class="semitoon-credit" aria-label="인스타그램 @semi.toon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg><span>@semi.toon</span></div>
-    <button id="owner-speech-open" class="menu-row" type="button" hidden><span class="menu-symbol" aria-hidden="true">💬</span><span class="menu-label">말풍선 보내기</span><span class="menu-detail">운영자</span></button>
+    <button id="owner-speech-open" class="menu-row" type="button" aria-haspopup="dialog" hidden><span class="menu-symbol" aria-hidden="true">💬</span><span class="menu-label">말풍선 보내기</span></button>
     <section class="menu-group" aria-labelledby="view-menu-heading">
       <h3 id="view-menu-heading">관람</h3>
       <nav class="view-controls" aria-label="관람 방식">
@@ -79,7 +79,13 @@
   <section class="tool-card hidden" id="tool-card" aria-label="선택한 장비"><button id="close-card" aria-label="장비 설명 닫기">×</button><div class="eyebrow" id="tool-family"></div><h2 id="tool-name"></h2><h3 id="tool-type"></h3><div id="tool-location"></div><div class="tool-emo-actions"><button id="tool-emo" type="button"><span class="emo-cap" aria-hidden="true">EMO</span><span><strong>EMO 누르기</strong><small>걸어가서 꾹 누르면 작동</small></span></button><button id="tool-repair" type="button" class="hidden">이 장비 수리하기 🔧</button></div><div class="tool-code-breakdown" aria-label="장비 코드 구성"><span><b id="tool-code-process"></b><small>공정</small></span><span><b id="tool-code-fab"></b><small>FAB</small></span><span><b id="tool-code-bay"></b><small>BAY</small></span><span><b id="tool-code-number"></b><small>장비</small></span></div><p id="tool-description"></p><div id="tool-ports"></div><span class="tool-caption">종류와 위치를 구분하는 관람용 장비 이름</span></section>
   <div id="foup-actions" class="foup-actions hidden"><button id="foup-drop" type="button">바닥에 놓기</button><button id="foup-throw" type="button">던지기 ↗</button></div>
   <button id="oht-dismount" class="oht-dismount hidden" type="button">내리기 ↓</button>
-  <nav id="posture-controls" class="posture-controls" aria-label="캐릭터 자세"><button id="posture-sit" type="button" aria-pressed="false">앉기</button><button id="posture-lie" type="button" aria-pressed="false">눕기</button></nav>
+  <nav id="posture-controls" class="posture-controls" aria-label="캐릭터 자세와 대화">
+    <button id="posture-sit" type="button" aria-pressed="false">앉기</button>
+    <button id="posture-lie" type="button" aria-pressed="false">눕기</button>
+    <button id="speech-quick-open" type="button" aria-label="대화 말풍선 보내기" aria-haspopup="dialog" title="말풍선 보내기" hidden>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20.5 11.25a8.5 8.5 0 0 1-8.5 8.25 10 10 0 0 1-3.5-.65L4 20l1.15-4.15a7.9 7.9 0 0 1-1.65-4.6A8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 8.5 8.25Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><g fill="currentColor"><circle cx="8.3" cy="11.3" r="1"/><circle cx="12" cy="11.3" r="1"/><circle cx="15.7" cy="11.3" r="1"/></g></svg>
+    </button>
+  </nav>
   <aside id="safety-panel" class="safety-panel hidden" aria-live="polite">
     <strong id="safety-title"></strong><span id="safety-description"></span>
     <button id="safety-repairs" class="hidden" type="button">수리할 장비 찾기 🔧</button>

@@ -119,10 +119,12 @@ body.photo-mode > :not(#world):not(#photo-exit):not(#photo-hint) { visibility: h
 
 .posture-controls {
   position: fixed; z-index: 5; right: var(--safe-right); bottom: var(--safe-bottom);
-  display: flex; gap: 4px; padding: 4px; border: 1px solid #fff; border-radius: 16px;
+  display: flex; gap: 0; padding: 1px; border: 1px solid #fff; border-radius: 13px;
   background: #f7fbfbe8; box-shadow: 0 3px 15px #26495012; backdrop-filter: blur(10px);
 }
-.posture-controls button { min-width: 60px; min-height: 44px; padding: 0 10px; border-radius: 12px; background: transparent; font-size: 12px; }
+.posture-controls button { position: relative; display: grid; place-items: center; min-width: 44px; min-height: 36px; padding: 0 3px; border-radius: 10px; background: transparent; font-size: 12px; white-space: nowrap; }
+.posture-controls button::before { content: ""; position: absolute; inset: -4px 0; }
+#speech-quick-open { color: #285d65; }
 .posture-controls button[aria-pressed=true] { color: #fff; background: #397b81; }
 .emote-controls { position:fixed; z-index:7; left:50%; bottom:var(--safe-bottom); transform:translateX(-50%); width:min(426px,calc(100vw - 16px - env(safe-area-inset-left) - env(safe-area-inset-right))); display:flex; align-items:center; gap:3px; padding:3px; border:1px solid #ffffff66; border-radius:15px; background:#f7fbfb80; overflow:hidden; touch-action:pinch-zoom; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
 .emote-items { display:grid; grid-template-columns:repeat(var(--emote-columns,9),minmax(0,1fr)); flex:1; min-width:0; }
@@ -149,6 +151,7 @@ body.entering .safety-panel,body:has(#tool-card:not(.hidden)) .safety-panel { di
 .oht-dismount { position: fixed; z-index: 5; right: var(--safe-right); bottom: var(--safe-bottom); padding: 0 20px; border-radius: 16px; color: white; background: #397b81; box-shadow: 0 3px 15px #26495022; }
 .oht-dismount:disabled { background: #6d969c; }
 .posture-controls,.oht-dismount,.safety-panel,.view-label { margin-bottom:49px; }
+.posture-controls { margin-bottom:56px; }
 .foup-actions { margin-bottom:49px; }
 body.entering .posture-controls, body:has(#tool-card:not(.hidden)) .posture-controls { display: none; }
 .view-label {
