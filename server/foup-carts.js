@@ -1,6 +1,6 @@
 import {isBlocked} from '../src/layout.js';
 import {floorSpot} from '../src/foup-play.js';
-import {cartPoint,cartDriverPose,cartSeatPose,cartFits,pushCart} from '../src/cart-layout.js';
+import {cartPoint,cartSeatPose,cartFits,pullCart,CART_SIZE} from '../src/cart-layout.js';
 
 const fail=message=>({ok:false,message});
 export function createFoupCarts({store,players,now=()=>0}){
@@ -33,10 +33,10 @@ export function createFoupCarts({store,players,now=()=>0}){
     if(data.hidden){leave(p);return {...data,x:p.x,y:0,z:p.z};}
     if(c.driver!==p.id)return {...data,...cartSeatPose(c,c.riders.indexOf(p.id))};
     if(data.y>.15||Math.hypot(data.x-p.x,data.z-p.z)>4){leave(p);return data;}
-    const next=pushCart(c,p,data,isBlocked);
-    if(!next)return {...data,x:p.x,y:0,z:p.z,heading:c.yaw+Math.PI,speed:0,posture:'stand'};
+    const next=pullCart(c,p,data,isBlocked);
+    if(!next||Math.hypot(data.x-c.x,data.z-c.z)<.85)return {...data,x:p.x,y:0,z:p.z,speed:0,posture:'stand'};
     if(Math.hypot(next.x-c.x,next.z-c.z)>.0001||Math.abs(next.yaw-c.yaw)>.0001){Object.assign(c,{x:next.x,z:next.z,yaw:next.yaw});store.moveCart(c);placeRiders(c);dirty=true;touch(c,p);}
-    return {...data,y:0,heading:next.yaw+Math.PI,posture:'stand'};
+    return {...data,y:0,posture:'stand'};
   }
   function command(p,kind,data){
     if(kind==='cart-leave'){const position=leave(p);return position?{ok:true,cartExit:position}:{ok:true};}
@@ -46,11 +46,10 @@ export function createFoupCarts({store,players,now=()=>0}){
     if(c.driver)return fail('이동 중이에요. 손잡이를 놓은 뒤 이용해 주세요');
     if(kind==='cart-pull'){
       if(store.getCarried(p.id))return fail('FOUP을 카트에 싣거나 내려놓아 주세요');
-      const handle=cartDriverPose(c);
+      const handle=cartPoint(c,0,0,CART_SIZE.tow);
       if(isBlocked(handle.x,handle.z,.295))return fail('손잡이 앞이 좁아요. 반대편에서 카트를 이용해 주세요');
       // Mounting only moves the player the short distance to the handle.
-      // Retain the wire command/phase names so already-open clients can leave.
-      Object.assign(p,handle,{posture:'stand',speed:0,phase:'cart-pulling',cartId:c.id,cartLevel:null});
+      Object.assign(p,handle,{heading:c.yaw,posture:'stand',speed:0,phase:'cart-pulling',cartId:c.id,cartLevel:null});
       c.driver=p.id;touch(c,p);save();return {ok:true,cartHandle:handle};
     }
     if(kind==='cart-board'){
@@ -77,10 +76,10 @@ export function createFoupCarts({store,players,now=()=>0}){
   function step(){for(const c of store.carts.values())placeRiders(c);if(dirty&&now()-lastSaved>=5)save();}
   function moveNpc(c,p,next,dt){
     if(c.driver!==p.id||!p.cartTask||dt<=0||Math.hypot(next.x-c.x,next.z-c.z)>dt*1.36)return false;
-    const handle=cartDriverPose(next);
+    const handle=cartPoint(next,0,0,CART_SIZE.tow);
     if(!cartFits(next,isBlocked)||isBlocked(handle.x,handle.z,.295))return false;
     const speed=Math.hypot(p.x-handle.x,p.z-handle.z)/dt;
-    Object.assign(c,{x:next.x,z:next.z,yaw:next.yaw});Object.assign(p,handle,{speed,phase:'cart-pulling'});
+    Object.assign(c,{x:next.x,z:next.z,yaw:next.yaw});Object.assign(p,handle,{heading:c.yaw,speed,phase:'cart-pulling'});
     store.moveCart(c);dirty=true;return true;
   }
   function snapshot(){return [...store.carts.values()].map(c=>({id:c.id,x:+c.x.toFixed(3),z:+c.z.toFixed(3),yaw:+c.yaw.toFixed(3),driver:c.driver,riders:[...c.riders],returning:Boolean(c.returning)}));}

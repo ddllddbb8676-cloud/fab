@@ -38,7 +38,6 @@ test('an abandoned cart returns visibly with an existing NPC and stows all four 
   for(let i=0;i<1600;i++){
     s.step();if(s.returner.state)phases.add(s.returner.state.phase);
     assert.ok(cartFits(s.c,isBlocked));assert.ok(cargo.filter(r=>r.mode==='carried').length<=1);
-    if(s.c.driver){const a=s.actor;assert.ok((s.c.x-a.x)*Math.sin(a.heading)+(s.c.z-a.z)*Math.cos(a.heading)>1.66,'NPC faces the cart while pushing from behind');}
     if(cargo.every(r=>r.mode==='stored')&&!s.returner.state)break;
   }
   assert.deepEqual(cargo.map(r=>r.mode),Array(4).fill('stored'));

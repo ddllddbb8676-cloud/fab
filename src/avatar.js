@@ -178,7 +178,6 @@ export function createAvatar(THREE) {
   function update(dt, { speed = 0, heading = facing, turnRate = 12, pressTarget = null, pressProgress = 0, posture = 'stand', repairTime = null, cleanTime = null, hanging = false, carrying = false, crouch = 0, snap = false } = {}) {
     if (disposed) return;
     const step = Number.isFinite(dt) ? Math.max(0, Math.min(dt, .1)) : 0;
-    if(root.userData.cartGrip)heading=root.userData.cartGrip.yaw+Math.PI;
     speed = Number.isFinite(speed) ? Math.max(0, speed) : 0; heading = Number.isFinite(heading) ? heading : facing;
     const pressing = pressTarget && [pressTarget.x, pressTarget.y, pressTarget.z].every(Number.isFinite)
       ? Math.max(0, Math.min(1, Number.isFinite(pressProgress) ? pressProgress : 0)) : 0;
@@ -245,8 +244,7 @@ export function createAvatar(THREE) {
       const grip=root.userData.cartGrip;
       if(grip&&!working&&!cleaning&&!hanging){
         root.updateMatrixWorld(true);
-        const forward=grip.yaw+Math.PI;
-        pressLocal.set(grip.x+Math.cos(forward)*arm.side*.20,grip.y,grip.z-Math.sin(forward)*arm.side*.20);
+        pressLocal.set(grip.x+Math.cos(grip.yaw)*arm.side*.20,grip.y,grip.z-Math.sin(grip.yaw)*arm.side*.20);
         upper.worldToLocal(pressLocal);arm.wrist.copy(pressLocal);
         arm.elbow.copy(arm.shoulder).lerp(arm.wrist,.5);arm.elbow.x+=arm.side*.07;
       }
