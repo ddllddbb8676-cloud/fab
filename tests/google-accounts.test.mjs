@@ -20,10 +20,9 @@ async function sign(claims={}, header={}, key=pairs[0].privateKey) {
   return body+'.'+Buffer.from(await crypto.subtle.sign('RSASSA-PKCS1-v1_5',key,Buffer.from(body))).toString('base64url');
 }
 const makeVerifier=()=>googleVerifier({getKeys:()=>Response.json({keys:[jwk]},{headers:{'Cache-Control':'public, max-age=3600'}})});
-function fixture(t) {
+function fixture(t, now = Date.now()) {
   const db=new DatabaseSync(':memory:');t.after(()=>db.close());
   const storage={sql:{exec(query,...args){return {toArray:((rows)=>()=>rows)(db.prepare(query).all(...args))};}},transactionSync(fn){db.exec('BEGIN');try{const result=fn();db.exec('COMMIT');return result;}catch(e){db.exec('ROLLBACK');throw e;}}};
-  let now=Date.now();
   const profiles=new Map([[primary,{id:primary,name:'원래팹',brokenCount:7,repairedCount:3,wallet:{balance:155,owned:['helmet'],equipped:{head:'helmet'}}}],[secondary,{id:secondary,name:'새기기',brokenCount:2,repairedCount:5,wallet:{balance:25,owned:[]}}]]);
   const accounts=createGoogleAccounts(storage,{profile:key=>profiles.get(key),clock:()=>now});
   const verify=makeVerifier(), env={FAB_GOOGLE_CLIENT_ID:clientId,FAB_OWNER_VISITOR_ID:primary};
@@ -108,6 +107,35 @@ async function existingLink(f,device,subject='provider-id'){
   assert.equal((await f.call('link',device,{code})).status,200);
 }
 const aliasOf=response=>response.headers.get('Set-Cookie').split(';')[0];
+test('the entry notice belongs to the current character and is claimed once per Korean calendar day',async t=>{
+  const beforeMidnight=Date.parse('2026-11-06T23:59:59+09:00');
+  const f=fixture(t,beforeMidnight), before=structuredClone(f.profiles);
+  const claim=async(device,body={})=>(await (await f.call('entry-notice',device,body)).json()).show;
+  assert.equal(await claim(attacker,{profile:primary}),false);
+  assert.deepEqual((await Promise.all([claim(deviceA),claim(deviceA)])).sort(),[false,true]);
+  assert.equal(await claim(deviceB),true);
+  const reloaded=createGoogleAccounts(f.storage,{profile:id=>f.profiles.get(id),clock:()=>beforeMidnight});
+  assert.equal(await reloaded.claimEntryNotice(primary),false);
+  f.advance(1000);
+  assert.equal(await claim(deviceA),true);
+  assert.equal(await claim(deviceA),false);
+  assert.equal(f.db.prepare('SELECT count(*) AS n FROM google_entry_notices').get().n,1);
+  assert.deepEqual(f.profiles,before);
+});
+test('linked and restored characters skip the notice and another origin cannot consume a guest notice',async t=>{
+  const f=fixture(t);
+  await existingLink(f,deviceA);
+  const {code}=await f.code(deviceB);
+  const restore=await f.call('signin',deviceB,{code});
+  assert.equal(restore.status,200);
+  for(const [device,alias] of [[deviceA],[deviceB,aliasOf(restore)]]) {
+    assert.deepEqual(await (await f.call('entry-notice',device,{},alias)).json(),{show:false});
+  }
+  const foreign=f.req('entry-notice',{Cookie:f.cookie(deviceB),Origin:'https://other.test'},{});
+  assert.equal((await googleRoute(foreign,f.env)).status,403);
+  assert.equal((await googleRoute(f.req('entry-notice',{},{}),f.env)).status,401);
+  assert.deepEqual(await (await f.call('entry-notice',deviceB,{})).json(),{show:true});
+});
 test('first Google entry reserves an unused FAB identity, and subsequent Google login opens it directly',async t=>{
   const f=fixture(t), before=structuredClone(f.profiles), guest=await sessionId(attacker);
   let proof=await f.code(attacker);

@@ -8,7 +8,7 @@ const verify = googleVerifier();
 const result = (status, data, headers) => Response.json(data,{status,headers:{...privateHeaders,...headers}});
 const codeActions = new Set(['preview','link','restore','unlink','signin','register','recover-preview','recover-confirm']);
 const handoffActions = new Set(['handoff-create','handoff-open','handoff-verify','handoff-approve','handoff-pickup']);
-const actions = new Set(['status','start','verify','leave','character-code',...codeActions,...handoffActions]);
+const actions = new Set(['status','entry-notice','start','verify','leave','character-code',...codeActions,...handoffActions]);
 async function readJson(request) {
   const limit = 10000, reader = request.body?.getReader();
   if (!reader) throw new AccountError(400,'요청을 다시 열어 주세요.');
@@ -77,6 +77,7 @@ export async function accountInRoom(request,env,accounts,retireDevice) {
   if (!device) return result(401,{});
   const current = await effectiveProfileId(request,env,accounts), action = new URL(request.url).pathname.split('/').pop();
   try {
+    if (action === 'entry-notice') return result(200,{show:await accounts.claimEntryNotice(current)});
     if (action === 'status') {
       const restored=current!==device;
       const [character,original]=await Promise.all([accounts.view(current),restored?accounts.view(device):null]);

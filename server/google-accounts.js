@@ -27,6 +27,7 @@ export function createGoogleAccounts(storage, {profile, resetting = () => false,
   // These tables are independent of profile:*, score, equipment and wallet storage.
   const sql = storage.sql;
   let initialized = false, characterCodesReady = false;
+  let noticeDay;
   const row = (statement,...args) => sql.exec(statement,...args).toArray()[0];
   function exists() {
     if (!initialized && sql) initialized = Boolean(row("SELECT 1 FROM sqlite_master WHERE type='table' AND name='google_links'"));
@@ -48,6 +49,16 @@ export function createGoogleAccounts(storage, {profile, resetting = () => false,
     for (const table of ['google_nonces','google_tickets','google_devices']) sql.exec('DELETE FROM '+table+' WHERE expires <= ?',clock());
   }
   function linked(id) { return exists() && Boolean(row('SELECT 1 FROM google_links WHERE profile=?',id)); }
+  async function claimEntryNotice(id) {
+    if (!await profile(id) || resetting(id) || linked(id)) return false;
+    const day = Math.floor((clock() + 9 * 3600000) / 86400000);
+    if (day !== noticeDay) {
+      sql.exec('CREATE TABLE IF NOT EXISTS google_entry_notices (day INTEGER, profile TEXT, PRIMARY KEY(day, profile)) WITHOUT ROWID');
+      sql.exec('DELETE FROM google_entry_notices WHERE day < ?', day);
+      noticeDay = day;
+    }
+    return Boolean(row('INSERT INTO google_entry_notices(day, profile) VALUES (?, ?) ON CONFLICT DO NOTHING RETURNING 1 AS claimed', day, id));
+  }
   function linkedProfile(subject) { return row('SELECT profile FROM google_links WHERE subject=?',subject)?.profile ?? null; }
   function prepareCharacterCodes() {
     init();
@@ -211,7 +222,7 @@ export function createGoogleAccounts(storage, {profile, resetting = () => false,
     });
   }
   const handoff=createBrowserHandoff({sql,init,row,view,linked,linkedProfile,saveLink,newTicket,clock,fail,transaction:fn=>storage.transactionSync(fn),sourceForCode,resetting});
-  return {start,verified,linked,restoredSession,view,useCode,signIn,issueCharacterCode,recover,discardCharacterCode,handoff,
+  return {start,verified,linked,claimEntryNotice,restoredSession,view,useCode,signIn,issueCharacterCode,recover,discardCharacterCode,handoff,
     forgetDevice(device) { if (exists()) sql.exec('DELETE FROM google_devices WHERE device=?',device); }
   };
 }

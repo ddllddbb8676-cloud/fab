@@ -29,6 +29,17 @@ async function screen(route,answers,{embedded=false,store=new Map()}={}){
 }
 const status={enabled:true,linked:false,restored:false,character:original,clientId:'test'};
 const google={status,start:{nonce:'nonce'},verify:{code:googleCode}};
+test('the game notice opens account selection for this character directly, including the Instagram handoff',async()=>{
+  const game=await readFile(new URL('index.html',root),'utf8');
+  const action=/<a href="\/account(\?mode=link)">바로 연동하러 가기<\/a>/.exec(game);
+  assert.ok(action);assert.match(game,/<button type="button">다음에 하기<\/button>/);
+  const normal=await screen(action[1],google);
+  assert.deepEqual(normal.calls.map(c=>c.step),['status','start']);assert.equal(normal.el('auth').hidden,false);
+  const key='b'.repeat(64);
+  const embedded=await screen(action[1],{status,'handoff-create':{key,receipt:googleCode,expires:Date.now()+300000}},{embedded:true});
+  assert.equal(embedded.calls.at(-1).data.mode,'link');
+  assert.deepEqual(embedded.visits,['x-safari-https://fab.test/account?mode=browser#open='+key]);
+});
 test('first visit offers two labeled choices and an existing Google login enters without a second confirmation',async()=>{
   assert.match(welcome,/href="\/account\?mode=start"[^>]*><strong>구글로 시작하기/);
   assert.match(welcome,/href="\/\?play=guest"[^>]*><strong>구글 없이 바로 시작/);

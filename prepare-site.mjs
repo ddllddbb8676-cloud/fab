@@ -34,6 +34,7 @@ await mkdir(new URL('audio/entertainer/',dist),{recursive:true});
 await copyFile(new URL('audio/entertainer/fab-entertainer-stocker.mp3',root),new URL('audio/entertainer/fab-entertainer-stocker.mp3',dist));
 await copyFile(new URL('src/admin-visit.js',root),new URL('src/admin-visit.js',dist));
 await copyFile(new URL('src/usage-telemetry.js',root),new URL('src/usage-telemetry.js',dist));
+await copyFile(new URL('src/google-entry-notice.js',root),new URL('src/google-entry-notice.js',dist));
 for(const name of ['capture-time.js','capture-time.css'])await copyFile(new URL('src/'+name,root),new URL('src/'+name,dist));
 await copyFile(new URL('src/scene-depth.js', root), new URL('src/scene-depth.js', dist));
 await copyFile(new URL('src/playful-accessories.js', root), new URL('src/playful-accessories.js', dist));
