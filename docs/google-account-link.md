@@ -2,6 +2,8 @@
 
 11월 6일 사용자가 구글을 선택했다. 게스트 입장이 기본이다. 팹뿌 전용 웹 클라이언트 ID를 운영 Worker의 `FAB_GOOGLE_CLIENT_ID`에 설정하면 게임 메뉴 및 닉네임 선택 창에 연결 경로가 열린다. ID가 비어 있으면 운영 메뉴는 숨겨지고 `/api/account/google/status`는 `{"enabled":false}`를 반환한다.
 
+2026-11-06 12:35 KST에 운영 버전 `e3859903-2866-49ea-90c8-8325b6553c0b`로 준비 코드를 배포했다. `/account/privacy` 공개, 게스트의 기존 기록 해시, 89개 게임 모듈, 일반 계정의 관리자 접근 차단을 운영에서 확인했다. 현재 구글 버튼은 비활성이다. 등록된 웹 클라이언트 ID와 실제 구글 동의를 사용한 검증이 남았다. 로컬 Worker에서는 별도 브라우저의 일회용 코드, WebSocket·HTTP 양쪽 복구, 운영자 권한 및 연결 해제를 검증했다. 휴대폰 너비 390px에서 코드 입력을 확인했고 실제 iPhone에서 구글 로그인을 검증한 것은 아니다. 전체 검사 608개 통과, 1개 건너뜀. 배포 검증 기록은 `outputs/google-link-release/verification.json`이다.
+
 ## 공개 설정
 
 1. 팹뿌용 Google Auth Platform에서 외부 이용자용 브랜딩과 지원 메일을 설정한다. 홈페이지는 `https://fab.semitoon.com`, 구글 연결 개인정보 안내는 `https://fab.semitoon.com/account/privacy`이다. 운영 공개 시 대상 및 Google이 요구하는 도메인 확인 사항을 점검한다.
