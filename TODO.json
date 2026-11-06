@@ -4,9 +4,10 @@
     {
       "id": "optional-social-login",
       "title": "구글 계정으로 기존 팹뿌 캐릭터 연결 및 복구",
-      "status": "awaiting_google_registration",
+      "status": "deployed",
       "savedAt": "2026-11-02T10:32:17+09:00",
       "resumedOn": "2026-11-06",
+      "deployedOn": "2026-11-06",
       "executionStarted": true,
       "scheduled": false,
       "source": "사용자: 그래 구글로 연결하는걸로 하자",
