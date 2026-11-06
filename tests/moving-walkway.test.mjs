@@ -93,11 +93,69 @@ test('server cart pose accepts two-times travel with all four original cargo IDs
     assert.deepEqual(ids.map(id=>room.wallet(id)),wallets);
   }
 });
-test('a one-second delayed cart pose stays attached only on the same forward belt',()=>{
+test('a delayed belt pose moves the cart; an impossible ground jump stops both at the accepted position',()=>{
   const room=createRoom({random:()=>.5,now:()=>Date.UTC(2026,10,5,4,0)}),id='visitor:'+'d'.repeat(64),c=room.store.carts.get('CART01');
   Object.assign(c,{x:1.05,z:20,yaw:Math.PI});room.join(id,{hasEntered:true,optOut:true});room.pose(id,{x:1.05,y:0,z:18.5,heading:Math.PI,posture:'stand'});
   assert.ok(room.command(id,'cart-pull',{id:c.id}).ok);const p=room.players.get(id),start=p.z;
   for(let i=0;i<10;i++)room.step(.1);
   room.pose(id,{x:p.x,y:0,z:start-6.4,heading:Math.PI,posture:'stand',speed:0});assert.equal(c.driver,id);assert.ok(Math.abs(c.z-13.6)<1e-8);
-  room.pose(id,{x:p.x,y:0,z:p.z-20,heading:Math.PI,posture:'stand',speed:0});assert.equal(c.driver,null,'unbounded jump still releases the handle');
+  const accepted=p.z;
+  room.pose(id,{x:p.x,y:0,z:p.z-20,heading:Math.PI,posture:'stand',speed:0});
+  assert.equal(c.driver,id);assert.equal(p.z,accepted);assert.ok(Math.abs(c.z-13.6)<1e-8);
+  assert.ok(room.carts.snapshot()[0].correction);
+  room.pose(id,{x:p.x,y:0,z:accepted-.1,heading:Math.PI,posture:'stand',speed:0});
+  assert.equal(p.z,accepted-.1);assert.equal(room.carts.snapshot()[0].correction,undefined);
+});
+
+test('coalesced poses across either belt entrance, along it and off the far end keep the same rider and cargo',()=>{
+  for(const lane of WALKWAY_LANES){
+    let clock=Date.UTC(2026,10,6,0,30);
+    const room=createRoom({random:()=>.5,now:()=>clock}),driver='visitor:'+'d'.repeat(64),rider='visitor:'+'e'.repeat(64);
+    const c=room.store.carts.get('CART01'),start=lane.direction>0?lane.minZ:lane.maxZ,end=lane.direction>0?lane.maxZ:lane.minZ;
+    const sign=lane.direction,yaw=sign>0?0:Math.PI;
+    Object.assign(c,{x:lane.x,z:start-sign*(.5+CART_SIZE.tow),yaw});
+    function pose(id,x,z){room.pose(id,{x,y:0,z,heading:yaw,posture:'stand',speed:0});}
+    for(const id of [driver,rider]){
+      room.join(id,{hasEntered:true,optOut:true});pose(id,c.x+.8,c.z);
+    }
+    const cargo=[...room.store.records.values()].find(r=>r.mode==='port');
+    assert.ok(room.store.pickup(cargo.id,driver));assert.ok(room.store.loadCart(c.id,2,driver,cargo.id));
+    assert.ok(room.command(rider,'cart-board',{id:c.id,level:0}).ok);
+    assert.ok(room.command(driver,'cart-pull',{id:c.id}).ok);
+    const p=room.players.get(driver),wallet=room.wallet(driver);
+    function move(z,ms){
+      clock+=ms;room.step(.05); // a slow simulation tick must not erase real network elapsed time
+      pose(driver,lane.x,z);
+      assert.equal(p.z,z);assert.equal(c.driver,driver);assert.ok(Math.abs(c.z-(z-sign*CART_SIZE.tow))<1e-7);
+      assert.equal(room.players.get(rider).z,cartSeatPose(c,0).z);
+      assert.equal(cargo.z,cartCargoPose(c,2).z);
+    }
+    move(start+sign*5.1,1000);
+    while((end-p.z)*sign>17)move(p.z+sign*16,2500);
+    move(end-sign*4.4,2500);move(end+sign*.025,1000);
+    assert.equal(cargo.mode,'cart');assert.equal(c.riders[0],rider);assert.deepEqual(room.wallet(driver),wallet);
+  }
+});
+
+test('side entry and exit combined with a ride in one slow poll follow the real belt path; reverse travel gets walking speed',()=>{
+  for(const lane of WALKWAY_LANES)for(const leaving of [false,true]){
+    let clock=Date.UTC(2026,10,6,0,30);
+    const room=createRoom({now:()=>clock,random:()=>.5}),id='visitor:'+'f'.repeat(64),c=room.store.carts.get('CART01');
+    Object.assign(c,{x:leaving?lane.x:0,z:25,yaw:lane.direction>0?0:Math.PI});
+    room.join(id,{hasEntered:true,optOut:true});
+    const handle=cartPoint(c,0,0,CART_SIZE.tow),s=state(handle.x,handle.z);
+    const pose=()=>room.pose(id,{...s.position,heading:c.yaw,posture:'stand',speed:0});
+    pose();assert.ok(room.command(id,'cart-pull',{id:c.id}).ok);
+    for(let i=0;i<90;i++){
+      const before={...s.position};
+      if(leaving?i>=70:i<20)s.position.x+=(leaving?-1:1)*lane.x/20;
+      applyWalkwayMotion(s,before,1/60);
+    }
+    clock+=1500;pose();
+    const player=room.players.get(id);assert.equal(player.z,s.position.z);assert.equal(c.driver,id);
+    const accepted=player.z;
+    s.position.z-=lane.direction*6.4;clock+=1000;pose();
+    assert.equal(player.z,accepted);assert.equal(c.driver,id);
+    assert.ok(room.carts.snapshot()[0].correction,'a reverse or off-belt 2x jump is refused');
+  }
 });

@@ -86,7 +86,7 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
       if(record)worldEvents?.contest.moved(record);
       if(foupReady)onFoupChange(store.checkpoint());
     }});
-  const carts=createFoupCarts({store,players,now:()=>time});
+  const carts=createFoupCarts({store,players,now:()=>time,wallNow:now});
   function restoreFoups(saved){
     if(time!==0||players.size)throw new Error('FOUP restore is only allowed before the room starts');
     store.restore(saved);

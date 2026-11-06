@@ -3,7 +3,7 @@ import {isBlocked} from './layout.js';
 import {createCartView} from './cart-view.js';
 
 export function createCartControls(options){
-  let selected=null;
+  let selected=null,lastFrameTime=-Infinity;
   const nearest=()=>controls.reduce((a,b)=>distance(a)<=distance(b)?a:b);
   const distance=c=>Math.hypot(options.explorer.state.position.x-c.state.x,options.explorer.state.position.z-c.state.z);
   const focused=()=>controls.find(c=>c.active)??controls.find(c=>c.state.id===selected&&distance(c)<2.2)??nearest();
@@ -12,13 +12,17 @@ export function createCartControls(options){
     anyActive:()=>controls.some(c=>c.active),select:()=>{selected=home.id;}
   }));
   return {
-    frame(frame,initial){for(const c of controls)c.frame(frame,initial);},
+    frame(frame,initial){
+      if(!initial&&frame.t<lastFrameTime)return;
+      if(Number.isFinite(frame.t))lastFrameTime=frame.t;
+      for(const c of controls)c.frame(frame,initial);
+    },
     prepare(dt){options.avatar.root.userData.cartGrip=null;for(const c of controls)c.prepare(dt);},
     update(){for(const c of controls)c.update();},
     tap(ray){if(controls.some(c=>c.active))return false;for(const c of [...controls].sort((a,b)=>a.hitDistance(ray)-b.hitDistance(ray)))if(c.tap(ray))return true;return false;},
     riderPose:id=>controls.map(c=>c.riderPose(id)).find(Boolean)??null,
     grip:id=>controls.map(c=>c.grip(id)).find(Boolean)??null,
-    disconnect(){for(const c of controls)c.disconnect();selected=null;},
+    disconnect(){for(const c of controls)c.disconnect();selected=null;lastFrameTime=-Infinity;},
     get active(){return controls.some(c=>c.active);},get riding(){return controls.some(c=>c.riding);},
     get state(){return {...focused().state,carts:controls.map(c=>c.state)};},
     target:(...args)=>focused().target(...args)
@@ -47,7 +51,6 @@ function createOneCart({THREE,scene,explorer,avatar,store,network,getId,ready,to
     try{
       const result=await network.command(kind,{id:c.id,...data});
       if(!result.ok){toast(result.message??'카트를 다시 눌러주세요');return;}
-      if(result.cartHandle)placeSelf({...result.cartHandle,heading:c.yaw});
       if(result.cartExit){placeSelf(result.cartExit);explorer.state.posture='stand';}
       if(['cart-pull','cart-board','cart-leave'].includes(kind))close();
       if(kind==='cart-pull')toast('조이스틱으로 카트를 끌어요 · 놓기를 누르면 멈춰요');
@@ -72,12 +75,19 @@ function createOneCart({THREE,scene,explorer,avatar,store,network,getId,ready,to
   }
   function frame(frame,initial){
     const next=frame.carts?.find(row=>row.id===c.id);if(!next)return;
-    const was=active(),wasRider=level()>=0,wasDriver=isDriver();
-    goal=next;connected=true;c.returning=next.returning;
-    if(initial||wasDriver&&Math.hypot(c.x-next.x,c.z-next.z)>1)Object.assign(c,next);
-    else if(!wasDriver||next.driver!==getId())Object.assign(c,{driver:next.driver,riders:next.riders});
-    else {c.driver=next.driver;c.riders=[...next.riders];}
-    if(initial){Object.assign(c,next);member=false;}
+    const was=active(),wasRider=level()>=0,driving=Boolean(next.driver)&&next.driver===getId();
+    const takingHandle=driving&&(initial||!isDriver());
+    const corrected=driving&&next.correction&&next.correction!==goal?.correction;
+    // While towing, the local cart and driver advance in the same render step.
+    // A regular snapshot describes an earlier pose, especially on a fast belt.
+    if(initial||takingHandle||corrected)Object.assign(c,{x:next.x,z:next.z,yaw:next.yaw});
+    Object.assign(c,{driver:next.driver,riders:[...next.riders],returning:next.returning});
+    goal=next;connected=true;
+    if(takingHandle||corrected){
+      const self=frame.people?.find(p=>p[0]===getId());
+      const driver=self?{x:self[1],z:self[3]}:cartPoint(c,0,0,CART_SIZE.tow);
+      placeSelf({...driver,heading:takingHandle?c.yaw:undefined});
+    }
     if(was&&!active()){
       const self=frame.people?.find(p=>p[0]===getId());
       if(self&&wasRider)placeSelf({x:self[1],y:self[2],z:self[3],heading:self[4]});

@@ -2,10 +2,32 @@ import {isBlocked} from '../src/layout.js';
 import {floorSpot} from '../src/foup-play.js';
 import {cartPoint,cartSeatPose,cartFits,pullCart,CART_SIZE} from '../src/cart-layout.js';
 import {walkwayAt,WALKWAY_SPEED} from '../src/moving-walkway.js';
+import {WALK_SPEED} from '../src/locomotion.js';
+import {canWalkSegment} from '../src/walking.js';
 
 const fail=message=>({ok:false,message});
-export function createFoupCarts({store,players,now=()=>0}){
-  let dirty=false,lastSaved=0;
+function distanceToLane(p,lane){
+  const side=Math.max(0,Math.abs(p.x-lane.x)-lane.width/2);
+  return Math.hypot(side,Math.max(0,lane.minZ-p.z,p.z-lane.maxZ));
+}
+// A single HTTP pose may include a sideways step onto a belt, a ride, and a
+// turn off it. The endpoints tell us the minimum distance walked on the floor.
+function plausibleTow(from,to,distance,elapsed){
+  const seconds=elapsed+.5/WALKWAY_SPEED; // half a metre of network jitter
+  if(distance<=WALK_SPEED*seconds)return true;
+  if(distance>WALKWAY_SPEED*seconds||Math.abs(to.x-from.x)>WALK_SPEED*seconds)return false;
+  const dx=to.x-from.x,dz=to.z-from.z,steps=Math.ceil(distance/.25);
+  for(let i=0;i<=steps;i++){
+    const f=i/steps,lane=walkwayAt({x:from.x+dx*f,z:from.z+dz*f});
+    if(lane&&dz*lane.direction>0){
+      const floor=Math.min(distance,distanceToLane(from,lane)+distanceToLane(to,lane));
+      return floor/WALK_SPEED+(distance-floor)/WALKWAY_SPEED<=seconds;
+    }
+  }
+  return false;
+}
+export function createFoupCarts({store,players,now=()=>0,wallNow=Date.now}){
+  let dirty=false,lastSaved=0,correctionSeq=0;
   const lastUse=new Map([...store.carts.keys()].map(id=>[id,now()]));
   const touch=(c,p)=>{if(!p||!p.id.startsWith('resident:'))lastUse.set(c.id,now());};
   const membership=id=>[...store.carts.values()].find(c=>c.driver===id||c.riders.includes(id));
@@ -19,7 +41,7 @@ export function createFoupCarts({store,players,now=()=>0}){
   function leave(p){
     const c=membership(p.id);if(!c)return null;
     touch(c,p);
-    if(c.driver===p.id)c.driver=null;
+    if(c.driver===p.id){c.driver=null;delete c.poseAt;delete c.correction;}
     const level=c.riders.indexOf(p.id);
     if(level>=0){
       c.riders[level]=null;
@@ -33,13 +55,20 @@ export function createFoupCarts({store,players,now=()=>0}){
     const c=membership(p.id);if(!c)return data;
     if(data.hidden){leave(p);return {...data,x:p.x,y:0,z:p.z};}
     if(c.driver!==p.id)return {...data,...cartSeatPose(c,c.riders.indexOf(p.id))};
-    // A slow HTTP pose can span over 4 m at belt speed. Permit only a bounded,
-    // forward segment on the same belt, scaled to server-observed elapsed time.
-    const lane=walkwayAt(p),sameBelt=lane&&walkwayAt(data)?.id===lane.id&&(data.z-p.z)*lane.direction>=0;
-    const maxDistance=sameBelt?Math.max(4,WALKWAY_SPEED*Math.min(2,Math.max(0,now()-p.lastSeen))+.5):4;
-    if(data.y>.15||Math.hypot(data.x-p.x,data.z-p.z)>maxDistance){leave(p);return data;}
-    const next=pullCart(c,p,data,isBlocked,{maxDistance});
-    if(!next||Math.hypot(data.x-next.x,data.z-next.z)<.85)return {...data,x:p.x,y:0,z:p.z,speed:0,posture:'stand'};
+    if(data.y>.15){leave(p);return data;}
+    const distance=Math.hypot(data.x-p.x,data.z-p.z),receivedAt=wallNow();
+    const elapsed=Math.max(0,now()-p.lastSeen,(receivedAt-(c.poseAt??receivedAt))/1000);
+    if(distance>0)c.poseAt=receivedAt;
+    // Bound a single collision sweep after a long stall. A rejected move
+    // corrects the driver and cart together at their last accepted positions.
+    const canSweep=distance<=4||(distance<=WALKWAY_SPEED*6+.5&&
+      plausibleTow(p,data,distance,elapsed)&&canWalkSegment(p,data));
+    const next=canSweep&&pullCart(c,p,data,isBlocked,{maxDistance:Math.max(4,distance)});
+    if(!next||Math.hypot(data.x-next.x,data.z-next.z)<.85){
+      c.correction??=++correctionSeq;
+      return {...data,x:p.x,y:0,z:p.z,speed:0,posture:'stand'};
+    }
+    delete c.correction;
     if(Math.hypot(next.x-c.x,next.z-c.z)>.0001||Math.abs(next.yaw-c.yaw)>.0001){Object.assign(c,{x:next.x,z:next.z,yaw:next.yaw});store.moveCart(c);placeRiders(c);dirty=true;touch(c,p);}
     return {...data,y:0,posture:'stand'};
   }
@@ -55,7 +84,7 @@ export function createFoupCarts({store,players,now=()=>0}){
       if(isBlocked(handle.x,handle.z,.295))return fail('손잡이 앞이 좁아요. 반대편에서 카트를 이용해 주세요');
       // Mounting only moves the player the short distance to the handle.
       Object.assign(p,handle,{heading:c.yaw,posture:'stand',speed:0,phase:'cart-pulling',cartId:c.id,cartLevel:null});
-      c.driver=p.id;touch(c,p);save();return {ok:true,cartHandle:handle};
+      c.driver=p.id;c.poseAt=wallNow();touch(c,p);save();return {ok:true,cartHandle:handle};
     }
     if(kind==='cart-board'){
       const level=data.level;
@@ -87,6 +116,6 @@ export function createFoupCarts({store,players,now=()=>0}){
     Object.assign(c,{x:next.x,z:next.z,yaw:next.yaw});Object.assign(p,handle,{heading:c.yaw,speed,phase:'cart-pulling'});
     store.moveCart(c);dirty=true;return true;
   }
-  function snapshot(){return [...store.carts.values()].map(c=>({id:c.id,x:+c.x.toFixed(3),z:+c.z.toFixed(3),yaw:+c.yaw.toFixed(3),driver:c.driver,riders:[...c.riders],returning:Boolean(c.returning)}));}
+  function snapshot(){return [...store.carts.values()].map(c=>({id:c.id,x:+c.x.toFixed(3),z:+c.z.toFixed(3),yaw:+c.yaw.toFixed(3),driver:c.driver,riders:[...c.riders],returning:Boolean(c.returning),...(c.correction?{correction:c.correction}:{})}));}
   return {command,pose,leave,membership,step,snapshot,moveNpc,lastUsed:id=>lastUse.get(id)??now(),touch};
 }
