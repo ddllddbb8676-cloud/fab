@@ -165,3 +165,76 @@ test('replacement, expiry, a linked source, and a competing claim cannot reuse a
   assert.equal((await f.call('recover-preview',deviceB,{code:fresh.code,characterCode:beforeLink})).status,409);
   assert.equal((await f.call('recover-preview',deviceB,{code:fresh.code,characterCode:valid})).status,409);
 });
+async function browserVerification(f,job,browser,sub='browser-user'){
+  const open=await f.call('handoff-open',browser,{key:job.key});
+  assert.equal(open.status,200);
+  const {nonce}=await open.json();
+  const credential=await sign({nonce,sub});
+  return {credential,response:await f.call('handoff-verify',browser,{key:job.key,credential})};
+}
+
+test('browser link is bound to its origin, Google browser, nonce and single purpose, and preserves both profiles',async t=>{
+  const f=fixture(t), original=structuredClone(f.profiles);
+  const job=await (await f.call('handoff-create',deviceA,{mode:'link'})).json();
+  const pickup=d=>f.call('handoff-pickup',d,{receipt:job.receipt});
+  assert.equal((await (await pickup(deviceA)).json()).state,'waiting');
+  const {credential,response}=await browserVerification(f,job,deviceB);
+  assert.equal((await response.json()).state,'ready');
+  assert.equal((await f.call('handoff-open',attacker,{key:job.key})).status,409);
+  assert.equal((await f.call('handoff-verify',deviceB,{key:job.key,credential})).status,409);
+  assert.equal((await f.call('verify',deviceB,{credential})).status,409);
+  assert.equal((await pickup(deviceB)).status,410);
+  for(let i=0;i<2;i++)assert.equal((await (await pickup(deviceA)).json()).state,'ready');
+  const proof={code:job.receipt};
+  for(const action of ['signin','register','restore','unlink'])assert.equal((await f.call(action,deviceA,proof)).status,409);
+  assert.equal((await f.call('preview',deviceB,proof)).status,409);
+  assert.equal((await (await f.call('preview',deviceA,proof)).json()).target.name,'원래팹');
+  assert.equal((await f.call('link',deviceA,proof)).status,200);
+  assert.equal((await f.call('link',deviceA,proof)).status,409);
+  assert.equal((await (await f.call('status',deviceA)).json()).linked,true);
+  assert.equal((await (await f.call('status',deviceB)).json()).linked,false);
+  assert.deepEqual(f.profiles,original);
+});
+
+test('a browser login requires the Google browser to approve the requesting screen and only the original cookie can sign in',async t=>{
+  const f=fixture(t);
+  const proof=await f.code(deviceA,'linked'), link={code:proof.code};
+  await f.call('preview',deviceA,link);await f.call('link',deviceA,link);
+  const create=async mode=>(await f.call('handoff-create',attacker,{mode})).json();
+  const wrongLink=await (await f.call('handoff-create',deviceB,{mode:'link'})).json();
+  assert.equal((await (await browserVerification(f,wrongLink,deviceA,'linked')).response.json()).state,'conflict');
+  assert.equal((await f.call('signin',deviceB,{code:wrongLink.receipt})).status,409);
+  const job=await create('login');
+  const {response}=await browserVerification(f,job,deviceB,'linked');
+  assert.equal((await response.json()).state,'approve');
+  assert.equal((await (await f.call('handoff-pickup',attacker,{receipt:job.receipt})).json()).state,'waiting');
+  assert.equal((await f.call('handoff-approve',attacker,{key:job.key})).status,409);
+  assert.equal((await f.call('handoff-approve',deviceB,{key:job.key})).status,200);
+  assert.equal((await f.call('handoff-pickup',attacker,{receipt:job.receipt})).status,200);
+  assert.equal((await f.call('signin',deviceB,{code:job.receipt})).status,409);
+  assert.equal((await f.call('register',attacker,{code:job.receipt})).status,409);
+  const signin=await f.call('signin',attacker,{code:job.receipt});
+  const alias=signin.headers.get('set-cookie').split(';')[0];
+  assert.equal((await (await f.call('status',attacker,undefined,alias)).json()).character.name,'원래팹');
+  const expired=await create('start');f.advance(300001);
+  assert.equal((await f.call('handoff-open',deviceB,{key:expired.key})).status,410);
+  assert.equal((await f.call('handoff-pickup',attacker,{receipt:expired.receipt})).status,410);
+});
+
+test('browser recovery proof cannot change a different source or be used as an ordinary login',async t=>{
+  const f=fixture(t), before=structuredClone(f.profiles);
+  const proof=await f.code(deviceB,'old'), code={code:proof.code};
+  await f.call('preview',deviceB,code);await f.call('link',deviceB,code);
+  const characterCode=(await (await f.call('character-code',deviceA,{})).json()).code;
+  const job=await (await f.call('handoff-create',deviceA,{mode:'recover',characterCode})).json();
+  const {response}=await browserVerification(f,job,deviceB,'old');
+  assert.equal((await response.json()).state,'approve');
+  await f.call('handoff-approve',deviceB,{key:job.key});await f.call('handoff-pickup',deviceA,{receipt:job.receipt});
+  const args={code:job.receipt,characterCode};
+  assert.equal((await f.call('recover-confirm',deviceA,args)).status,409);
+  assert.equal((await f.call('signin',deviceA,args)).status,409);
+  const preview=await (await f.call('recover-preview',deviceA,args)).json();
+  assert.equal(preview.target.name,'원래팹');assert.equal(preview.previous.name,'새기기');
+  assert.equal((await f.call('recover-confirm',deviceA,args)).status,200);
+  assert.deepEqual(f.profiles,before);
+});

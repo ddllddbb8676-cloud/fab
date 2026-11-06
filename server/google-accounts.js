@@ -1,6 +1,7 @@
 import {newSessionToken} from './player-profiles.js';
 import {deviceDays} from './account-sessions.js';
 import {digest} from './google-identity.js';
+import {createBrowserHandoff} from './google-browser-handoff.js';
 
 const minutes = 5*60*1000;
 export class AccountError extends Error {
@@ -51,7 +52,8 @@ export function createGoogleAccounts(storage, {profile, resetting = () => false,
     sql.exec('CREATE INDEX IF NOT EXISTS google_character_codes_expiry ON google_character_codes(expires)');
     characterCodesReady=true;
   }
-  function discardCharacterCode(id) {
+  function discardCharacterCode(id,subject=null) {
+    handoff.revoke(id,subject);
     if (characterCodesReady || (sql && row("SELECT 1 FROM sqlite_master WHERE type='table' AND name='google_character_codes'"))) {
       sql.exec('DELETE FROM google_character_codes WHERE profile=?',id);
     }
@@ -85,9 +87,10 @@ export function createGoogleAccounts(storage, {profile, resetting = () => false,
     });
     return {code};
   }
-  function ticket(hash,device,current) {
+  function ticket(hash,device,current,usage) {
     const value = row('SELECT * FROM google_tickets WHERE hash=? AND expires>?',hash,clock());
     if (!value || (value.device && (value.device !== device || value.current_profile !== current))) invalidCode();
+    if(value.scope && value.scope!==usage && !(usage==='preview' && ['link','unlink'].includes(value.scope)))invalidCode();
     return value;
   }
   function intent(subject,current) {
@@ -99,13 +102,14 @@ export function createGoogleAccounts(storage, {profile, resetting = () => false,
   async function useCode({code, device, current, action}) {
     init();
     const hash = await ticketHash(code);
-    const initial = ticket(hash,device,current), plan = intent(initial.subject,current);
+    const initial = ticket(hash,device,current,action), plan = intent(initial.subject,current);
+    if((initial.scope==='link' && plan.action==='restore') || (initial.scope==='unlink' && plan.action!=='linked'))changed();
     const [here,there] = await Promise.all([view(current),plan.dest === current ? null : view(plan.dest)]);
     if (plan.action === 'link' && !here) fail(409,'저장할 캐릭터로 게임에 한 번 입장한 뒤 연결해 주세요.');
     const empty={name:'첫 입장 전 캐릭터',broken:0,repaired:0};
     const key = action === 'restore' ? await deviceKey() : null;
     return storage.transactionSync(() => {
-      const value = ticket(hash,device,current), now = intent(value.subject,current);
+      const value = ticket(hash,device,current,action), now = intent(value.subject,current);
       if (now.action !== plan.action || now.dest !== plan.dest || resetting(current) || resetting(now.dest)) changed();
       if (action === 'preview') {
         sql.exec('UPDATE google_tickets SET device=?, current_profile=?, target=?, action=? WHERE hash=?',device,current,plan.dest,plan.action,hash);
@@ -116,14 +120,14 @@ export function createGoogleAccounts(storage, {profile, resetting = () => false,
           (!unlink && (action !== plan.action || action === 'linked'))) fail(409,'캐릭터를 다시 확인해 주세요.');
       if (action === 'link') {
         sql.exec('INSERT INTO google_links VALUES (?,?)',value.subject,current);
-        discardCharacterCode(current);
+        discardCharacterCode(current,value.subject);
       }
       const login = action === 'restore' ? installDevice(device,now.dest,key) : {};
       if (unlink) {
         sql.exec('DELETE FROM google_devices WHERE profile=?',current);
         sql.exec('DELETE FROM google_links WHERE subject=?',value.subject);
         sql.exec('DELETE FROM google_tickets WHERE subject=?',value.subject);
-        discardCharacterCode(current);
+        discardCharacterCode(current,value.subject);
       }
       sql.exec('DELETE FROM google_tickets WHERE hash=?',hash);
       return {ok:true,...login,unlink};
@@ -134,7 +138,7 @@ export function createGoogleAccounts(storage, {profile, resetting = () => false,
     const hash=await ticketHash(code);
     const [key,here]=await Promise.all([deviceKey(),view(current)]);
     return storage.transactionSync(()=>{
-      const proof=ticket(hash,device,current);
+      const proof=ticket(hash,device,current,create?'start':'login');
       if(proof.action) invalidCode();
       let target=linkedProfile(proof.subject);
       if (!target) {
@@ -159,12 +163,18 @@ export function createGoogleAccounts(storage, {profile, resetting = () => false,
     sql.exec('INSERT OR REPLACE INTO google_character_codes(profile,hash,expires) VALUES (?,?,?)',current,hash,clock()+minutes);
     return {code};
   }
-  async function recover({code,characterCode,device,current,confirm}) {
-    if (typeof characterCode!=='string' || !/^FAB-(?:[A-F0-9]{6}-){3}[A-F0-9]{6}$/.test(characterCode)) invalidCharacter();
+  async function sourceForCode(characterCode) {
+    if(typeof characterCode!=='string' || !/^FAB-(?:[A-F0-9]{6}-){3}[A-F0-9]{6}$/.test(characterCode))invalidCharacter();
     prepareCharacterCodes();
-    const [hash,sourceHash]=await Promise.all([ticketHash(code),digest('character:'+characterCode)]);
+    const hash=await digest('character:'+characterCode);
+    const source=row('SELECT profile FROM google_character_codes WHERE hash=? AND expires>?',hash,clock());
+    if(!source || linked(source.profile))invalidCharacter();
+    return {hash,profile:source.profile};
+  }
+  async function recover({code,characterCode,device,current,confirm}) {
+    const [hash,{hash:sourceHash}]=await Promise.all([ticketHash(code),sourceForCode(characterCode)]);
     function readPair() {
-      const proof=ticket(hash,device,current);
+      const proof=ticket(hash,device,current,'recover:'+sourceHash);
       if (proof.action && proof.action!=='recover') invalidCode();
       const source=row('SELECT * FROM google_character_codes WHERE hash=? AND expires>?',sourceHash,clock());
       if (!source || (source.ticket && source.ticket!==hash)) invalidCharacter();
@@ -190,10 +200,13 @@ export function createGoogleAccounts(storage, {profile, resetting = () => false,
       } else sql.exec('INSERT INTO google_links VALUES (?,?)',proof.subject,source.profile);
       sql.exec('DELETE FROM google_character_codes WHERE hash=?',sourceHash);
       sql.exec('DELETE FROM google_tickets WHERE subject=?',proof.subject);
+      handoff.revoke(source.profile,proof.subject);
+      if(previous)handoff.revoke(previous,proof.subject);
       return {...installDevice(device,source.profile,key),revokedProfile:previous};
     });
   }
-  return {start,verified,linked,restoredSession,view,useCode,signIn,issueCharacterCode,recover,discardCharacterCode,
+  const handoff=createBrowserHandoff({sql,init,row,view,linked,linkedProfile,clock,fail,transaction:fn=>storage.transactionSync(fn),sourceForCode,resetting});
+  return {start,verified,linked,restoredSession,view,useCode,signIn,issueCharacterCode,recover,discardCharacterCode,handoff,
     forgetDevice(device) { if (exists()) sql.exec('DELETE FROM google_devices WHERE device=?',device); }
   };
 }

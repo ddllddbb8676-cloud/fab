@@ -7,7 +7,8 @@ import {pendingFirstVisit,firstVisitCookie} from './entry-response.js';
 const verify = googleVerifier();
 const result = (status, data, headers) => Response.json(data,{status,headers:{...privateHeaders,...headers}});
 const codeActions = new Set(['preview','link','restore','unlink','signin','register','recover-preview','recover-confirm']);
-const actions = new Set(['status','start','verify','leave','character-code',...codeActions]);
+const handoffActions = new Set(['handoff-create','handoff-open','handoff-verify','handoff-approve','handoff-pickup']);
+const actions = new Set(['status','start','verify','leave','character-code',...codeActions,...handoffActions]);
 async function readJson(request) {
   const limit = 10000, reader = request.body?.getReader();
   if (!reader) throw new AccountError(400,'요청을 다시 열어 주세요.');
@@ -56,12 +57,15 @@ export async function googleRoute(request,env,verifyCredential=verify) {
   try {
     const input = action === 'status' ? {} : await readJson(request);
     let safe = {};
-    if (action === 'verify') {
+    if (action === 'verify' || action === 'handoff-verify') {
       try { safe = await verifyCredential(input.credential,env.FAB_GOOGLE_CLIENT_ID); }
       catch { return result(401,{message:'구글 인증을 확인하지 못했어요. 다시 로그인해 주세요.'}); }
+      if(action==='handoff-verify')safe.key=input.key;
+    } else if(handoffActions.has(action)){
+      safe={key:input.key,receipt:input.receipt,mode:input.mode,characterCode:input.characterCode};
     } else if (codeActions.has(action)) safe = {code:input.code,characterCode:input.characterCode};
     // The caller cannot supply verified claims, internal paths or the identity header.
-    const withBody = action === 'verify' || codeActions.has(action);
+    const withBody = action === 'verify' || codeActions.has(action) || handoffActions.has(action);
     const rpc = new Request(new URL('/_fab/account/'+action,request.url),{method:'POST',headers:{Cookie:request.headers.get('Cookie'),'Content-Type':'application/json'},body:withBody ? JSON.stringify(safe) : undefined});
     return await env.FAB_ROOM.getByName('FAB-A-v20').fetch(rpc);
   } catch (error) {
@@ -73,7 +77,11 @@ export async function accountInRoom(request,env,accounts,retireDevice) {
   if (!device) return result(401,{});
   const current = await effectiveProfileId(request,env,accounts), action = new URL(request.url).pathname.split('/').pop();
   try {
-    if (action === 'status') return result(200,{enabled:true,clientId:env.FAB_GOOGLE_CLIENT_ID,character:await accounts.view(current),linked:accounts.linked(current),restored:current !== device});
+    if (action === 'status') {
+      const restored=current!==device;
+      const [character,original]=await Promise.all([accounts.view(current),restored?accounts.view(device):null]);
+      return result(200,{enabled:true,clientId:env.FAB_GOOGLE_CLIENT_ID,character,linked:accounts.linked(current),restored,original:original?.name});
+    }
     if (action === 'start') return result(200,accounts.start(device));
     if (action === 'character-code') return result(200,await accounts.issueCharacterCode(device,current));
     if (action === 'leave') {
@@ -82,6 +90,11 @@ export async function accountInRoom(request,env,accounts,retireDevice) {
     }
     const input = await request.json();
     if (action === 'verify') return result(200,await accounts.verified(device,input));
+    if(action==='handoff-create')return result(200,await accounts.handoff.create(device,current,input));
+    if(action==='handoff-open')return result(200,await accounts.handoff.open(device,input.key));
+    if(action==='handoff-verify')return result(200,await accounts.handoff.verify(device,input.key,input));
+    if(action==='handoff-approve')return result(200,await accounts.handoff.approve(device,input.key));
+    if(action==='handoff-pickup')return result(200,await accounts.handoff.pickup(device,current,input.receipt));
     const args={code:input.code,device,current};
     let output;
     if(action==='signin' || action==='register') output=await accounts.signIn({...args,create:action==='register'});
