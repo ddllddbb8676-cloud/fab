@@ -18,7 +18,9 @@ async function screen(route,answers,{embedded=false,store=new Map()}={}){
   const sessionStorage={getItem:k=>store.get(k),setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)};
   const fetch=async(path,option)=>{
     const step=path.split('/').pop(), data=option.body && JSON.parse(option.body);
-    calls.push({step,data});assert.ok(Object.hasOwn(answers,step),'unexpected '+step);return Response.json(typeof answers[step]==='function'?answers[step](data):answers[step]);
+    calls.push({step,data});assert.ok(Object.hasOwn(answers,step),'unexpected '+step);
+    const answer=typeof answers[step]==='function'?answers[step](data):answers[step];
+    return answer instanceof Response?answer:Response.json(answer);
   };
   const later=(fn,ms)=>{if(ms===950){queueMicrotask(fn);return;}return setTimeout(fn,ms).unref();};
   const context={document,location,history,sessionStorage,navigator:{userAgent:embedded?'Instagram iPhone':'Safari'},window,URL,fetch,AbortSignal,setTimeout:later,clearTimeout};
@@ -42,6 +44,15 @@ test('selecting an unused Google links the displayed character automatically and
   assert.equal(ui.el('choice').hidden,true);assert.deepEqual(ui.visits,['/']);assert.equal(ui.calls.at(-1).step,'link');
   const conflict=await screen('?mode=link',{...google,preview:{action:'restore',target:mistaken}});await conflict.google();
   assert.equal(conflict.el('recover-link').hidden,false);assert.deepEqual(conflict.visits,[]);
+});
+test('a Google login with no character points to the original game without creating or switching a profile',async()=>{
+  const error=()=>Response.json({reason:'google_not_linked',message:'이 구글 계정에 연결된 캐릭터가 없어요.'},{status:409});
+  for(const character of [null,original]){
+    const ui=await screen('?mode=login',{...google,status:{...status,character},signin:error});
+    await ui.google();assert.equal(ui.el('missing-link').hidden,false);assert.equal(ui.el('auth').hidden,true);
+    assert.equal(ui.el('link-visible').hidden,!character);
+    assert.deepEqual(ui.calls.map(r=>r.step),['status','start','verify','signin']);assert.deepEqual(ui.visits,[]);
+  }
 });
 test('case three can authenticate the visible original automatically or accept its code from another device',async()=>{
   const src=await screen('?mode=source',{status,'character-code':{code:fabCode}});
@@ -67,4 +78,19 @@ test('Instagram sends a real tap to Safari, which authenticates, then the origin
   assert.equal(receiver.location.hash,'');await receiver.google();assert.equal(receiver.el('browser-done').hidden,false);
   const origin=await screen('?mode=browser#open='+key,{status,'handoff-pickup':{state:'ready'},preview:{action:'link',target:original},link:{ok:true}},{embedded:true,store});
   assert.deepEqual(origin.visits,['/']);assert.equal(store.size,0);
+});
+
+test('Safari names the saved character and can enter it without the original tab or another Google prompt',async()=>{
+  const key='b'.repeat(64), open={mode:'link',label:original.name,state:'waiting',nonce:'test'};
+  const saved={state:'ready',linked:true,label:original.name,signinCode:googleCode};
+  const safari=await screen('?mode=browser#open='+key,{status,'handoff-open':open,'handoff-verify':saved,signin:{ok:true}});
+  await safari.google();
+  assert.equal(safari.el('heading').textContent,'구글 연결 완료');assert.match(safari.el('message').textContent,/원래팹/);
+  assert.equal(safari.el('browser-linked').hidden,false);assert.equal(safari.el('browser-done').hidden,true);
+  assert.deepEqual(safari.visits,[]);
+  await safari.el('play-linked').onclick({preventDefault(){}});
+  assert.deepEqual(safari.visits,['/']);assert.deepEqual(safari.calls.at(-1).data,{code:googleCode});
+  const hub=await screen('?mode=browser#open='+key,{status,'handoff-pickup':{state:'ready',linked:true}},
+    {embedded:true,store:new Map([['fab-google-origin-v1',JSON.stringify({key,receipt:googleCode,mode:'link',label:original.name,expires:Date.now()+1000})]])});
+  assert.deepEqual(hub.visits,['/']);assert.deepEqual(hub.calls.map(c=>c.step),['status','handoff-pickup']);
 });

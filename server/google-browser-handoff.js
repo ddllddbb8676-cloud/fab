@@ -5,9 +5,9 @@ const modes=new Set(['link','start','login','recover','unlink']);
 const lifetime=5*60*1000;
 const invalid='인증 시간이 지났어요. 팹뿌에서 구글 연결을 다시 눌러 주세요.';
 
-// Safari and the in-app browser have separate cookie jars. The launch URL can
-// verify a Google identity, but only the originating session can collect it.
-export function createBrowserHandoff({sql,init,row,view,linked,linkedProfile,clock,fail,transaction,sourceForCode,resetting}) {
+// The origin chooses its own character. A verified browser can finish that link
+// while the origin is suspended. Only the origin can redeem its private receipt.
+export function createBrowserHandoff({sql,init,row,view,linked,linkedProfile,saveLink,newTicket,clock,fail,transaction,sourceForCode,resetting}) {
   let ready=false;
   function prepare() {
     if(ready)return;
@@ -37,13 +37,14 @@ export function createBrowserHandoff({sql,init,row,view,linked,linkedProfile,clo
       target=source.profile;
     }
     const character=await view(target);
-    if(mode==='link' && (!character || linked(profile)))fail(409,'게임에서 연결할 캐릭터의 이름을 확인해 주세요.');
+    if(mode==='link' && (profile!==device || !character || linked(profile)))fail(409,'게임에서 연결할 캐릭터의 이름을 확인해 주세요.');
     if(mode==='unlink' && !linked(profile))fail(409,'연결된 구글 계정이 없어요.');
     if(resetting(profile)||resetting(target))fail(409,'잠시 후 다시 시도해 주세요.');
     const key=newSessionToken(),receipt=newSessionToken().slice(0,24).toUpperCase();
     const [launch,proof]=await Promise.all([launchHash(key),digest('ticket:'+receipt)]);
     const expires=clock()+lifetime;
     transaction(()=>{
+      sql.exec('DELETE FROM google_tickets WHERE expires<=?',clock());
       sql.exec('DELETE FROM google_handoffs WHERE expires<=?',clock());
       if(row('SELECT COUNT(*) AS n FROM google_handoffs').n>=2048)fail(429,'잠시 후 다시 눌러 주세요.');
       const previous=row('SELECT receipt FROM google_handoffs WHERE origin=? AND mode=?',device,mode);
@@ -59,19 +60,48 @@ export function createBrowserHandoff({sql,init,row,view,linked,linkedProfile,clo
     const nonce=job.nonce || newSessionToken();
     if(job.state==='waiting')sql.exec('UPDATE google_handoffs SET browser=?,nonce=? WHERE launch=?',browser,nonce,job.launch);
     const target=job.state==='approve' && linkedProfile(job.subject);
-    return {mode:job.mode,label:job.label,state:job.state,googleName:target?(await view(target))?.name:undefined,nonce:job.state==='waiting'?nonce:undefined};
+    return {mode:job.mode,label:job.label,state:job.state,linked:savedLink(job),googleName:target?(await view(target))?.name:undefined,nonce:job.state==='waiting'?nonce:undefined};
   }
-  async function verify(browser,key,{nonce,subject,hint}) {
+  function savedLink(job) {
+    if(job.mode!=='link' || !['ready','claimed'].includes(job.state))return false;
+    return job.subject ? linkedProfile(job.subject)===job.profile : linked(job.profile);
+  }
+  async function verify(browser,current,key,{nonce,subject,hint}) {
     prepare();
-    const job=lookup(await launchHash(key));
-    if(job.state!=='waiting'||job.browser!==browser||job.nonce!==nonce)fail(409,invalid);
-    // A link-only request must never sign its origin in to an already-linked
-    // account. Disclose neither that character's name nor its records on conflict.
-    const original=linkedProfile(subject);
-    const conflict=(job.mode==='link' && original && original!==job.profile) || (job.mode==='unlink' && original!==job.profile);
-    const state=conflict?'conflict':job.mode==='link'?'ready':'approve';
-    sql.exec('UPDATE google_handoffs SET state=?,subject=?,hint=?,nonce=NULL WHERE launch=?',state,conflict?null:subject,conflict?'':hint,job.launch);
-    return {state,googleName:state==='approve'&&original?(await view(original))?.name:undefined};
+    const launch=await launchHash(key);
+    const pending=lookup(launch);
+    let play;
+    if(pending.mode==='link'){
+      if(pending.state!=='waiting'||pending.browser!==browser||pending.nonce!==nonce)fail(409,invalid);
+      const character=await view(pending.profile);
+      if(!character || character.name!==pending.label)fail(409,'캐릭터가 바뀌었어요. 원래 게임에서 닉네임을 확인하고 다시 연결해 주세요.');
+      play=await newTicket();
+    }
+    const result=transaction(()=>{
+      const job=lookup(launch);
+      if(job.state!=='waiting'||job.browser!==browser||job.nonce!==nonce)fail(409,invalid);
+      const original=linkedProfile(subject);
+      if(job.mode==='link'){
+        if(job.profile!==job.origin||resetting(job.profile))fail(409,invalid);
+        // Never replace either side of an existing link or give a conflicting
+        // request the name or login of the other Google account's character.
+        if(original===job.profile || (!original && !linked(job.profile))){
+          if(!original)saveLink(job.profile,subject,job.receipt);
+          sql.exec("UPDATE google_handoffs SET state='ready',subject=?,hint=?,nonce=NULL WHERE launch=?",subject,hint,launch);
+          // Only the browser that submitted Google's signed credential gets
+          // this single-use login. Opening the URL or polling cannot issue one.
+          sql.exec("INSERT INTO google_tickets(hash,subject,hint,expires,device,current_profile,scope) VALUES(?,?,?,?,?,?,'login')",play.hash,subject,hint,job.expires,browser,current);
+          return {state:'ready',linked:true,label:job.label,signinCode:play.code};
+        }
+      }else if(job.mode!=='unlink'||original===job.profile){
+        sql.exec("UPDATE google_handoffs SET state='approve',subject=?,hint=?,nonce=NULL WHERE launch=?",subject,hint,launch);
+        return {state:'approve',target:original};
+      }
+      sql.exec("UPDATE google_handoffs SET state='conflict',nonce=NULL WHERE launch=?",launch);
+      return {state:'conflict'};
+    });
+    if(result.state==='approve')return {state:'approve',googleName:result.target?(await view(result.target))?.name:undefined};
+    return result;
   }
   async function approve(browser,key) {
     prepare();
@@ -96,13 +126,13 @@ export function createBrowserHandoff({sql,init,row,view,linked,linkedProfile,clo
         sql.exec('INSERT INTO google_tickets(hash,subject,hint,expires,device,current_profile,scope) VALUES(?,?,?,?,?,?,?)',proof,job.subject,job.hint,job.expires,device,profile,scope);
         sql.exec("UPDATE google_handoffs SET state='claimed',subject=NULL,hint=NULL WHERE receipt=?",proof);
       }
-      return {state:'ready'};
+      return {state:'ready',linked:savedLink(job)};
     });
   }
-  function revoke(profile,subject=null) {
+  function revoke(profile,subject=null,keepReceipt='') {
     if(!ready && (!sql || !row("SELECT 1 FROM sqlite_master WHERE type='table' AND name='google_handoffs'")))return;
-    sql.exec('DELETE FROM google_tickets WHERE hash IN (SELECT receipt FROM google_handoffs WHERE profile=? OR subject=?)',profile,subject);
-    sql.exec('DELETE FROM google_handoffs WHERE profile=? OR subject=?',profile,subject);
+    sql.exec('DELETE FROM google_tickets WHERE hash IN (SELECT receipt FROM google_handoffs WHERE (profile=? OR subject=?) AND receipt<>?)',profile,subject,keepReceipt);
+    sql.exec('DELETE FROM google_handoffs WHERE (profile=? OR subject=?) AND receipt<>?',profile,subject,keepReceipt);
   }
   return {create,open,verify,approve,pickup,revoke};
 }

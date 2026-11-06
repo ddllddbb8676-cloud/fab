@@ -92,7 +92,7 @@ export async function accountInRoom(request,env,accounts,retireDevice) {
     if (action === 'verify') return result(200,await accounts.verified(device,input));
     if(action==='handoff-create')return result(200,await accounts.handoff.create(device,current,input));
     if(action==='handoff-open')return result(200,await accounts.handoff.open(device,input.key));
-    if(action==='handoff-verify')return result(200,await accounts.handoff.verify(device,input.key,input));
+    if(action==='handoff-verify')return result(200,await accounts.handoff.verify(device,current,input.key,input));
     if(action==='handoff-approve')return result(200,await accounts.handoff.approve(device,input.key));
     if(action==='handoff-pickup')return result(200,await accounts.handoff.pickup(device,current,input.receipt));
     const args={code:input.code,device,current};
@@ -109,7 +109,7 @@ export async function accountInRoom(request,env,accounts,retireDevice) {
     if(pendingFirstVisit(request) && (output.setDevice || action==='link')) response.headers.append('Set-Cookie',firstVisitCookie(request.url,false));
     return response;
   } catch (error) {
-    if (error instanceof AccountError) return result(error.status,{message:error.message});
+    if (error instanceof AccountError) return result(error.status,{message:error.message,reason:error.reason});
     throw error;
   }
 }

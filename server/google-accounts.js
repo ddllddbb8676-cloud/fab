@@ -5,15 +5,19 @@ import {createBrowserHandoff} from './google-browser-handoff.js';
 
 const minutes = 5*60*1000;
 export class AccountError extends Error {
-  constructor(status,message) { super(message); this.status=status; }
+  constructor(status,message,reason) { super(message); this.status=status; this.reason=reason; }
 }
-const fail = (status,message) => { throw new AccountError(status,message); };
+const fail = (status,message,reason) => { throw new AccountError(status,message,reason); };
 const invalidCode = () => fail(409,'사용했거나 만료된 코드예요. 구글 인증부터 다시 해 주세요.');
 const changed = () => fail(409,'연결 상태가 바뀌었어요. 캐릭터 이름을 다시 확인해 주세요.');
 const invalidCharacter = () => fail(409,'원래 기기에서 새 캐릭터 코드를 복사해 주세요. 코드는 5분 동안 한 번 쓸 수 있어요.');
 async function ticketHash(code) {
   if (typeof code !== 'string' || !/^[A-F0-9]{24}$/.test(code)) invalidCode();
   return digest('ticket:'+code);
+}
+async function newTicket() {
+  const code=newSessionToken().slice(0,24).toUpperCase();
+  return {code,hash:await ticketHash(code)};
 }
 async function deviceKey() {
   const secret=newSessionToken();
@@ -52,11 +56,15 @@ export function createGoogleAccounts(storage, {profile, resetting = () => false,
     sql.exec('CREATE INDEX IF NOT EXISTS google_character_codes_expiry ON google_character_codes(expires)');
     characterCodesReady=true;
   }
-  function discardCharacterCode(id,subject=null) {
-    handoff.revoke(id,subject);
+  function discardCharacterCode(id,subject=null,keepReceipt='') {
+    handoff.revoke(id,subject,keepReceipt);
     if (characterCodesReady || (sql && row("SELECT 1 FROM sqlite_master WHERE type='table' AND name='google_character_codes'"))) {
       sql.exec('DELETE FROM google_character_codes WHERE profile=?',id);
     }
+  }
+  function saveLink(profileId,subject,keepReceipt) {
+    sql.exec('INSERT INTO google_links(subject,profile) VALUES (?,?)',subject,profileId);
+    discardCharacterCode(profileId,subject,keepReceipt);
   }
   function installDevice(device,target,key) {
     sql.exec('DELETE FROM google_devices WHERE device=?',device);
@@ -80,7 +88,7 @@ export function createGoogleAccounts(storage, {profile, resetting = () => false,
   }
   async function verified(device, {subject,nonce,hint}) {
     init();
-    const code = newSessionToken().slice(0,24).toUpperCase(), hash = await digest('ticket:'+code);
+    const {code,hash} = await newTicket();
     storage.transactionSync(() => {
       if (!row('DELETE FROM google_nonces WHERE device=? AND nonce=? AND expires>? RETURNING device',device,nonce,clock())) invalidCode();
       sql.exec('INSERT INTO google_tickets(hash,subject,hint,expires) VALUES (?,?,?,?)',hash,subject,hint,clock()+minutes);
@@ -118,10 +126,7 @@ export function createGoogleAccounts(storage, {profile, resetting = () => false,
       const unlink = action === 'unlink' && plan.action === 'linked';
       if (value.device !== device || value.current_profile !== current || value.target !== plan.dest || value.action !== plan.action ||
           (!unlink && (action !== plan.action || action === 'linked'))) fail(409,'캐릭터를 다시 확인해 주세요.');
-      if (action === 'link') {
-        sql.exec('INSERT INTO google_links VALUES (?,?)',value.subject,current);
-        discardCharacterCode(current,value.subject);
-      }
+      if (action === 'link') saveLink(current,value.subject);
       const login = action === 'restore' ? installDevice(device,now.dest,key) : {};
       if (unlink) {
         sql.exec('DELETE FROM google_devices WHERE profile=?',current);
@@ -142,7 +147,7 @@ export function createGoogleAccounts(storage, {profile, resetting = () => false,
       if(proof.action) invalidCode();
       let target=linkedProfile(proof.subject);
       if (!target) {
-        if (!create) fail(409,'이 구글 계정에 연결된 캐릭터가 없어요. 예전 기기의 게임 메뉴에서 먼저 연결해 주세요.');
+        if (!create) fail(409,'이 구글 계정에 연결된 캐릭터가 없어요.','google_not_linked');
         if (current!==device || here || linked(current)) fail(409,'이 기기에 캐릭터가 있어요. 내 캐릭터 메뉴에서 이름을 확인하고 구글에 연결해 주세요.');
         target=device;
         // Reserve the real guest ID. The ordinary first room join creates its name and wallet.
@@ -205,7 +210,7 @@ export function createGoogleAccounts(storage, {profile, resetting = () => false,
       return {...installDevice(device,source.profile,key),revokedProfile:previous};
     });
   }
-  const handoff=createBrowserHandoff({sql,init,row,view,linked,linkedProfile,clock,fail,transaction:fn=>storage.transactionSync(fn),sourceForCode,resetting});
+  const handoff=createBrowserHandoff({sql,init,row,view,linked,linkedProfile,saveLink,newTicket,clock,fail,transaction:fn=>storage.transactionSync(fn),sourceForCode,resetting});
   return {start,verified,linked,restoredSession,view,useCode,signIn,issueCharacterCode,recover,discardCharacterCode,handoff,
     forgetDevice(device) { if (exists()) sql.exec('DELETE FROM google_devices WHERE device=?',device); }
   };

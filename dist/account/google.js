@@ -24,7 +24,6 @@ function createGoogleBrowserFlow({api,el,panel,message,onResult,onConflict,onMod
   function schedule(){clearTimeout(timer);if(active && pending && !document.hidden)timer=setTimeout(pickup,2500);}
   async function pickup(){
     if(!pending||checking||!active||document.hidden)return;
-    if(Date.now()>=pending.expires){restart('인증 시간이 지났어요. 다시 시작해 주세요.');return;}
     checking=true;
     const job=pending;
     try{
@@ -35,6 +34,9 @@ function createGoogleBrowserFlow({api,el,panel,message,onResult,onConflict,onMod
       }
       if(result.state==='ready'){
         clearTimeout(timer);
+        if(result.linked && job.mode==='link'){
+          pending=null;save(storeKey,null);location.replace('/');return;
+        }
         await onResult(job);
         pending=null;save(storeKey,null);
         replaceUrl('/account?mode='+job.mode);
@@ -50,6 +52,7 @@ function createGoogleBrowserFlow({api,el,panel,message,onResult,onConflict,onMod
         restart(error.message);return;
       }
       if(error.status===409){pending=null;save(storeKey,null);message(error.message);return;}
+      if(Date.now()>=job.expires){restart('연결 상태를 확인하려면 원래 캐릭터의 계정 메뉴를 다시 열어 주세요.');return;}
       message('인증 결과를 다시 확인하고 있어요.');
     }finally{checking=false;schedule();}
   }
@@ -58,7 +61,7 @@ function createGoogleBrowserFlow({api,el,panel,message,onResult,onConflict,onMod
     replaceUrl(urlFor(job.key));
     panel('external');el('open-browser').hidden=false;el('retry-handoff').hidden=true;
     el('open-browser').href=externalUrl(urlFor(job.key));
-    message(job.mode==='link'?'구글 계정을 선택한 뒤 돌아오면 이 캐릭터가 자동으로 연결돼요.':
+    message(job.mode==='link'?'브라우저에서 구글 계정을 선택하면 이 캐릭터가 바로 연결돼요.':
       '브라우저에서 인증한 뒤 돌아오면 자동으로 이어져요. 요청 번호 '+job.key.slice(-4).toUpperCase());
     schedule();
   }
@@ -80,7 +83,22 @@ function createGoogleBrowserFlow({api,el,panel,message,onResult,onConflict,onMod
       launch(job);
     };
   }
-  function browserState({state,googleName}){
+  function browserState({state,googleName,linked,label,signinCode}){
+    if(linked && recipient.mode==='link'){
+      el('heading').textContent='구글 연결 완료';el('intro').textContent='';
+      panel('browser-linked');
+      message('‘'+label+'’ 캐릭터를 연결했어요. 다른 브라우저에서도 같은 구글 계정으로 이어갈 수 있어요.');
+      const play=el('play-linked');
+      if(signinCode)play.onclick=event=>{
+        event.preventDefault();
+        return run(async()=>{
+          try{await api('signin',{code:signinCode});}
+          catch(error){if(error.status===409){location.replace('/account?mode=login');return;}throw error;}
+          location.replace('/');
+        });
+      };
+      return;
+    }
     if(state==='approve'){
       panel('browser-approval');message('이 기기에서 시작한 요청인지 확인해 주세요.');
       const action={login:'원래 팹뿌에 로그인',start:'원래 팹뿌에서 게임 시작',recover:'구글 연결 바로잡기',unlink:'구글 연결 해제'}[recipient.mode];
@@ -157,7 +175,7 @@ async function api(step,data){
   const value=await response.json();
   if(!response.ok){
     const error=Error(value.message||'요청을 마치지 못했어요. 다시 시도해 주세요.');
-    error.status=response.status;throw error;
+    error.status=response.status;error.reason=value.reason;throw error;
   }
   return value;
 }
@@ -195,7 +213,16 @@ function loadGoogle(){
 async function accept(code){
   ticket=code;
   if(mode==='start'||mode==='login'){
-    await api(mode==='start'?'register':'signin',{code});
+    try{await api(mode==='start'?'register':'signin',{code});}
+    catch(error){
+      if(error.reason!=='google_not_linked')throw error;
+      ticket=null;panel('missing-link');message(error.message);
+      if(current.character && !current.linked && !current.restored){
+        const link=el('link-visible');link.hidden=false;
+        link.textContent='이 기기의 ‘'+current.character.name+'’를 구글에 연결';
+      }
+      return;
+    }
     location.replace('/');return;
   }
   if(mode==='recover'){

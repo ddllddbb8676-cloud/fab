@@ -173,27 +173,69 @@ async function browserVerification(f,job,browser,sub='browser-user'){
   return {credential,response:await f.call('handoff-verify',browser,{key:job.key,credential})};
 }
 
+test('another browser can sign in after Google verifies the link even if Instagram never runs again',async t=>{
+  const f=fixture(t), profiles=structuredClone(f.profiles);
+  const job=await (await f.call('handoff-create',deviceA,{mode:'link'})).json();
+  const {response}=await browserVerification(f,job,deviceB);
+  assert.equal(response.status,200);
+  // The original tab stays closed past the lifetime of the handoff.
+  f.advance(300001);
+  const fresh=await f.code(attacker,'browser-user');
+  const login=await f.call('signin',attacker,{code:fresh.code});
+  assert.equal(login.status,200);
+  const alias=login.headers.get('Set-Cookie').split(';')[0];
+  assert.equal((await (await f.call('status',attacker,undefined,alias)).json()).character.name,'원래팹');
+  assert.deepEqual(f.profiles,profiles);
+});
+
 test('browser link is bound to its origin, Google browser, nonce and single purpose, and preserves both profiles',async t=>{
   const f=fixture(t), original=structuredClone(f.profiles);
   const job=await (await f.call('handoff-create',deviceA,{mode:'link'})).json();
   const pickup=d=>f.call('handoff-pickup',d,{receipt:job.receipt});
   assert.equal((await (await pickup(deviceA)).json()).state,'waiting');
   const {credential,response}=await browserVerification(f,job,deviceB);
-  assert.equal((await response.json()).state,'ready');
+  const saved=await response.json();
+  assert.equal(saved.state,'ready');assert.equal(saved.linked,true);assert.equal(saved.label,'원래팹');
   assert.equal((await f.call('handoff-open',attacker,{key:job.key})).status,409);
   assert.equal((await f.call('handoff-verify',deviceB,{key:job.key,credential})).status,409);
   assert.equal((await f.call('verify',deviceB,{credential})).status,409);
   assert.equal((await pickup(deviceB)).status,410);
-  for(let i=0;i<2;i++)assert.equal((await (await pickup(deviceA)).json()).state,'ready');
+  for(let i=0;i<2;i++)assert.deepEqual(await (await pickup(deviceA)).json(),{state:'ready',linked:true});
+  const revisit=await (await f.call('handoff-open',deviceB,{key:job.key})).json();
+  assert.equal(revisit.linked,true);assert.equal(revisit.signinCode,undefined);
   const proof={code:job.receipt};
   for(const action of ['signin','register','restore','unlink'])assert.equal((await f.call(action,deviceA,proof)).status,409);
   assert.equal((await f.call('preview',deviceB,proof)).status,409);
-  assert.equal((await (await f.call('preview',deviceA,proof)).json()).target.name,'원래팹');
-  assert.equal((await f.call('link',deviceA,proof)).status,200);
+  const legacy=await (await f.call('preview',deviceA,proof)).json();
+  assert.equal(legacy.target.name,'원래팹');assert.equal(legacy.action,'linked');
   assert.equal((await f.call('link',deviceA,proof)).status,409);
   assert.equal((await (await f.call('status',deviceA)).json()).linked,true);
   assert.equal((await (await f.call('status',deviceB)).json()).linked,false);
+  const play={code:saved.signinCode};
+  for(const other of [deviceA,attacker])assert.equal((await f.call('signin',other,play)).status,409);
+  for(const action of ['register','preview','link','unlink'])assert.equal((await f.call(action,deviceB,play)).status,409);
+  const login=await f.call('signin',deviceB,play);
+  assert.equal(login.status,200);assert.equal((await f.call('signin',deviceB,play)).status,409);
+  const alias=login.headers.get('Set-Cookie').split(';')[0];
+  assert.equal((await (await f.call('status',deviceB,undefined,alias)).json()).character.name,'원래팹');
   assert.deepEqual(f.profiles,original);
+});
+
+test('concurrent links keep one character per Google identity, and an old or reset target cannot take it',async t=>{
+  const f=fixture(t);
+  const create=async d=>(await f.call('handoff-create',d,{mode:'link'})).json();
+  const [a,b]=await Promise.all([create(deviceA),create(deviceB)]);
+  const attempts=await Promise.all([browserVerification(f,a,deviceB),browserVerification(f,b,attacker)]);
+  const results=await Promise.all(attempts.map(x=>x.response.json()));
+  assert.deepEqual(results.map(r=>r.state).sort(),['conflict','ready']);
+  assert.deepEqual(results.find(r=>r.state==='conflict'),{state:'conflict'});
+  assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM google_links').get().n,1);
+  const other=results[0].linked?deviceB:deviceA, otherId=await sessionId(other);
+  const orphan=await create(other);
+  f.profiles.delete(otherId);
+  const {response}=await browserVerification(f,orphan,attacker,'unused');
+  assert.equal(response.status,409);
+  assert.equal(f.accounts.linked(otherId),false);
 });
 
 test('a browser login requires the Google browser to approve the requesting screen and only the original cookie can sign in',async t=>{

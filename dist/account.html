@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow"><title>내 캐릭터 · 구글 연동 | 팹뿌</title>
-  <link rel="stylesheet" href="/account/account.css?v=3"><script src="/account/google.js?v=3" defer></script>
+  <link rel="stylesheet" href="/account/account.css?v=3"><script src="/account/google.js?v=4" defer></script>
 </head><body><main>
   <a class="back" id="back" href="/">← 게임으로</a>
   <h1 id="heading">내 캐릭터 · 구글 연동</h1>
@@ -33,6 +33,14 @@
     <p id="approval-text"></p><button type="button" id="approve-browser">내가 시작한 요청 계속</button>
   </section>
   <section id="browser-done" data-panel hidden><p>원래 팹뿌 화면으로 돌아가면 자동으로 이어져요.</p></section>
+  <section id="browser-linked" data-panel hidden>
+    <a id="play-linked" class="button" href="/account?mode=login">이 브라우저에서 게임하기</a>
+  </section>
+  <section id="missing-link" data-panel hidden>
+    <p>원래 닉네임이 보이는 게임에서 <strong>메뉴 → 내 캐릭터 · 구글 연동 → 1. 현재 캐릭터를 구글에 연결</strong>을 눌러 주세요. 닉네임과 ‘구글 연결 완료’가 뜨면 여기서도 이어갈 수 있어요.</p>
+    <a class="button" href="/account?mode=login">구글 계정 다시 선택하기</a>
+    <a id="link-visible" class="help-link" href="/account?mode=link" hidden></a>
+  </section>
   <section id="source" data-panel hidden>
     <p>위 닉네임이 가져갈 캐릭터인지 확인해 주세요. 발급받은 코드는 본인 기기에만 붙여넣어 주세요.</p>
     <button id="issue" type="button">이 캐릭터의 코드 발급</button>
