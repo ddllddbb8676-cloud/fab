@@ -6,7 +6,7 @@
   "workers_dev": false,
   "vars": { "FAB_ENVIRONMENT": "production" },
   "routes": [{ "pattern": "fab.semitoon.com", "custom_domain": true }],
-  "assets": { "directory": "./dist", "binding": "ASSETS", "run_worker_first": ["/", "/index", "/index.html", "/connection-check", "/connection-check.html", "/admin", "/admin/", "/admin.html", "/api/*"] },
+  "assets": { "directory": "./dist", "binding": "ASSETS", "run_worker_first": ["/", "/index", "/index.html", "/connection-check", "/connection-check.html", "/admin", "/admin/", "/admin.html", "/account", "/account/", "/account.html", "/api/*"] },
   "durable_objects": { "bindings": [{ "name": "FAB_ROOM", "class_name": "FabRoom" }, { "name": "FAB_ANALYTICS", "class_name": "FabAnalytics" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["FabRoom"] }, { "tag": "v2-growth-analytics", "new_sqlite_classes": ["FabAnalytics"] }],
   "observability": { "enabled": false }

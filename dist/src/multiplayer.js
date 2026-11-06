@@ -1,8 +1,8 @@
-import { PROTOCOL } from './shared-protocol.js?v=691a4aaad477';
-import {WELCOME_TIMEOUT_MS} from './room-connection.js?v=691a4aaad477';
-import {createRoomChannel} from './room-channel.js?v=691a4aaad477';
-export {multiplayerConfiguration} from './room-config.js?v=691a4aaad477';
-export {WELCOME_TIMEOUT_MS} from './room-connection.js?v=691a4aaad477';
+import { PROTOCOL } from './shared-protocol.js?v=1092cff843de';
+import {WELCOME_TIMEOUT_MS} from './room-connection.js?v=1092cff843de';
+import {createRoomChannel} from './room-channel.js?v=1092cff843de';
+export {multiplayerConfiguration} from './room-config.js?v=1092cff843de';
+export {WELCOME_TIMEOUT_MS} from './room-connection.js?v=1092cff843de';
 
 export function createMultiplayer({config,prepared=null,getPose,onWelcome,onFrame,onRoster,onStatus,onError,onCatch,onWallet,onNickname,onTitles}) {
   let socket=null,status='connecting',id=null,seq=0,retry=0,closed=false,suspended=false,lastPose='',lastSent=0,connection=0,retryTimer=null,handshakeTimer=null;
@@ -81,6 +81,6 @@ export function createMultiplayer({config,prepared=null,getPose,onWelcome,onFram
   const show=()=>{if(!suspended||closed)return;suspended=false;connect();};
   globalThis.window?.addEventListener('pagehide',hide);globalThis.window?.addEventListener('pageshow',show);
   return {command,sendPose,update:sendPose,get id(){return id;},get connected(){return status==='connected';},get status(){return status;},get transport(){return socket?.transport??'websocket';},
-    async resetProfile(){const r=await fetch('/api/session/reset',{method:'POST',credentials:'same-origin'});if(!r.ok)throw new Error('초기화하지 못했어요. 잠시 후 다시 눌러주세요.');this.dispose();},
+    async resetProfile(){const r=await fetch('/api/session/reset',{method:'POST',credentials:'same-origin'});if(!r.ok)throw new Error((await r.json().catch(()=>({}))).message || '초기화하지 못했어요. 잠시 후 다시 눌러주세요.');this.dispose();},
     dispose(){closed=true;clearInterval(heartbeat);document.removeEventListener('visibilitychange',visible);globalThis.window?.removeEventListener('pagehide',hide);globalThis.window?.removeEventListener('pageshow',show);prepared?.dispose();retireSocket();}};
 }

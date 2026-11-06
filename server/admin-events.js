@@ -1,7 +1,7 @@
 import {ADMIN_HEADERS,isAdmin} from './admin-access.js';
 export const eventResponse=(status,data)=>Response.json(data,{status,headers:ADMIN_HEADERS});
-export async function eventAccess(request,env){
-  if(!await isAdmin(request,env))return eventResponse(403,{message:'운영자만 이벤트를 시작할 수 있어요.'});
+export async function eventAccess(request,env,accounts){
+  if(!await isAdmin(request,env,accounts))return eventResponse(403,{message:'운영자만 이벤트를 시작할 수 있어요.'});
   if(!['GET','POST'].includes(request.method))return eventResponse(405,{message:'지원하지 않는 요청이에요.'});
   if(request.method==='GET')return null;
   if(request.headers.get('Origin')!==new URL(request.url).origin)return eventResponse(403,{message:'FAB 관리자 페이지에서 시작해 주세요.'});

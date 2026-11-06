@@ -2,7 +2,8 @@ import {DurableObject} from 'cloudflare:workers';
 import {createGrowthMetrics} from './growth-metrics.js';
 import {telemetryAccess,readTelemetry,createTelemetryLimiter} from './telemetry-request.js';
 import {isAdmin,ADMIN_HEADERS,metricExclusions} from './admin-access.js';
-import {sessionId,sessionToken} from './player-profiles.js';
+import {sessionToken} from './player-profiles.js';
+import {effectiveProfileId} from './account-sessions.js';
 import {items as catalog} from '../src/cosmetics-catalog.js';
 const PRIVATE={'Cache-Control':'private, no-store','Vary':'Cookie'};
 const METHODS=new Set(['connect','observeProfile','activity','reward','purchaseRejected','presence','forget']);
@@ -52,7 +53,7 @@ export class FabAnalytics extends DurableObject{
     }
     if(url.pathname==='/api/telemetry'){
       const denied=telemetryAccess(request,Boolean(sessionToken(request)));if(denied)return new Response(null,{status:denied,headers:PRIVATE});
-      const id=await sessionId(sessionToken(request));if(!id)return new Response(null,{status:401,headers:PRIVATE});
+      const id=await effectiveProfileId(request,this.env);if(!id)return new Response(null,{status:401,headers:PRIVATE});
       if(!this.allowed(id))return new Response(null,{status:429,headers:PRIVATE});
       const parsed=await readTelemetry(request);if(!parsed.events)return new Response(null,{status:parsed.status,headers:PRIVATE});
       if(parsed.events.some(e=>e.itemId&&!catalog.some(item=>item.id===e.itemId)))return new Response(null,{status:400,headers:PRIVATE});

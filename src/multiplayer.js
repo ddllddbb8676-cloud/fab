@@ -81,6 +81,6 @@ export function createMultiplayer({config,prepared=null,getPose,onWelcome,onFram
   const show=()=>{if(!suspended||closed)return;suspended=false;connect();};
   globalThis.window?.addEventListener('pagehide',hide);globalThis.window?.addEventListener('pageshow',show);
   return {command,sendPose,update:sendPose,get id(){return id;},get connected(){return status==='connected';},get status(){return status;},get transport(){return socket?.transport??'websocket';},
-    async resetProfile(){const r=await fetch('/api/session/reset',{method:'POST',credentials:'same-origin'});if(!r.ok)throw new Error('초기화하지 못했어요. 잠시 후 다시 눌러주세요.');this.dispose();},
+    async resetProfile(){const r=await fetch('/api/session/reset',{method:'POST',credentials:'same-origin'});if(!r.ok)throw new Error((await r.json().catch(()=>({}))).message || '초기화하지 못했어요. 잠시 후 다시 눌러주세요.');this.dispose();},
     dispose(){closed=true;clearInterval(heartbeat);document.removeEventListener('visibilitychange',visible);globalThis.window?.removeEventListener('pagehide',hide);globalThis.window?.removeEventListener('pageshow',show);prepared?.dispose();retireSocket();}};
 }

@@ -3,12 +3,19 @@ export function createNicknameUI({command,connected,onToggle}) {
   const dialog=document.createElement('dialog');dialog.className='nickname-dialog';dialog.setAttribute('aria-labelledby','nickname-title');
   dialog.innerHTML=`<h2 id="nickname-title">닉네임을 정해 주세요</h2><p class="nickname-intro"></p><p class="nickname-preserve">이름만 바뀌어요. 파괴·수리 기록, 칩, 구매 아이템은 그대로 유지돼요.</p><form><section class="nickname-edit"><label for="nickname-input">닉네임</label><input id="nickname-input" type="text" maxlength="7" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="nickname-rule nickname-error"><small id="nickname-rule">공백 포함 1~7자 · 한글/영문/숫자/띄어쓰기<br>“세미”가 포함된 이름은 사용할 수 없어요.</small><button class="nickname-next" type="submit">확인</button></section><section class="nickname-review" hidden><p>입력하신 닉네임은 <strong class="nickname-chosen"></strong> 입니다.</p><p class="nickname-warning"></p><p>이 닉네임으로 만드시겠습니까?</p><small class="nickname-use-hint"></small><div><button class="nickname-back" type="button">수정하기</button><button class="nickname-confirm" type="button">확정하기</button></div></section><p id="nickname-error" role="alert"></p><button class="nickname-later" type="button" hidden>나중에 사용하기</button></form>`;
   document.body.append(dialog);const $=s=>dialog.querySelector(s);$('.nickname-warning').textContent=NICKNAME_WARNING;
+  const accountEntry=document.getElementById('google-account-link');
+  let restoreLink;
+  if(accountEntry && !accountEntry.hidden){
+    restoreLink=document.createElement('a');restoreLink.className='nickname-restore';restoreLink.href=accountEntry.href;
+    restoreLink.textContent='구글에 연결한 캐릭터 불러오기';$('.nickname-edit').append(restoreLink);
+  }
   let info=null,busy=false,step='edit',candidate='',candidateTicket=0,composing=false;
   function render(){const reviewing=step==='review';$('.nickname-edit').hidden=reviewing;$('.nickname-review').hidden=!reviewing;$('.nickname-next').disabled=busy||!connected();$('.nickname-confirm').disabled=busy||!connected();$('.nickname-back').disabled=busy;$('#nickname-input').disabled=busy;$('.nickname-confirm').textContent=busy?'저장 중…':'확정하기';$('.nickname-later').hidden=info?.kind!=='ticket';$('.nickname-later').disabled=busy;$('.nickname-use-hint').textContent=info?.kind==='ticket'?'확정하면 보유한 닉네임 변경권 1장을 사용합니다.':'확정하면 무료 1회 변경 기회를 사용합니다.';}
   function close(){if(!dialog.open)return;dialog.close();document.body.classList.remove('nickname-open');onToggle(false);}
   function sync(next,forceOpen=false){info=next;if(!next?.canChoose){close();return;}if(dialog.open){render();return;}if(next.kind==='ticket'&&!forceOpen)return;
     step='edit';busy=false;candidate='';$('#nickname-input').value=next.name||'';$('#nickname-error').textContent='';
     $('#nickname-title').textContent=next.kind==='ticket'?'닉네임 바꾸기':next.kind==='existing'?'닉네임 변경 기회가 생겼어요':'닉네임을 정해 주세요';
+    if(restoreLink)restoreLink.hidden=next.kind==='ticket';
     $('.nickname-intro').textContent=next.kind==='ticket'?'변경권 1장을 보유하고 있어요. 새 이름을 확정하기 전까지는 사용되지 않아요.':next.kind==='existing'?'지금 이름을 그대로 사용하거나 한 번 바꿀 수 있어요.':'추천 이름을 준비했어요. 그대로 쓰거나 원하는 이름으로 바꿔 주세요.';
     onToggle(true);document.body.classList.add('nickname-open');dialog.showModal();render();$('.nickname-next').focus({preventScroll:true});
   }

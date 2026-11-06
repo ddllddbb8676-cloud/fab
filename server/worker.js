@@ -3,7 +3,11 @@ import { DurableObject } from 'cloudflare:workers';
 import { createRoom } from './room-engine.js';
 import { PROTOCOL, MAX_VISITORS } from '../src/shared-protocol.js';
 import { ROOM_CAPACITY, AUTOMATED_COUNT } from '../src/room-population.js';
-import {sessionToken,newSessionToken,sessionCookie,sessionId,createProfileStore} from './player-profiles.js';
+import {sessionToken,newSessionToken,sessionCookie,createProfileStore} from './player-profiles.js';
+import {createGoogleAccounts} from './google-accounts.js';
+import {validClientId} from './google-identity.js';
+import {accountPage,googleRoute,accountInRoom} from './account-routes.js';
+import {deviceCookie,effectiveProfileId,localSession} from './account-sessions.js';
 import equipmentBootstrap from './equipment-bootstrap.json';
 import {canonicalRedirect} from './canonical-url.js';
 import {rejectOutdatedRoom} from './room-version.js';
@@ -22,8 +26,8 @@ export {FabAnalytics} from './analytics-worker.js';
 const PRIVATE_HEADERS = {'Cache-Control':'private, no-store','Vary':'Cookie'};
 const httpResult = (status, data = {}) => Response.json(data,{status,headers:PRIVATE_HEADERS});
 const VISIT_BODY_LIMIT=1024;
-async function visitAccess(request,env){
-  if(!await isAdmin(request,env))return httpResult(403,{message:'운영자만 이용할 수 있어요.'});
+async function visitAccess(request,env,accounts){
+  if(!await isAdmin(request,env,accounts))return httpResult(403,{message:'운영자만 이용할 수 있어요.'});
   if(request.method!=='POST')return httpResult(405,{message:'방문할 닉네임을 선택해 주세요.'});
   if(request.headers.get('Origin')!==new URL(request.url).origin)return httpResult(403,{message:'FAB 관리자 페이지에서 다시 선택해 주세요.'});
   if(request.headers.get('Content-Type')?.split(';')[0].trim().toLowerCase()!=='application/json')return httpResult(415,{message:'닉네임 요청 형식을 확인해 주세요.'});
@@ -52,6 +56,9 @@ export default {
   async fetch(request,env) {
     const redirect=canonicalRedirect(request);if(redirect)return redirect;
     const url=new URL(request.url);
+    if(url.pathname.startsWith('/_fab/') || url.pathname==='/account-session')return httpResult(404);
+    if(url.pathname.startsWith('/api/account/google/'))return googleRoute(request,env);
+    if(['/account','/account/','/account.html'].includes(url.pathname))return accountPage(request,env);
     if(url.pathname==='/api/admin/events'){
       const denied=await eventAccess(request,env);if(denied)return denied;
       return env.FAB_ROOM.getByName('FAB-A-v20').fetch(request);
@@ -113,7 +120,7 @@ export default {
     }
     if(url.pathname.startsWith('/api/'))return new Response('Not found',{status:404});
     const asset=await env.ASSETS.fetch(request);
-    if(asset.headers.get('Content-Type')?.includes('text/html'))return serveEntry(asset,request);
+    if(asset.headers.get('Content-Type')?.includes('text/html'))return serveEntry(asset,request,validClientId(env.FAB_GOOGLE_CLIENT_ID));
     return asset;
   }
 };
@@ -127,6 +134,8 @@ export class FabRoom extends DurableObject {
     this.metricProfiles=new Map();this.paidItems=new Set(cosmeticItems.filter(item=>item.price>0).map(item=>item.id));this.lastMetricsFlush=Date.now();
     this.profiles=createProfileStore(ctx.storage,{ownerId:env.FAB_OWNER_VISITOR_ID,onProfileObserved:p=>this.observeProfile(p),onProfileRemoved:id=>{this.room?.forgetContestProfile(id);this.profileMetrics.remove(id);this.metricProfiles.delete(id);}});
     this.httpPeers=new Map();this.connectionOrders=new Map();
+    this.resettingProfiles=new Set();
+    this.accounts=createGoogleAccounts(ctx.storage,{profile:id=>this.room.profile(id)||this.profiles.get(id),resetting:id=>this.resettingProfiles.has(id)});
     this.room=createRoom({ownerId:env.FAB_OWNER_VISITOR_ID,eventExcludedIds:excludedIds,onEventsChange:s=>this.profiles.saveEvents(s),nicknameAvailable:(...args)=>this.profiles.nicknameAvailable(...args),replaceNickname:(...args)=>this.profiles.replaceNickname(...args),claimName:(...args)=>this.profiles.claimName(...args),getHistoricalScores:()=>this.profiles.ranking(),onEquipmentChange:s=>this.profiles.saveEquipment(s),onFoupChange:s=>this.profiles.saveFoups(s),onProfileChange:p=>this.profiles.save(p),onReward:event=>this.trackGrowth(()=>this.growthMetrics.reward(event.id,event.kind,event.amount)),onRosterChange:()=>{this.rosterDirty=true;},onCatch:event=>{
       for(const [ws,s] of this.sockets)if(s.id===event.guardId)this.send(ws,{type:'safety-catch',...event});
     }});this.timer=null;this.tickCount=0;this.previous=Date.now();
@@ -149,8 +158,8 @@ export class FabRoom extends DurableObject {
       // Finish any legacy duplicate-name migration before exposing profiles or rankings.
       await this.checkpoint();
       for(const ws of ctx.getWebSockets()) {
-        const {id,order}=ws.deserializeAttachment()||{},saved=id?await this.profiles.get(id):null;
-        if(id&&this.room.join(id,saved).ok){this.sockets.set(ws,{id,rate:0,at:Date.now()});this.connectionOrders.set(id,{order:order??0,at:Date.now()});this.welcome(ws,id);this.trackGrowth(()=>this.growthMetrics.connect(id,{existing:Boolean(saved),transport:'restored',profile:this.room.profile(id)}));}
+        const {id,order,auth}=ws.deserializeAttachment()||{},saved=id?await this.profiles.get(id):null;
+        if(id&&this.sessionValid(id,auth)&&this.room.join(id,saved).ok){this.sockets.set(ws,{id,auth,rate:0,at:Date.now()});this.connectionOrders.set(id,{order:order??0,at:Date.now()});this.welcome(ws,id);this.trackGrowth(()=>this.growthMetrics.connect(id,{existing:Boolean(saved),transport:'restored',profile:this.room.profile(id)}));}
         else try{ws.close(1012,'다시 연결해 주세요');}catch{}
       }
       await this.checkpoint();if(this.sockets.size)this.start();
@@ -201,8 +210,15 @@ export class FabRoom extends DurableObject {
   sendWallets(){for(const [ws,s] of this.sockets){const player=this.room.players.get(s.id);if(s.ready!==false&&player&&s.walletRevision!==player.wallet.revision){const wallet=this.room.wallet(s.id);this.send(ws,{type:'wallet',wallet});s.walletRevision=wallet.revision;}}}
   broadcastRoster(){const data=JSON.stringify({type:'roster',roster:this.room.roster(),count:this.room.players.size});for(const [ws,s] of this.sockets)if(s.ready!==false)this.send(ws,data);}
   async fetch(request) {
+    const path=new URL(request.url).pathname;
+    if(path==='/account-session')return httpResult(200,{id:await effectiveProfileId(request,this.adminEnv,this.accounts)});
+    if(path.startsWith('/_fab/account/'))return accountInRoom(request,this.adminEnv,this.accounts,(device,id)=>{
+      for(const [peer,session] of this.sockets){
+        if(session.auth && (session.auth.device===device || session.id===id)){this.close(peer);this.retire(peer);}
+      }
+    });
     if(new URL(request.url).pathname==='/api/admin/events'){
-      const denied=await eventAccess(request,this.adminEnv);if(denied)return denied;
+      const denied=await eventAccess(request,this.adminEnv,this.accounts);if(denied)return denied;
       if(request.method==='GET')return eventResponse(200,{worldEvents:this.room.worldEvents.controlState()});
       const input=await readEventRequest(request);if(!input)return eventResponse(400,{message:'이벤트 요청을 확인해 주세요.'});
       const result=this.room.worldEvents.startManual(input.kind,input.requestId,input.bayCount);
@@ -211,7 +227,7 @@ export class FabRoom extends DurableObject {
       return eventResponse(result.ok?200:result.status,{...result,worldEvents:this.room.worldEvents.controlState()});
     }
     if(new URL(request.url).pathname==='/api/admin/visit'){
-      const denied=await visitAccess(request,this.adminEnv);if(denied)return denied;
+      const denied=await visitAccess(request,this.adminEnv,this.accounts);if(denied)return denied;
       const input=await readVisitName(request);
       if(input.status)return httpResult(input.status,{message:input.status===413?'닉네임 요청이 너무 길어요.':input.status===408?'요청이 늦어졌어요. 다시 선택해 주세요.':'올바른 닉네임을 선택해 주세요.'});
       const matches=[...this.room.players.values()].filter(p=>/^visitor:[a-f0-9]{64}$/.test(p.id)&&!this.metricExcludedIds.has(p.id)&&(p.civilianName||p.name)===input.name);
@@ -223,7 +239,7 @@ export class FabRoom extends DurableObject {
       return Response.json({target:{id:target.id,name:target.civilianName||target.name},expiresAt:Date.now()+120000},{headers:ADMIN_HEADERS});
     }
     if(new URL(request.url).pathname==='/api/admin/metrics'){
-      if(!await isAdmin(request,this.adminEnv))return httpResult(403);
+      if(!await isAdmin(request,this.adminEnv,this.accounts))return httpResult(403);
       if(request.method!=='GET')return httpResult(405);
       this.track(()=>this.activityMetrics.sync(this.room.players.keys()));
       if(this.metricsUnavailable)return httpResult(503,{error:'통계를 준비하지 못했어요. 게임은 계속 이용할 수 있어요.'});
@@ -234,22 +250,28 @@ export class FabRoom extends DurableObject {
     if(new URL(request.url).pathname==='/api/room-http')return this.httpRoom(request);
     if(new URL(request.url).pathname==='/api/leaderboard')return Response.json({scope:'all-time',rows:this.room.ranking(),recordedVisitors:this.profiles.rankedVisitorCount,highestVisitorScore:this.profiles.ranking()[0]?.brokenCount??0},{headers:{'Cache-Control':'no-store'}});
     if(new URL(request.url).pathname==='/api/session/reset') {
-      const id=await sessionId(sessionToken(request));
+      const {id,expired}=await localSession(request,this.accounts);
+      if(expired)return Response.json({message:'구글 로그인이 만료됐어요. 새로고침 후 초기화할 캐릭터를 확인해 주세요.'},{status:409,headers:{...PRIVATE_HEADERS,'Set-Cookie':deviceCookie('',request.url)}});
       if(id){
-        for(const [ws,s] of this.sockets)if(s.id===id){ws.serializeAttachment?.({retired:true});this.send(ws,{type:'resetting'});this.sockets.delete(ws);try{ws.close(4002,'새로 시작하기');}catch{}}
-        this.room.remove(id);await this.profiles.remove(id);this.broadcastRoster();
+        if(this.accounts.linked(id))return httpResult(409,{message:'구글 계정 연결 화면에서 연결을 해제한 뒤 초기화해 주세요.'});
+        if(this.resettingProfiles.has(id))return httpResult(409,{message:'이미 캐릭터를 초기화하는 중이에요.'});
+        this.resettingProfiles.add(id);
+        try {
+          for(const [ws,s] of this.sockets)if(s.id===id){ws.serializeAttachment?.({retired:true});this.send(ws,{type:'resetting'});this.sockets.delete(ws);try{ws.close(4002,'새로 시작하기');}catch{}}
+          this.room.remove(id);await this.profiles.remove(id);this.broadcastRoster();
+        } finally {this.resettingProfiles.delete(id);}
       }
       return Response.json({ok:true});
     }
     if(new URL(request.url).searchParams.get('v')!==String(PROTOCOL))return new Response('새로고침 후 다시 입장해 주세요',{status:409});
     const [client,server]=Object.values(new WebSocketPair());
     const incomingToken=sessionToken(request),token=incomingToken||newSessionToken();
-    const id=await sessionId(token);
+    const {id,auth}=await localSession(request,this.accounts,token);
     const headers=incomingToken?undefined:{'Set-Cookie':sessionCookie(token,request.url)};
     const order=connectionOrder(new URL(request.url).searchParams.get('o'));
     if(Number.isNaN(order))return new Response('Invalid connection order',{status:400});
     this.ctx.acceptWebSocket(server);
-    await this.admit(server,id,order);
+    await this.admit(server,id,order,auth);
     return new Response(null,{status:101,headers,webSocket:client});
   }
   retire(peer) {
@@ -258,7 +280,8 @@ export class FabRoom extends DurableObject {
     this.sockets.delete(peer);
     try{peer.close(4001,'다른 탭에서 이어서 접속했습니다');}catch{}
   }
-  async admit(peer,id,order) {
+  sessionValid(id,auth){return !auth || this.accounts.restoredSession(auth.hash,auth.device)?.profile===id;}
+  async admit(peer,id,order,auth) {
     const prior=this.connectionOrders.get(id);
     if(order!==null && prior && order<=prior.order){this.retire(peer);return;}
     // Reserve before any storage await. An older pending read cannot take the
@@ -278,7 +301,7 @@ export class FabRoom extends DurableObject {
     let saved;
     try{saved=this.room.profile(id)||await this.profiles.get(id);}
     finally{ticket.reading=false;}
-    if(this.connectionOrders.get(id)!==ticket){this.retire(peer);return;}
+    if(this.connectionOrders.get(id)!==ticket || !this.sessionValid(id,auth)){this.retire(peer);return;}
     const current=this.room.profile(id)||saved;
     for(const [other,s] of this.sockets)if(s.id===id)this.retire(other);
     if(this.room.players.has(id))this.room.remove(id);
@@ -286,8 +309,8 @@ export class FabRoom extends DurableObject {
     if(!joined.ok){
       const full={type:'full',message:joined.message};this.send(peer,full);peer.close(1008,'Room full');return full;
     }
-    peer.serializeAttachment?.({id,order:ticket.order});
-    const session={id,rate:0,at:Date.now(),ready:false};
+    peer.serializeAttachment?.({id,order:ticket.order,...(auth?{auth}:{})});
+    const session={id,auth,rate:0,at:Date.now(),ready:false};
     this.sockets.set(peer,session);
     try{await this.checkpoint();}
     catch(error){try{peer.close(1013,'Try again');}catch{}this.close(peer);throw error;}
@@ -300,7 +323,7 @@ export class FabRoom extends DurableObject {
     const parsed=await readRoomBody(request);
     if(!parsed.body)return httpResult(parsed.status);
     const {op,key,cursor,order,inputs}=parsed.body;
-    const id=await sessionId(sessionToken(request));
+    const {id,auth}=await localSession(request,this.accounts);
     if(!id)return httpResult(401);
     // A key is a transport lease, never an account credential.
     const lookup=id+'/'+key;
@@ -309,7 +332,7 @@ export class FabRoom extends DurableObject {
       for(const [oldKey,old] of this.httpPeers)if(old.status && (Date.now()-old.closedAt>120000 || this.httpPeers.size>=256))this.httpPeers.delete(oldKey);
       if(this.httpPeers.size>=256)return httpResult(429);
       peer=new HttpRoomPeer();this.httpPeers.set(lookup,peer);
-      peer.opening=this.admit(peer,id,order);
+      peer.opening=this.admit(peer,id,order,auth);
     }
     if(!peer)return httpResult(410);
     let full;
@@ -361,6 +384,7 @@ export class FabRoom extends DurableObject {
   }
   async webSocketMessage(ws,message) {
     const session=this.sockets.get(ws);if(!session)return;
+    if(session.auth && session.auth.expires<=Date.now()){this.close(ws);this.retire(ws);return;}
     const now=Date.now();if(now-session.at>=1000){session.rate=0;session.at=now;}
     if(typeof message!=='string'||message.length>2048||++session.rate>24){try{ws.close(1008,'Message limit');}catch{}this.close(ws);return;}
     let data;try{data=JSON.parse(message);}catch{return;}

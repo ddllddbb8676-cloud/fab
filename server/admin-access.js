@@ -1,10 +1,10 @@
-import {sessionId,sessionToken} from './player-profiles.js';
+import {effectiveProfileId} from './account-sessions.js';
 import {configuredOwnerId} from './owner-privileges.js';
 
 export const ADMIN_HEADERS = {'Cache-Control':'private, no-store','Vary':'Cookie','X-Robots-Tag':'noindex, nofollow','X-Content-Type-Options':'nosniff','Referrer-Policy':'same-origin'};
-export async function isAdmin(request,env) {
+export async function isAdmin(request,env,accounts) {
   const owner=configuredOwnerId(env.FAB_OWNER_VISITOR_ID);
-  return Boolean(owner && await sessionId(sessionToken(request))===owner);
+  return Boolean(owner && await effectiveProfileId(request,env,accounts)===owner);
 }
 export function metricExclusions(env) {
   return (env.FAB_METRICS_EXCLUDED_IDS||'').split(',').map(value=>configuredOwnerId(value.trim())).filter(Boolean);
