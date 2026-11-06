@@ -7,7 +7,7 @@ import { machines, ports, isBlocked } from '../src/layout.js';
 import { AIR_SHOWER } from '../src/air-shower.js';
 import {stockerById} from '../src/stocker-layout.js';
 import { createFleet, reservedPortIds } from '../src/network-transport.js';
-import { createFoupStore, FOUP_CLEAN_SECONDS, FOUP_CLEAN_REWARD } from '../src/foup-play.js';
+import { createFoupStore, canReachGroundFoup, FOUP_PICKUP_REACH, FOUP_CLEAN_SECONDS, FOUP_CLEAN_REWARD } from '../src/foup-play.js';
 import { createResidentSimulation } from '../src/residents.js';
 import { getEmoApproach } from '../src/emo-interaction.js';
 import { boardingMachine,boardingApproach,NO_LOADPORT_MESSAGE } from '../src/play-actions.js';
@@ -25,8 +25,8 @@ import {markCatch} from '../src/catch-reaction.js';
 import {canSelectTitle,restoreTitlePreference,destructionTitle,npcDestructionTitle,OPERATOR_TITLE} from '../src/destruction-titles.js';
 import {isRestArea,canSafetyTraverse,restAreaExit,SAFETY_CLEARANCE} from '../src/rest-area.js';
 import {createWorldEvents} from './world-events.js';
-import {contestOutfit, gatheringPoint, contestZone} from '../src/foup-contest.js';
-import {planContestRepairs} from './contest-preparation.js';
+import {contestOutfit, contestZone} from '../src/foup-contest.js';
+import {contestMachineIds, planContestRepairs} from './contest-preparation.js';
 
 const distance=(a,b)=>Math.hypot(a.x-b.x,a.z-b.z);
 const finite=(n,a,b)=>Number.isFinite(n)&&n>=a&&n<=b;
@@ -98,17 +98,17 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
     fleet.detachCargo(v.id);
     if(!s.parked)store.launch(r,{...s.foup},{x:0,y:.6,z:(boardingMachine(s.car)?.sign??1)*2.2});
   }
-  const residents=createResidentSimulation({fleet,store,destruction,detachCargo,random,getNeighbors:()=>safety.people,protectedIds:()=>[...leases.keys(),...(worldEvents?.protectedIds()??[])],onCue:emit});
+  const residents=createResidentSimulation({fleet,store,destruction,detachCargo,random,getNeighbors:()=>safety.people,
+    protectedIds:()=>[...leases.keys(),...(worldEvents?.protectedIds()??[]),...(worldEvents?.contest.live()?contestMachineIds:[])],onCue:emit});
   const safety=createSafetyPatrols({random,excludedNames:residents.people.map(p=>p.name)});
   const cartReturner=createCartReturner({store,carts,residents,players,now:()=>time,canRun:()=>!worldEvents?.contest.live()&&!worldEvents?.bayRunning()&&!worldEvents?.view().lastResult,onCue:emit});
   function rememberContestProfile(saved) {
     if(worldEvents?.contest.hasMember(saved.id))contestProfiles.set(saved.id,saved);
   }
-  function gatherContestant(id,index,token) {
+  function gatherContestant(id,point,token) {
     const p=players.get(id);
     if(!p)return;
     if(isSafety(p.role))finishDuty(p,p.optOut);
-    const point=gatheringPoint(index);
     const held=store.getCarried(id);
     if(held)store.launch(held,{...point,y:.82,yaw:p.heading},{x:0,y:0,z:0});
     release(p);
@@ -153,7 +153,16 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
   worldEvents=createWorldEvents({now,random,onChange:onEventsChange,
     contestOptions:{ownerId,gather:gatherContestant,rosterChanged:contestRosterChanged,award:awardContest,
       planRepairs:()=>planContestRepairs(destruction.isDestroyed,id=>!leases.has(id)&&!broken.get(id)?.owner),
-      repair:id=>{if(!leases.has(id)&&!broken.get(id)?.owner){residents.yieldMachine(id);destruction.reset(id);}},
+      repair:ids=>{
+        let repaired=false;
+        for (const id of ids) {
+          if (!broken.has(id) || leases.has(id) || broken.get(id).owner) continue;
+          residents.yieldMachine(id);
+          broken.delete(id);
+          repaired=true;
+        }
+        if (repaired) onEquipmentChange(equipmentState());
+      },
       clearZones:()=>{
         for(const p of players.values())if(p.phase==='cleaning'){const r=store.records.get(p.cleanTargetId);if(r&&contestZone(r.x,r.z))release(p);}
         store.clearFloorArea(contestZone);
@@ -419,9 +428,15 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
     if(kind==='pickup') {
       if(p.vehicleId!==null&&p.vehicleId!==undefined)return fail();
       let r=store.records.get(data.id);
+      if (data.contestPickup && (!contestMove || r?.gold || r?.mode !== 'ground' || data.vehicleId !== undefined)) {
+        return fail('바닥에 내려온 경기용 풉을 다시 골라주세요');
+      }
+      if (contestMove && r?.mode === 'ground' && (p.hidden || p.y > .15 || !canReachGroundFoup(p,r))) {
+        return fail('풉이 있는 쪽으로 조금 더 가까이 가주세요');
+      }
       if(data.vehicleId!==undefined){const v=fleet.vehicles[data.vehicleId];if(!v||v.cargoDetached||!v.state.parked||v.currentPort.id!==data.portId)return fail('OHT가 FOUP을 가져갔어요');
         if(distance(p,v.state.foup)>2)return fail('FOUP 앞으로 가까이 가주세요');detachCargo(v);r=store.records.get(`vehicle:${v.id}`);}
-      if(!r||r.portId&&destruction.isDestroyed(byPort.get(r.portId)?.machineId)||distance(p,r)>2||!store.pickup(r.id,id))return fail('다른 사람이 FOUP을 먼저 가져갔어요');
+      if(!r||r.portId&&destruction.isDestroyed(byPort.get(r.portId)?.machineId)||distance(p,r)>FOUP_PICKUP_REACH||!store.pickup(r.id,id))return fail('다른 사람이 FOUP을 먼저 가져갔어요');
       p.carrying=true;emit('pickup',p);return {ok:true};
     }
     if(kind==='place') {

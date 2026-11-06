@@ -1,5 +1,5 @@
-import { TOUR_POINTS } from './layout.js?v=a73f61bfaf6e';
-import { findWalkPath, canWalkSegment } from './walking.js?v=a73f61bfaf6e';
+import { TOUR_POINTS } from './layout.js?v=0aef8956b0b4';
+import { findWalkPath, canWalkSegment } from './walking.js?v=0aef8956b0b4';
 
 const distance = (a, b) => Math.hypot(b.x - a.x, b.z - a.z);
 const point = p => ({ x: p.x, z: p.z });

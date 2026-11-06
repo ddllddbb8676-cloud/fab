@@ -1,9 +1,9 @@
-import { machines, ports, TOOL_WIDTH, TOOL_FRONT, PORT_Z, VEHICLE_Y, SEATED_FOUP_Y, isBlocked } from './layout.js?v=a73f61bfaf6e';
-import { reservedPortIds } from './network-transport.js?v=a73f61bfaf6e';
-import { floorSpot, supportHeight, createFoupStore, createFoupRenderer, FOUP_CLEAN_SECONDS } from './foup-play.js?v=a73f61bfaf6e';
-import { createFoupDebris } from './foup-debris.js?v=a73f61bfaf6e';
-import {stockerPorts,stockers,stockerById,stockerPoint} from './stocker-layout.js?v=a73f61bfaf6e';
-import {canTraverseRuntimeObstacles} from './runtime-obstacles.js?v=a73f61bfaf6e';
+import { machines, ports, TOOL_WIDTH, TOOL_FRONT, PORT_Z, VEHICLE_Y, SEATED_FOUP_Y, isBlocked } from './layout.js?v=0aef8956b0b4';
+import { reservedPortIds } from './network-transport.js?v=0aef8956b0b4';
+import { floorSpot, supportHeight, createFoupStore, createFoupRenderer, canReachGroundFoup, FOUP_PICKUP_REACH, FOUP_CLEAN_SECONDS } from './foup-play.js?v=0aef8956b0b4';
+import { createFoupDebris } from './foup-debris.js?v=0aef8956b0b4';
+import {stockerPorts,stockers,stockerById,stockerPoint} from './stocker-layout.js?v=0aef8956b0b4';
+import {canTraverseRuntimeObstacles} from './runtime-obstacles.js?v=0aef8956b0b4';
 
 const smooth = t => { const p = Math.max(0, Math.min(1, t)); return p * p * (3 - 2 * p); };
 export function boardingMachine(car) {
@@ -24,7 +24,7 @@ export function groundPickupCandidates(record,from){
       Array.from({length:7},(_,i)=>i/6).every(t=>!isBlocked(p.x+(record.x-p.x)*t,p.z+(record.z-p.z)*t,.08)));
 }
 
-export function createPlayActions({ THREE, scene, materials, fleet, explorer, avatar, initialPortIds, hideOriginal, showOriginal, isDestroyed, toast, onCue = () => {}, network = null, isRestricted = () => false, reducedMotion = false, seedStockers=false }) {
+export function createPlayActions({ THREE, scene, materials, fleet, explorer, avatar, initialPortIds, hideOriginal, showOriginal, isDestroyed, toast, onCue = () => {}, network = null, isRestricted = () => false, contestPlaying = () => false, reducedMotion = false, seedStockers=false }) {
   const store = createFoupStore({ ports, initialPortIds, hideOriginal, showOriginal, isDestroyed, seedStockers, onStockerOut:p=>onCue('stocker-out',p), onImpact: record => onCue('bounce', record), onShatter:record=>onCue('shatter',record) });
   if(seedStockers)store.initializeStockers();
   const renderer = createFoupRenderer(THREE, scene, materials);
@@ -32,6 +32,7 @@ export function createPlayActions({ THREE, scene, materials, fleet, explorer, av
   const byPort = new Map(ports.map(port => [port.id, port]));
   const box = new THREE.Box3(), hit = new THREE.Vector3();
   let action = null, pending = null, passengerId = null, awaiting = false, requestGeneration = 0, cleanRequest = false;
+  let landingPickup = null;
   const visibility=()=>{if(document.hidden)clearPending();};
   if(typeof document!=='undefined')document.addEventListener('visibilitychange',visibility);
   const pose = () => ({ x: explorer.state.position.x, y: explorer.state.position.y, z: explorer.state.position.z, heading: explorer.state.heading });
@@ -48,6 +49,7 @@ export function createPlayActions({ THREE, scene, materials, fleet, explorer, av
     return fleet.vehicles.find(v => !v.cargoDetached && v.state.parked && v.currentPort.id === port.id);
   }
   function clearPending() {
+    landingPickup = null;
     if(cleanRequest){cleanRequest=false;requestGeneration++;awaiting=false;network?.command('cancel');}
     if(action?.phase==='cleaning')cancelCleanup();
     if (!pending) return;
@@ -92,10 +94,38 @@ export function createPlayActions({ THREE, scene, materials, fleet, explorer, av
     const task={kind:'pickup',recordId:record?.id,portId:port?.id,vehicleId:v?.id};
     if(port)return startWalk({x:port.x,z:port.z+port.sign*.96},task);
     clearPending();
+    if (contestPlaying() && record && !record.gold) {
+      if (record.mode === 'flying') {
+        // A tap on the last bounce should use the actual landing spot.
+        landingPickup = {id:record.id, until:performance.now()+3000};
+        return true;
+      }
+      task.contestPickup = true;
+      if (explorer.state.posture === 'stand' && canReachGroundFoup(explorer.state.position, record)) {
+        if (explorer.state.path.length) explorer.stopWalk();
+        begin(task);
+        return true;
+      }
+    }
     for(const destination of groundPickupCandidates(record,pose()))if(explorer.walkTo(destination)){
       pending={...task,destination};return true;
     }
     toast('앞쪽 통로에서 다시 눌러주세요');return false;
+  }
+  function nearbyContestFoup() {
+    if (!contestPlaying() || !onFoot() || store.carried || explorer.state.posture !== 'stand') return null;
+    const from = explorer.state.position;
+    let nearest = null, best = FOUP_PICKUP_REACH ** 2;
+    for (const record of store.records.values()) {
+      if (record.mode !== 'ground' || record.gold) continue;
+      const d = (record.x - from.x) ** 2 + (record.z - from.z) ** 2;
+      if (d <= best && canReachGroundFoup(from, record)) { nearest = record; best = d; }
+    }
+    return nearest;
+  }
+  function pickupNearby() {
+    const record = nearbyContestFoup();
+    return record ? requestPickup(record) : false;
   }
   function requestPlace(port) {
     if (!onFoot() || !store.carried) return false;
@@ -178,8 +208,11 @@ export function createPlayActions({ THREE, scene, materials, fleet, explorer, av
         if (record || v) consider(rayDistance(ray, port.x, SEATED_FOUP_Y, port.z, .6, .55, .55), { kind: 'pickup', record, port, v }, port.machineId);
       }
     }
+    const contest = contestPlaying();
     if (!store.carried) for (const record of store.records.values()) {
-      if (record.mode === 'ground') consider(rayDistance(ray, record.x, record.y, record.z, .6, .55, .55), { kind: 'pickup', record });
+      if (record.mode === 'ground' || (contest && !record.gold && record.mode === 'flying')) {
+        consider(rayDistance(ray, record.x, record.y, record.z, contest ? .88 : .6, .55, contest ? .88 : .55), { kind: 'pickup', record });
+      }
       if (record.mode === 'broken') consider(rayDistance(ray, record.x, .15, record.z, 1.8, .3, 1.8), { kind: 'clean', record });
     }
     if (!candidate) { clearPending(); return false; }
@@ -208,7 +241,7 @@ export function createPlayActions({ THREE, scene, materials, fleet, explorer, av
       if(task.kind==='board')remote('climb',{},result=>startClimb(task,result));
       else {
         const port=byPort.get(task.portId);if(port)explorer.state.heading=port.sign===1?Math.PI:0;
-        remote(task.kind==='pickup'?'pickup':'place',task.kind==='pickup'?{id:task.recordId,portId:task.portId,vehicleId:task.vehicleId}:{id:task.portId},()=>{
+        remote(task.kind==='pickup'?'pickup':'place',task.kind==='pickup'?{id:task.recordId,portId:task.portId,vehicleId:task.vehicleId,...(task.contestPickup?{contestPickup:true}:{})}:{id:task.portId},()=>{
           explorer.state.carrying=Boolean(store.carried);toast(task.kind==='pickup'?'FOUP을 들었어요 · 빈 로드포트를 누르면 내려놓아요':'FOUP을 이 로드포트에 내려놓았어요');
         });
       }
@@ -262,10 +295,23 @@ export function createPlayActions({ THREE, scene, materials, fleet, explorer, av
   }
   function update(dt) {
     if(!network)store.step(dt);
+    if (landingPickup) {
+      const record = store.records.get(landingPickup.id);
+      if (!contestPlaying() || !onFoot() || store.carried || performance.now() > landingPickup.until) {
+        landingPickup = null;
+      } else if (record?.mode !== 'flying') {
+        landingPickup = null;
+        if (record?.mode === 'ground') requestPickup(record);
+      }
+    }
     if (pending) {
       const distance = Math.hypot(explorer.state.position.x - pending.destination.x, explorer.state.position.z - pending.destination.z);
       const last = explorer.state.path.at(-1);
       if (explorer.state.locked || explorer.state.posture !== 'stand' || explorer.state.mode !== 'walk' || (last && Math.hypot(last.x - pending.destination.x, last.z - pending.destination.z) > .02)) clearPending();
+      else if (pending.contestPickup && (!contestPlaying() || store.records.get(pending.recordId)?.mode !== 'ground')) clearPending();
+      else if (pending.contestPickup && canReachGroundFoup(explorer.state.position, store.records.get(pending.recordId))) {
+        const task=pending;pending=null;explorer.stopWalk();begin(task);
+      }
       else if (distance < .025 && !explorer.state.path.length && !avatar.root.userData.resting) { const task = pending; pending = null; begin(task); }
       else if (!explorer.state.path.length && distance > .05) clearPending();
     }
@@ -357,12 +403,12 @@ export function createPlayActions({ THREE, scene, materials, fleet, explorer, av
     return result.sort((a,b) => a.distance - b.distance).slice(0, 30);
   }
   function resetOnline() {
-    requestGeneration++;awaiting=false;cleanRequest=false;pending=null;action=null;passengerId=null;
+    requestGeneration++;awaiting=false;cleanRequest=false;pending=null;landingPickup=null;action=null;passengerId=null;
     explorer.state.cleaningTime=null;
     explorer.setScriptedPose(null);const p=floorSpot(explorer.state.position);if(p)explorer.state.position.set(p.x,0,p.z);
     explorer.state.carrying=false;explorer.setMode('walk');
   }
-  return { tap, update, render, requestBoard, requestPlace, requestStocker, requestCleanup, dismount, throwFoup, clearPending, targets, store, resetOnline,
+  return { tap, update, render, requestBoard, requestPlace, requestStocker, requestCleanup, dismount, throwFoup, nearbyContestFoup, pickupNearby, clearPending, targets, store, resetOnline,
     dispose(){clearPending();if(typeof document!=='undefined')document.removeEventListener?.('visibilitychange',visibility);renderer.dispose();debris.dispose();},
     detachVehicleCargo: detachedVehicleCargo,
     get protectedMachineId() { return pending?.machine?.id ?? action?.machine?.id ?? byPort.get(pending?.portId)?.machineId ?? null; },

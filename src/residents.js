@@ -54,7 +54,8 @@ export function createResidentSimulation({ fleet, store, destruction, detachCarg
     }
     people.push(actor);
   }
-  function reserved(id) { return protectedIds().includes(id); }
+  let protectedTools = new Set();
+  function reserved(id) { return protectedTools.has(id); }
   function release(actor) {
     if (claims.get(actor.targetId) === actor.id) claims.delete(actor.targetId);
     if (actor.phase === 'repair') destruction.cancelRepair(actor.targetId);
@@ -204,6 +205,7 @@ export function createResidentSimulation({ fleet, store, destruction, detachCarg
   }
   function update(dt) {
     if (!Number.isFinite(dt) || dt <= 0) return;
+    protectedTools = new Set(protectedIds());
     dt = Math.min(dt, .1); elapsed += dt;
     const damage=new Set(destruction.state.destroyedIds);
     for(const id of previousDamage)if(!damage.has(id))recentRepairs.set(id,elapsed+REPAIR_STOCK.repairGraceSeconds);

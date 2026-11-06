@@ -1,7 +1,8 @@
-import { isBlocked, machines, bays, SEATED_FOUP_Y } from './layout.js?v=a73f61bfaf6e';
-import {entranceBounds} from './entrance-layout.js?v=a73f61bfaf6e';
-import {CART_HOMES,cartCargoPose,cartFits,cartPoint} from './cart-layout.js?v=a73f61bfaf6e';
-import {stockers,stockerById,stockerBounds,stockerSlot,stockerRecordPose,STOCKER_CAPACITY,STOCKER_TRANSFER_SECONDS,STOCKER_OUT_CUE_AT} from './stocker-layout.js?v=a73f61bfaf6e';
+import { isBlocked, machines, bays, SEATED_FOUP_Y } from './layout.js?v=0aef8956b0b4';
+import {canTraverseRuntimeObstacles} from './runtime-obstacles.js?v=0aef8956b0b4';
+import {entranceBounds} from './entrance-layout.js?v=0aef8956b0b4';
+import {CART_HOMES,cartCargoPose,cartFits,cartPoint} from './cart-layout.js?v=0aef8956b0b4';
+import {stockers,stockerById,stockerBounds,stockerSlot,stockerRecordPose,STOCKER_CAPACITY,STOCKER_TRANSFER_SECONDS,STOCKER_OUT_CUE_AT} from './stocker-layout.js?v=0aef8956b0b4';
 const stockModes=new Set(['stored','stocking','retrieving','stocker-out']);
 // Accept the retired units only while reading older saved worlds.
 const retiredStockers=new Set(['STK03','STK04','STK05','STK06']);
@@ -9,6 +10,19 @@ export const FOUP_CLEAN_SECONDS = 3.2;
 export const FOUP_CLEAN_REWARD = 2;
 export const FOUP_RESTOCK_SECONDS = 12;
 export const STOCKER_REFILL_COUNT = 12;
+export const FOUP_PICKUP_REACH = 2;
+
+export function canReachGroundFoup(from, record) {
+  if (record?.mode !== 'ground') return false;
+  const dx = record.x - from.x, dz = record.z - from.z;
+  const distance = Math.hypot(dx, dz);
+  if (distance > FOUP_PICKUP_REACH || !canTraverseRuntimeObstacles(from, record, .08)) return false;
+  const steps = Math.max(1, Math.ceil(distance / .12));
+  for (let i = 0; i <= steps; i++) {
+    if (isBlocked(from.x + dx * i / steps, from.z + dz * i / steps, .08)) return false;
+  }
+  return true;
+}
 
 export function floorSpot(point, radius = .295) {
   if (!isBlocked(point.x, point.z, radius)) return { x: point.x, z: point.z };

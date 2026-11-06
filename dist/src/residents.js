@@ -1,19 +1,19 @@
-import { machines, bays, ports, BAY_CENTERS } from './layout.js?v=a73f61bfaf6e';
-import { NPC_WALK_SPEED, NPC_REPAIR_SPEED } from './locomotion.js?v=a73f61bfaf6e';
-import { findWalkPath } from './walking.js?v=a73f61bfaf6e';
-import {stepNpc,rerouteNpc,npcDestination} from './npc-navigation.js?v=a73f61bfaf6e';
-import { getEmoApproach } from './emo-interaction.js?v=a73f61bfaf6e';
-import { findRestHeading } from './posture.js?v=a73f61bfaf6e';
-import { createVisitorName, createVisitorBadge } from './visitor-name.js?v=a73f61bfaf6e';
-import {npcDestructionTitle} from './destruction-titles.js?v=a73f61bfaf6e';
-import { createAvatar } from './avatar.js?v=a73f61bfaf6e';
-import {createAvatarAppearance} from './avatar-appearance.js?v=a73f61bfaf6e';
-import {npcOutfit} from './npc-outfits.js?v=a73f61bfaf6e';
-import { floorSpot } from './foup-play.js?v=a73f61bfaf6e';
-import { reservedPortIds } from './network-transport.js?v=a73f61bfaf6e';
-import {isEventBay,avoidsEventBay} from './safety-team.js?v=a73f61bfaf6e';
+import { machines, bays, ports, BAY_CENTERS } from './layout.js?v=0aef8956b0b4';
+import { NPC_WALK_SPEED, NPC_REPAIR_SPEED } from './locomotion.js?v=0aef8956b0b4';
+import { findWalkPath } from './walking.js?v=0aef8956b0b4';
+import {stepNpc,rerouteNpc,npcDestination} from './npc-navigation.js?v=0aef8956b0b4';
+import { getEmoApproach } from './emo-interaction.js?v=0aef8956b0b4';
+import { findRestHeading } from './posture.js?v=0aef8956b0b4';
+import { createVisitorName, createVisitorBadge } from './visitor-name.js?v=0aef8956b0b4';
+import {npcDestructionTitle} from './destruction-titles.js?v=0aef8956b0b4';
+import { createAvatar } from './avatar.js?v=0aef8956b0b4';
+import {createAvatarAppearance} from './avatar-appearance.js?v=0aef8956b0b4';
+import {npcOutfit} from './npc-outfits.js?v=0aef8956b0b4';
+import { floorSpot } from './foup-play.js?v=0aef8956b0b4';
+import { reservedPortIds } from './network-transport.js?v=0aef8956b0b4';
+import {isEventBay,avoidsEventBay} from './safety-team.js?v=0aef8956b0b4';
 
-import { RESIDENT_ROLES } from './room-population.js?v=a73f61bfaf6e';
+import { RESIDENT_ROLES } from './room-population.js?v=0aef8956b0b4';
 export { RESIDENT_ROLES };
 export const REPAIR_STOCK=Object.freeze({minimum:50,target:60,repairGraceSeconds:45});
 const distance = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -54,7 +54,8 @@ export function createResidentSimulation({ fleet, store, destruction, detachCarg
     }
     people.push(actor);
   }
-  function reserved(id) { return protectedIds().includes(id); }
+  let protectedTools = new Set();
+  function reserved(id) { return protectedTools.has(id); }
   function release(actor) {
     if (claims.get(actor.targetId) === actor.id) claims.delete(actor.targetId);
     if (actor.phase === 'repair') destruction.cancelRepair(actor.targetId);
@@ -204,6 +205,7 @@ export function createResidentSimulation({ fleet, store, destruction, detachCarg
   }
   function update(dt) {
     if (!Number.isFinite(dt) || dt <= 0) return;
+    protectedTools = new Set(protectedIds());
     dt = Math.min(dt, .1); elapsed += dt;
     const damage=new Set(destruction.state.destroyedIds);
     for(const id of previousDamage)if(!damage.has(id))recentRepairs.set(id,elapsed+REPAIR_STOCK.repairGraceSeconds);

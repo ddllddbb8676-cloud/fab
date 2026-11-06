@@ -1,4 +1,4 @@
-import {PROTOCOL} from './shared-protocol.js?v=a73f61bfaf6e';
+import {PROTOCOL} from './shared-protocol.js?v=0aef8956b0b4';
 
 export function embeddedRoomConfig(time){
   const serverTime=Number(time);

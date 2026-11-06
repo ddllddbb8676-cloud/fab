@@ -1,14 +1,26 @@
 import {bays} from '../src/layout.js';
 import {CONTEST_ZONES} from '../src/foup-contest.js';
 
-// A modest supply near the two circles; interleave bays and both machine rows.
-// Plan once, then the recruitment timer applies at most one repair per tick.
-export function planContestRepairs(isDestroyed, available=()=>true) {
-  const nearby=bays.filter(b=>CONTEST_ZONES.some(z=>Math.abs(z.z-b.z)<.01));
-  const groups=nearby.map(b=>{
-    const needed=Math.min(4,Math.max(0,12-b.machines.filter(m=>!isDestroyed(m.id)).length));
-    return b.machines.filter(m=>isDestroyed(m.id)&&available(m.id))
-      .sort((a,c)=>Math.abs(a.x)-Math.abs(c.x)||a.z-c.z).slice(0,needed).map(m=>m.id);
+const targetWorking = 16;
+const frontCount = 4;
+const rowsByBay = bays.filter(bay => CONTEST_ZONES.some(zone => zone.z === bay.z))
+  .map(bay => [...bay.machines].sort((a, b) => Math.abs(a.x) - Math.abs(b.x) || a.z - b.z));
+export const contestMachineIds = new Set(rowsByBay.flat().map(machine => machine.id));
+
+export function planContestRepairs(isDestroyed, available = () => true) {
+  const groups = rowsByBay.map(machines => {
+    const broken = machines.filter(machine => isDestroyed(machine.id));
+    const needed = targetWorking - (machines.length - broken.length);
+    const candidates = broken.filter(machine => available(machine.id));
+    const front = machines.slice(0, frontCount);
+    const brokenFront = candidates.filter(machine => front.includes(machine)).length;
+    return candidates.slice(0, Math.max(0, needed, brokenFront));
   });
-  return Array.from({length:4},(_,i)=>groups.map(ids=>ids[i]).filter(Number.isInteger)).flat();
+  // Each ring sees repairs from the first wave, even in a mostly broken fab.
+  const plan = [];
+  const longest = Math.max(...groups.map(group => group.length));
+  for (let i = 0; i < longest; i++) {
+    for (const group of groups) if (group[i]) plan.push(group[i].id);
+  }
+  return plan;
 }

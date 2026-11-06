@@ -13,8 +13,9 @@ const owner=id(9),white=id(1),black=id(2),spectator=id(3);
 const uuid=n=>'00000000-0000-0000-0000-'+String(n).padStart(12,'0');
 const outfit={head:'cat-ears',face:'heart-glasses',bag:'bag-turtle',beauty:'eyes-default',suit:'suit-pink'};
 const visible=(room,id,point)=>room.pose(id,{...point,y:0,heading:0,speed:0,posture:'stand',hidden:false});
-function game({at=Date.parse('2026-11-05T10:00:00+09:00'),accounts=[white,black,owner,spectator],savedEvents,savedFoups,profiles=new Map()}={}){
-  const room=createRoom({now:()=>at,ownerId:owner,onProfileChange:p=>profiles.set(p.id,structuredClone(p))});
+function game({at=Date.parse('2026-11-05T10:00:00+09:00'),accounts=[white,black,owner,spectator],savedEvents,savedFoups,savedEquipment,onEquipmentChange,profiles=new Map()}={}){
+  const room=createRoom({now:()=>at,ownerId:owner,onEquipmentChange,onProfileChange:p=>profiles.set(p.id,structuredClone(p))});
+  if(savedEquipment)room.restoreEquipment(savedEquipment);
   if(savedFoups)room.restoreFoups(savedFoups);
   if(savedEvents)room.worldEvents.restore(savedEvents);
   for(const p of profiles.values())room.rememberContestProfile(p);
@@ -43,15 +44,28 @@ function takeAndThrow(f,account,zone,r){
 test('two reachable central circles one bay apart and enough safe gathering positions',()=>{
   assert.deepEqual(zones.map(z=>z.team),['black','white']);assert.equal(zones[1].z-zones[0].z,BAY_PITCH);
   for(const zone of zones)for(let i=0;i<16;i++){const angle=i*Math.PI/8;assert.equal(isBlocked(zone.x+2.4*Math.cos(angle),zone.z+2.4*Math.sin(angle),.295),false);}
-  for(let i=0;i<101;i++){const p=gatheringPoint(i);assert.equal(isBlocked(p.x,p.z,.295),false);assert.equal(contestZone(p.x,p.z),null);}
+  for(const team of ['white','black']){
+    const seen=new Set();
+    for(let i=0;i<51;i++){
+      const p=gatheringPoint(team,i);assert.equal(isBlocked(p.x,p.z,.295),false);
+      assert.equal(contestZone(p.x,p.z),team);seen.add(p.x+','+p.z);
+    }
+    assert.equal(seen.size,51);
+  }
+  assert.deepEqual(gatheringPoint('referee'),{x:0,z:(zones[0].z+zones[1].z)/2});
 });
 test('join order, double clicks, operator balance and suit-only display including accessory edits',()=>{
   const f=game(),r=f.room,receipt=f.start();assert.ok(receipt.ok);
   assert.equal(f.start().replayed,true);assert.equal(f.join(owner).ok,false);
   assert.equal(f.join(white).team,'white');assert.equal(f.join(white).team,'white');assert.equal(f.join(black).team,'black');
+  assert.equal(contestZone(r.players.get(white).x,r.players.get(white).z),'white');
+  assert.equal(contestZone(r.players.get(black).x,r.players.get(black).z),'black');
   assert.equal(r.worldEvents.view().contest.joined,2);assert.equal(r.worldEvents.startManual('bay',uuid(2)).status,409);
   const before=r.wallet(white),m=receipt.event;
   assert.equal(m.endsAt-m.startsAt,180000);f.clock(m.startsAt);
+  for(const [id,expected] of [[white,'white'],[black,'black'],[owner,null]]) {
+    const {contestGather:p}=r.players.get(id);assert.equal(contestZone(p.x,p.z),expected);
+  }
   const display=account=>r.roster().find(row=>row[0]===account);
   assert.equal(display(owner)[4],'referee');assert.deepEqual(display(owner)[3],{...outfit,suit:'suit-blue'});
   assert.deepEqual(display(white)[3],{...outfit,suit:'suit-default'});assert.deepEqual(display(black)[3],{...outfit,suit:'suit-black'});
@@ -64,8 +78,22 @@ test('join order, double clicks, operator balance and suit-only display includin
 test('odd visitors get the operator on black; a missing operator or empty lobby cancels fairly',()=>{
   const f=game();const m=f.start().event;f.join(white);f.clock(m.startsAt);
   assert.equal(f.room.worldEvents.contest.team(owner),'black');assert.equal(f.room.worldEvents.view().contest.joined,2);
+  const pos=f.room.players.get(owner);assert.deepEqual({x:pos.x,z:pos.z},gatheringPoint('referee'));
   for(const count of [0,1]){const f=game({accounts:[white]});const m=f.start().event;if(count)f.join(white);f.clock(m.startsAt);
     assert.equal(f.room.worldEvents.view().contest.phase,'cancelled');assert.equal(f.room.wallet(white).chips,0);}
+});
+test('a departure during recruitment puts remaining players in their final team circles and leaves the operator at the midpoint',()=>{
+  const f=game(),r=f.room,m=f.start().event;
+  f.join(white);f.join(black);f.join(spectator);r.remove(white);f.clock(m.startsAt);
+  assert.equal(r.worldEvents.contest.team(black),'white');assert.equal(r.worldEvents.contest.team(spectator),'black');
+  for (const id of [black,spectator]) {
+    const target=r.players.get(id).contestGather;
+    assert.equal(contestZone(target.x,target.z),r.worldEvents.contest.team(id));
+    visible(r,id,{x:0,z:65});
+    assert.equal(contestZone(r.players.get(id).x,r.players.get(id).z),r.worldEvents.contest.team(id));
+    f.ackGather(id);assert.equal(r.players.get(id).contestGather,undefined);
+  }
+  const p=r.players.get(owner);assert.deepEqual({x:p.x,z:p.z},gatheringPoint('referee'));
 });
 test('a real throw lands intact, stealing subtracts immediately, and the final counts pay each team once',()=>{
   const f=game(),r=f.room,m=f.start().event;f.join(white);f.join(black);f.clock(m.startsAt);
@@ -93,39 +121,69 @@ test('reconstruction and a disconnected player retain scores; a draw credits bot
   again.clock(m.endsAt+2);assert.equal(again.room.wallet(white).chips,before+20);
 });
 
+test('an opponent throws a scored FOUP outside, either team can recover it there, and only its final ring counts',()=>{
+  const f=game(),r=f.room,m=f.start().event;f.join(white);f.join(black);f.clock(m.startsAt);
+  const ball=takeAndThrow(f,white,zones[1]);f.ackGather(black);visible(r,black,ball);
+  const collect=player=>r.command(player,'pickup',{id:ball.id,contestPickup:true});
+  assert.ok(collect(black).ok);assert.equal(r.worldEvents.view().contest.white,0);
+  visible(r,black,{x:0,z:6});assert.ok(r.command(black,'throw',{}).contestThrow);
+  assert.equal(collect(white).ok,false,'cannot take in flight');
+  for(let i=0;i<45;i++)r.store.step(.05);
+  assert.equal(ball.mode,'ground');assert.equal(contestZone(ball.x,ball.z),null);
+  visible(r,white,{x:ball.x,z:ball.z+2.2});assert.equal(collect(white).ok,false,'out of reach');
+  visible(r,spectator,ball);assert.equal(collect(spectator).ok,false);
+  visible(r,white,{x:ball.x,z:ball.z+1.8});visible(r,black,ball);
+  assert.ok(collect(white).ok);assert.equal(collect(black).ok,false,'same FOUP cannot go into two hands');
+  visible(r,white,{x:0,z:zones[1].z-4.4});r.command(white,'throw',{});
+  for(let i=0;i<45;i++)r.store.step(.05);
+  const before=r.wallet(white).chips;f.clock(m.endsAt);
+  assert.equal(r.worldEvents.view().contest.white,1);assert.equal(r.worldEvents.view().contest.black,0);
+  assert.equal(r.wallet(white).chips-before,30);
+});
+
 test('the spectator operator travels with the lobby and can revisit without joining or gaining rewards',()=>{
   const f=game(),r=f.room,m=f.start().event;
-  assert.deepEqual({x:r.players.get(owner).x,z:r.players.get(owner).z},gatheringPoint(100));
+  assert.deepEqual({x:r.players.get(owner).x,z:r.players.get(owner).z},gatheringPoint('referee'));
   f.join(white);f.join(black);f.clock(m.startsAt);f.ackGather(owner);visible(r,owner,{x:0,z:60});
   assert.equal(r.command(spectator,'contest-visit',{eventId:m.id}).ok,false);
   assert.equal(r.command(owner,'contest-visit',{eventId:'old'}).ok,false);
   assert.equal(r.command(owner,'contest-visit',{eventId:m.id}).ok,true);
   assert.equal(r.command(owner,'contest-visit',{eventId:m.id}).ok,false);
   assert.equal(r.worldEvents.view().contest.joined,2);assert.equal(r.worldEvents.contest.team(owner),'referee');
-  assert.deepEqual({x:r.players.get(owner).x,z:r.players.get(owner).z},gatheringPoint(100));
+  assert.deepEqual({x:r.players.get(owner).x,z:r.players.get(owner).z},gatheringPoint('referee'));
   takeAndThrow(f,white,zones[1]);f.clock(m.endsAt);assert.equal(r.wallet(owner).chips,0);
   const odd=game(),om=odd.start().event;odd.join(white);odd.clock(om.startsAt);
   assert.equal(odd.room.command(owner,'contest-visit',{eventId:om.id}).ok,false,'a playing operator cannot teleport');
 });
 
-test('recruitment repairs a few nearby tools gradually, respects repair ownership and persists the remaining plan',()=>{
-  const f=game(),r=f.room;
+test('recruitment restores nearby load ports in waves and reaches 16 working per bay even after a delayed start',()=>{
+  let writes=0;
+  const f=game({onEquipmentChange:()=>writes++}),r=f.room;
   for(const m of machines)r.destruction.trigger(m.id);
   const occupied=bays[4].machines.at(-1).id;r.destruction.beginRepair(occupied,'someone');
   const plan=planContestRepairs(r.destruction.isDestroyed,id=>id!==occupied);
-  assert.equal(plan.length,16);assert.equal(new Set(plan).size,16);
+  assert.equal(plan.length,64);assert.equal(new Set(plan).size,64);
   assert.deepEqual([...new Set(plan.map(id=>machines[id].bayId))].sort((a,b)=>a-b),[4,5,13,14]);
   const before=[r.profile(white).wallet,r.profile(white).repairedCount],m=f.start().event;f.join(white);f.join(black);
   assert.equal(r.destruction.state.destroyedIds.length,360);
-  f.clock(m.startsAt-28500);assert.equal(r.destruction.state.destroyedIds.length,359);
-  f.clock(m.startsAt-1000);assert.equal(r.destruction.state.destroyedIds.length,358,'a delayed tick never bursts all repairs');
-  const checkpoint=r.worldEvents.checkpoint();assert.equal(checkpoint.contest.repairs.length,14);
-  const resumed=game({at:m.startsAt-500,savedEvents:checkpoint});
-  assert.equal(resumed.room.worldEvents.checkpoint().contest.repairs.length,14);
-  f.clock(m.startsAt);assert.equal(r.destruction.state.destroyedIds.length,358,'repairs stop when play starts');
+  writes=0;f.clock(m.startsAt-28500);assert.equal(r.destruction.state.destroyedIds.length,356);
+  assert.equal(writes,1,'one equipment checkpoint for the whole wave');
+  f.clock(m.startsAt-1000);assert.equal(r.destruction.state.destroyedIds.length,352);
+  const checkpoint=r.worldEvents.checkpoint();
+  checkpoint.contest.repairs=plan.slice(0,10); // Resume an old short queue using current damage.
+  const resumed=game({at:m.startsAt-500,savedEvents:checkpoint,savedEquipment:r.equipmentState()});
+  resumed.clock(m.startsAt);
+  for(const bay of [4,5,13,14])assert.equal(bays[bay].machines.filter(m=>!resumed.room.destruction.isDestroyed(m.id)).length,16);
+  writes=0;f.clock(m.startsAt);assert.equal(writes,1,'one final checkpoint for all remaining repairs');
+  for(const bay of bays){
+    const working=bay.machines.filter(m=>!r.destruction.isDestroyed(m.id));
+    assert.equal(working.length,[4,5,13,14].includes(bay.id)?16:0);
+    if(working.length)assert.ok(bay.machines.filter(m=>Math.abs(m.x)<11&&m.id!==occupied).every(m=>working.includes(m)));
+  }
   assert.equal(r.destruction.isDestroyed(occupied),true);assert.deepEqual([r.profile(white).wallet,r.profile(white).repairedCount],before);
-  const healthy=new Set(bays[4].machines.slice(0,12).map(m=>m.id));
-  assert.equal(planContestRepairs(id=>!healthy.has(id)).filter(id=>machines[id].bayId===4).length,0);
+  const front=bays[4].machines.filter(m=>Math.abs(m.x)<11).map(m=>m.id);
+  assert.deepEqual(new Set(planContestRepairs(id=>front.includes(id))),new Set(front),'restore visible front tools even when all distant tools are healthy');
+  assert.deepEqual(planContestRepairs(()=>false),[]);
 });
 
 test('all safety duty pauses for spectators and players, including reconnect, then resumes after the result',()=>{

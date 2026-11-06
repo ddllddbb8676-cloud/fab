@@ -12,7 +12,7 @@ import {stockers,stockerPoint} from '../src/stocker-layout.js';
 import {AIR_SHOWER} from '../src/air-shower.js';
 import {setRuntimeObstacles} from '../src/runtime-obstacles.js';
 
-function harness({ destroyed = false,networkFactory=null } = {}) {
+function harness({ destroyed = false,networkFactory=null, contestPlaying=()=>false } = {}) {
   const previousDocument = globalThis.document, previousWindow = globalThis.window;
   globalThis.document = { hidden: false, getElementById: () => ({ classList: { contains: () => true, add() {}, remove() {} } }), addEventListener() {} };
   globalThis.window = { addEventListener() {} };
@@ -25,7 +25,7 @@ function harness({ destroyed = false,networkFactory=null } = {}) {
   explorer.state.position.set(v.state.car.x, 0, m.z + m.sign * 4.1);
   const materials = Object.fromEntries(['foup', 'foupDoor', 'dark', 'foupRib'].map(k => [k, new THREE.MeshStandardMaterial()]));
   const network=networkFactory?.({fleet,explorer,avatar,v,m});
-  play = createPlayActions({ THREE, scene, materials, fleet, explorer, avatar, network, initialPortIds: [initial.id], hideOriginal: id => hidden.push(id), isDestroyed: id => destroyed && id === m.id, toast: t => toasts.push(t) });
+  play = createPlayActions({ THREE, scene, materials, fleet, explorer, avatar, network, contestPlaying, initialPortIds: [initial.id], hideOriginal: id => hidden.push(id), isDestroyed: id => destroyed && id === m.id, toast: t => toasts.push(t) });
   return { scene, camera, listeners, avatar, fleet, explorer, play, v, m, initial, empty, toasts, hidden,
     step(seconds) { for (let t = 0; t < seconds; t += 1 / 60) { if(!network)fleet.step(1 / 60); play.update(1 / 60); explorer.update(1 / 60); play.render(); } },
     dispose() { play.dispose();avatar.dispose(); for (const material of Object.values(materials)) material.dispose(); globalThis.document = previousDocument; globalThis.window = previousWindow; }
@@ -98,6 +98,37 @@ test('a real canvas pointer tap retains the FOUP approach path until pickup',()=
     assert.equal(h.play.state.phase,'approach');assert.ok(h.explorer.state.path.length>0);
     h.step(5);assert.equal(h.play.state.carriedId,`port:${p.id}`);
   }finally{h.dispose();}
+});
+
+test('an outside-ring contest FOUP tapped on the last bounce is picked up at its landing position with one tap',()=>{
+  const h=harness({contestPlaying:()=>true});
+  try {
+    const r=h.play.store.adopt('vehicle:55',{x:0,y:.3,z:5.1,yaw:0});
+    h.play.store.launch(r,{x:0,y:.3,z:5.1},{x:.3,y:.3,z:.6});
+    h.explorer.state.position.set(0,0,4.1);
+    h.camera.position.set(0,2,2.8);h.camera.lookAt(r.x,r.y,r.z);h.camera.updateMatrixWorld();
+    const tap={pointerId:1,clientX:195,clientY:422};
+    h.listeners.get('pointerdown')(tap);h.listeners.get('pointerup')(tap);
+    assert.equal(h.play.store.carried,null,'a FOUP still in flight stays in the air');
+    h.step(1);
+    assert.equal(h.play.store.carried?.id,r.id);
+  }finally{h.dispose();}
+});
+
+test('the contest pickup action works beside a moving joystick, chooses the nearest reachable floor FOUP and excludes spectators',()=>{
+  let playing=true;
+  const h=harness({contestPlaying:()=>playing});
+  try {
+    h.explorer.state.position.set(0,0,6);h.explorer.beginJoystick();h.explorer.moveJoystick(.3,0);
+    h.play.store.adopt('vehicle:51',{x:.9,y:.225,z:6,yaw:0});
+    const right=h.play.store.adopt('vehicle:52',{x:-1.25,y:.225,z:6,yaw:0});
+    setRuntimeObstacles([{minX:.30,maxX:.49,minZ:5.8,maxZ:6.2}]);
+    assert.equal(h.play.nearbyContestFoup()?.id,right.id,'the nearer FOUP is across a barrier');
+    assert.ok(h.play.pickupNearby());assert.equal(h.play.store.carried?.id,right.id);
+    assert.equal(h.play.nearbyContestFoup(),null);
+    h.play.throwFoup(true);playing=false;
+    assert.equal(h.play.pickupNearby(),false);assert.equal(h.play.store.carried,null);
+  }finally{setRuntimeObstacles([]);h.dispose();}
 });
 
 test('FOUPs at both reported entrance positions can be tapped and picked up from outside the closed air shower',()=>{

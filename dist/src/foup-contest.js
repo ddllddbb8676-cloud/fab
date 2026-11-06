@@ -1,4 +1,4 @@
-import {BAY_CENTERS} from './layout.js?v=a73f61bfaf6e';
+import {BAY_CENTERS} from './layout.js?v=0aef8956b0b4';
 
 export const CONTEST_NAME = '흑백 풉 쟁탈전';
 export const CONTEST_RULES = Object.freeze({recruitMs:30_000, playMs:180_000, resultMs:12_000, radius:2.45, win:30, lose:15, tie:20});
@@ -14,9 +14,19 @@ export function contestZone(x, z) {
   return CONTEST_ZONES.find(zone => (x-zone.x)**2 + (z-zone.z)**2 <= CONTEST_RULES.radius**2)?.team ?? null;
 }
 
-export function gatheringPoint(index) {
-  const middle=(CONTEST_ZONES[0].z+CONTEST_ZONES[1].z)/2;
-  return {x:((index % 8) - 3.5) * .64, z:middle+(Math.floor(index / 8) - 6) * .5};
+export function gatheringPoint(team, seat = 0) {
+  const zone = CONTEST_ZONES.find(zone => zone.team === team);
+  if (!zone) return {x:0, z:(CONTEST_ZONES[0].z + CONTEST_ZONES[1].z) / 2};
+  if (seat === 0) return {x:zone.x, z:zone.z};
+  // Seat one player in the center, then distribute teammates in rings of 6, 12, 18…
+  let ring = 1, slot = seat - 1;
+  while (slot >= 6 * ring) {
+    slot -= 6 * ring;
+    ring++;
+  }
+  const angle = (slot + (ring % 2) / 2) * Math.PI / (3 * ring);
+  const radius = Math.min(.60 * ring, CONTEST_RULES.radius - .30);
+  return {x:zone.x + Math.sin(angle) * radius, z:zone.z + Math.cos(angle) * radius};
 }
 
 export function contestRewards(match) {

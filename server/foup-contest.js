@@ -1,4 +1,4 @@
-import {CONTEST_RULES as rules, contestZone, contestRewards} from '../src/foup-contest.js';
+import {CONTEST_RULES as rules, contestZone, contestRewards, gatheringPoint} from '../src/foup-contest.js';
 
 const visitor = /^visitor:[a-f0-9]{64}$/;
 const carrier = /^(port:\d{1,3}:\d|vehicle:\d{1,2})$/;
@@ -20,17 +20,21 @@ export function createFoupContest({now, ownerId, ready, gather, rosterChanged, a
   function start(at) {
     const startsAt = at + rules.recruitMs;
     match = {id:'contest:'+at, phase:'recruiting', startsAt, endsAt:startsAt+rules.playMs,
-      members:[], balls:{}, black:0, white:0, repairs:planRepairs(), nextRepairAt:at+1500};
+      members:[], balls:{}, black:0, white:0, nextRepairAt:at+1500};
     rosterChanged();
-    if(ownerId&&ready(ownerId))gather(ownerId,100,match.id+':referee-lobby');
+    if(ownerId&&ready(ownerId))gather(ownerId,gatheringPoint('referee'),match.id+':referee-lobby');
     return match;
   }
   function visit(id,eventId) {
     if(!ownerId||id!==ownerId||!live()||match.id!==eventId||team(id)!=='referee'||!ready(id))
       return deny('관전 중인 운영자만 함께 이동할 수 있어요.');
     if(now()-lastVisit<2000)return deny('잠시 후 다시 이동해 주세요.');
-    lastVisit=now();gather(id,100,match.id+':visit:'+now());
+    lastVisit=now();gather(id,gatheringPoint('referee'),match.id+':visit:'+now());
     return {ok:true,team:'referee'};
+  }
+  function gatherMember(id, index, token) {
+    const team = id === ownerId ? 'referee' : side(index);
+    gather(id, gatheringPoint(team, Math.floor(index / 2)), token);
   }
   function join(id, eventId) {
     if (!match || match.id !== eventId || match.phase !== 'recruiting' || now() >= match.startsAt)
@@ -39,7 +43,7 @@ export function createFoupContest({now, ownerId, ready, gather, rosterChanged, a
     if (id === ownerId) return deny('세미의 팀은 참가 모집이 끝나면 정해져요.');
     if (!match.members.includes(id)) {
       match.members.push(id);
-      gather(id, match.members.length-1, match.id+':lobby');
+      gatherMember(id, match.members.length-1, match.id+':lobby');
       rosterChanged();
       onChange();
     }
@@ -51,8 +55,9 @@ export function createFoupContest({now, ownerId, ready, gather, rosterChanged, a
     onChange();
   }
   function tick(at) {
-    if(match?.phase==='recruiting'&&at<match.startsAt&&match.repairs?.length&&at>=match.nextRepairAt){
-      repair(match.repairs.shift());match.nextRepairAt=at+1500;onChange();
+    if(match?.phase==='recruiting' && at<match.startsAt && at>=match.nextRepairAt){
+      repair(planRepairs().slice(0,4));
+      match.nextRepairAt=at+1500;
     }
     if (match?.phase === 'recruiting' && at >= match.startsAt) {
       if (at >= match.endsAt) return cancel(at, '모집 시간이 지나 이번 경기는 마쳤어요.');
@@ -62,11 +67,12 @@ export function createFoupContest({now, ownerId, ready, gather, rosterChanged, a
         if (!ownerId || !ready(ownerId)) return cancel(at, '홀수 팀을 맞추려면 세미가 팹 안에 있어야 해요.');
         match.members.push(ownerId);
       }
-      match.members.forEach((id, index) => gather(id, index, match.id+':start'));
-      if(!match.members.includes(ownerId)&&ready(ownerId))gather(ownerId,100,match.id+':referee-start');
+      repair(planRepairs());
+      match.members.forEach((id, index) => gatherMember(id, index, match.id+':start'));
+      if(!match.members.includes(ownerId)&&ready(ownerId))gather(ownerId,gatheringPoint('referee'),match.id+':referee-start');
       // All participants have left their previous positions before old floor
       // carriers are recycled. No pre-existing carrier scores for either side.
-      clearZones();match.repairs=[];match.phase = 'active';
+      clearZones();match.phase = 'active';
       rosterChanged();
       onChange();
     }
@@ -123,6 +129,9 @@ export function createFoupContest({now, ownerId, ready, gather, rosterChanged, a
         saved.repairs.some(id=>!Number.isInteger(id)||id<0||id>=360)||new Set(saved.repairs).size!==saved.repairs.length||!Number.isFinite(saved.nextRepairAt)))
       throw Error('Invalid FOUP contest preparation');
     match = structuredClone(saved);
+    // Older releases saved a short repair queue. Rebuild from the actual machines.
+    delete match.repairs;
+    if (!Number.isFinite(match.nextRepairAt)) match.nextRepairAt = match.startsAt - rules.recruitMs + 1500;
   }
   return {start, join, visit, tick, live, safetyPaused, team, playing, moved, track, view, restore,
     hasMember:id=>live() && match.members.includes(id),

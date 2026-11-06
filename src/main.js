@@ -684,7 +684,7 @@ destruction = createEquipmentDestruction({ THREE, scene, machines: layoutMachine
 playActions = createPlayActions({ THREE, scene, materials: M, fleet, explorer, avatar, initialPortIds,seedStockers:!connectionConfig,
   hideOriginal(portId) { removedOriginalFoups.add(portId); for (const hide of originalFoupParts.get(portId) ?? []) hide(); },
   showOriginal(portId) { removedOriginalFoups.delete(portId);for(const show of originalFoupParts.get(portId)??[])show(true); },
-  isDestroyed: id => destruction.isDestroyed(id), toast, onCue: motionCue, network:onlineLink, isRestricted: () => Boolean(cartControls?.active)||safetyState.penalty > 0&&!contestUI?.playing, reducedMotion });
+  isDestroyed: id => destruction.isDestroyed(id), toast, onCue: motionCue, network:onlineLink, contestPlaying:()=>Boolean(contestUI?.playing), isRestricted: () => Boolean(cartControls?.active)||safetyState.penalty > 0&&!contestUI?.playing, reducedMotion });
 const nicknameUI=createNicknameUI({command:(...args)=>onlineLink.command(...args),connected:()=>Boolean(onlineLink?.connected),onToggle:open=>{if(open){viewControls.closeAll();directory.close();$('help').classList.add('hidden');$('tool-card').classList.add('hidden');}explorer.lock(open||entry.active||$('google-entry-notice').open);}});
 const googleEntryNotice = createGoogleEntryNotice({dialog: $('google-entry-notice'), enabled: !$('google-account-link').hidden,
   onToggle: open => explorer.lock(open || entry.active || nicknameUI.isOpen)});
@@ -828,6 +828,7 @@ function updateConnectionLabel(status=multiplayer?.status) {
   if($('population-summary').textContent!==description)$('population-summary').textContent=description;
 }
 $('oht-dismount').addEventListener('click', () => playActions.dismount());
+$('contest-pickup').addEventListener('click', () => playActions.pickupNearby());
 $('foup-drop').addEventListener('click', () => playActions.throwFoup(true));
 $('foup-throw').addEventListener('click', () => playActions.throwFoup());
 function updateEmoCard() {
@@ -971,7 +972,10 @@ function updateZone() {
   $('oht-dismount').classList.toggle('hidden', !playActions.busy || play.phase==='cleaning');
   $('oht-dismount').disabled = !play.canDismount;
   $('oht-dismount').textContent = play.phase === 'riding' ? '내리기 ↓' : play.phase === 'climb' ? '올라가는 중…' : '내려오는 중…';
-  $('foup-actions').classList.toggle('hidden', !play.carriedId || entry.active);
+  const canCollect = !entry.active && Boolean(playActions.nearbyContestFoup());
+  $('contest-pickup').hidden = !canCollect;
+  $('foup-drop').hidden = $('foup-throw').hidden = !play.carriedId;
+  $('foup-actions').classList.toggle('hidden', entry.active || (!play.carriedId && !canCollect));
   for (const id of ['walk', 'tour', 'ride', 'overview', 'equipment-list', 'restore-equipment', 'reset', 'rear-view', 'transfer-view']) $(id).disabled = catchReaction.active || cartControls.active || playActions.busy || Boolean(safetyState.penalty && !['walk','overview','equipment-list','restore-equipment'].includes(id));
   for (const posture of ['sit', 'lie']) {
     const active = explorer.state.posture === posture, button = $(`posture-${posture}`);

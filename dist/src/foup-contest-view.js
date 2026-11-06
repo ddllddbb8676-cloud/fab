@@ -1,4 +1,4 @@
-import {CONTEST_NAME, CONTEST_RULES, CONTEST_ZONES, contestRewards} from './foup-contest.js?v=a73f61bfaf6e';
+import {CONTEST_NAME, CONTEST_RULES, CONTEST_ZONES, contestRewards} from './foup-contest.js?v=0aef8956b0b4';
 
 // Two instanced floor decals, allocated only when a match is announced.
 export function createContestZones(THREE, scene) {
@@ -123,7 +123,7 @@ export function createContestUI({doc=document, now=()=>performance.now(), comman
     if(recruiting){
       detail.textContent=(teamGoal[team]?teamGoal[team]+'! ':'내 방진복과 같은 색 원에 ')+`풉을 모으세요! 던져 넣기·상대 풉 뺏기도 가능 · 3분 대결 · ${match.joined}명 참가`;
     }else if(active){
-      detail.textContent=team==='referee'?'파란 심판 · 관전 중':teamGoal[team]?teamGoal[team]+' · 풉을 옮겨 넣으세요! 던져도 돼요':'관전 중';
+      detail.textContent=team==='referee'?'파란 심판 · 관전 중':teamGoal[team]?teamGoal[team]+' · 던져 넣으세요! 바닥 풉 옆에선 ‘풉 줍기’':'관전 중';
     }else if(match.phase==='cancelled')detail.textContent=match.reason;
     else detail.textContent=amount?`내 보상 +${amount}칩 적립`:'최종 집계';
     const referee=team==='referee'&&(recruiting||active);
