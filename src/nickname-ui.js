@@ -6,8 +6,8 @@ export function createNicknameUI({command,connected,onToggle}) {
   const accountEntry=document.getElementById('google-account-link');
   let restoreLink;
   if(accountEntry && !accountEntry.hidden){
-    restoreLink=document.createElement('a');restoreLink.className='nickname-restore';restoreLink.href=accountEntry.href;
-    restoreLink.textContent='구글에 연결한 캐릭터 불러오기';$('.nickname-edit').append(restoreLink);
+    restoreLink=document.createElement('a');restoreLink.className='nickname-restore';restoreLink.href='/account?mode=login';
+    restoreLink.textContent='기존 캐릭터로 구글 로그인';$('.nickname-edit').append(restoreLink);
   }
   let info=null,busy=false,step='edit',candidate='',candidateTicket=0,composing=false;
   function render(){const reviewing=step==='review';$('.nickname-edit').hidden=reviewing;$('.nickname-review').hidden=!reviewing;$('.nickname-next').disabled=busy||!connected();$('.nickname-confirm').disabled=busy||!connected();$('.nickname-back').disabled=busy;$('#nickname-input').disabled=busy;$('.nickname-confirm').textContent=busy?'저장 중…':'확정하기';$('.nickname-later').hidden=info?.kind!=='ticket';$('.nickname-later').disabled=busy;$('.nickname-use-hint').textContent=info?.kind==='ticket'?'확정하면 보유한 닉네임 변경권 1장을 사용합니다.':'확정하면 무료 1회 변경 기회를 사용합니다.';}

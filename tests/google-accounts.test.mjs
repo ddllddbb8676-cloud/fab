@@ -101,3 +101,67 @@ test('disabled, anonymous and foreign-origin requests fail before starting authe
   assert.equal((await googleRoute(f.req('verify',{Cookie:f.cookie(deviceA)},{}),{...f.env,FAB_GOOGLE_CLIENT_ID:''})).status,503);
   assert.equal(f.db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE name='google_links'").get().n,0);
 });
+
+async function existingLink(f,device,subject='provider-id'){
+  const {code}=await f.code(device,subject);
+  assert.equal((await f.call('preview',device,{code})).status,200);
+  assert.equal((await f.call('link',device,{code})).status,200);
+}
+const aliasOf=response=>response.headers.get('Set-Cookie').split(';')[0];
+test('first Google entry reserves an unused FAB identity, and subsequent Google login opens it directly',async t=>{
+  const f=fixture(t), before=structuredClone(f.profiles), guest=await sessionId(attacker);
+  let proof=await f.code(attacker);
+  assert.equal((await f.call('signin',attacker,proof)).status,409);
+  assert.equal((await f.call('register',deviceA,proof)).status,409);
+  assert.equal((await f.call('register',attacker,proof)).status,200);
+  assert.deepEqual(f.profiles,before);assert.equal(f.accounts.linked(guest),true);
+  assert.equal((await f.call('signin',deviceB,proof)).status,409);
+  proof=await f.code(deviceB);
+  const restored=await f.call('signin',deviceB,proof);assert.equal(restored.status,200);
+  const req=f.req('status',{Cookie:f.cookie(deviceB,aliasOf(restored))});
+  assert.equal(await effectiveProfileId(req,f.env),guest);
+  assert.equal((await f.call('signin',deviceB,proof)).status,409);
+});
+test('mislinked Google takes the proven original character only after showing both names, preserving both wallets',async t=>{
+  const f=fixture(t), before=structuredClone(f.profiles);
+  await existingLink(f,deviceB);
+  const oldSession=await f.call('signin',attacker,await f.code(attacker));
+  const oldAlias=aliasOf(oldSession);
+  assert.equal((await f.call('character-code',attacker,{},oldAlias)).status,409);
+  const source=await (await f.call('character-code',deviceA,{})).json();
+  assert.match(source.code,/^FAB-(?:[A-F0-9]{6}-){3}[A-F0-9]{6}$/);
+  const {code}=await f.code(deviceB), data={code,characterCode:source.code};
+  assert.equal((await f.call('recover-confirm',deviceB,data)).status,409);
+  assert.equal((await f.call('recover-preview',deviceB,{...data,code:'BAD'})).status,409);
+  const preview=await (await f.call('recover-preview',deviceB,data)).json();
+  assert.equal(preview.previous.name,'새기기');assert.equal(preview.target.name,'원래팹');
+  assert.equal(f.accounts.linked(primary),false);assert.equal(f.accounts.linked(secondary),true);
+  assert.equal((await f.call('recover-confirm',attacker,data)).status,409);
+  const done=await f.call('recover-confirm',deviceB,data);assert.equal(done.status,200);
+  const restored=f.req('status',{Cookie:f.cookie(deviceB,aliasOf(done))});
+  assert.equal(await effectiveProfileId(restored,f.env),primary);
+  assert.equal(await isAdmin(restored,f.env),true);
+  const revoked=f.req('status',{Cookie:f.cookie(attacker,oldAlias)});
+  assert.equal(await effectiveProfileId(revoked,f.env),await sessionId(attacker));
+  assert.ok(f.retired.some(([,id])=>id===secondary));
+  assert.equal((await f.call('recover-confirm',deviceB,data)).status,409);
+  const later=await f.call('signin',attacker,await f.code(attacker));
+  assert.equal((await (await f.call('status',attacker,undefined,aliasOf(later))).json()).character.name,'원래팹');
+  assert.deepEqual(f.profiles,before);
+});
+test('replacement, expiry, a linked source, and a competing claim cannot reuse a character code',async t=>{
+  const f=fixture(t), source=async()=>(await (await f.call('character-code',deviceA,{})).json()).code;
+  const stale=await source(), valid=await source(), one=await f.code(deviceB), two=await f.code(attacker,'other');
+  assert.equal((await f.call('recover-preview',deviceB,{code:one.code,characterCode:stale})).status,409);
+  const attempts=await Promise.all([[deviceB,one],[attacker,two]].map(([dev,proof])=>f.call('recover-preview',dev,{code:proof.code,characterCode:valid})));
+  assert.deepEqual(attempts.map(r=>r.status).sort(),[200,409]);
+  f.advance(300001);
+  assert.equal((await f.call('recover-confirm',deviceB,{code:one.code,characterCode:valid})).status,409);
+  const beforeLink=await source();
+  await existingLink(f,deviceA,'third');
+  assert.equal((await f.call('character-code',deviceA,{})).status,409);
+  const unbind=await f.code(deviceA,'third');await f.call('preview',deviceA,unbind);await f.call('unlink',deviceA,unbind);
+  const fresh=await f.code(deviceB);
+  assert.equal((await f.call('recover-preview',deviceB,{code:fresh.code,characterCode:beforeLink})).status,409);
+  assert.equal((await f.call('recover-preview',deviceB,{code:fresh.code,characterCode:valid})).status,409);
+});

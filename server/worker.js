@@ -11,7 +11,7 @@ import {deviceCookie,effectiveProfileId,localSession} from './account-sessions.j
 import equipmentBootstrap from './equipment-bootstrap.json';
 import {canonicalRedirect} from './canonical-url.js';
 import {rejectOutdatedRoom} from './room-version.js';
-import {serveEntry} from './entry-response.js';
+import {serveEntry,pendingFirstVisit} from './entry-response.js';
 import {HttpRoomPeer,HTTP_IDLE_MS,connectionOrder,readRoomBody} from './http-room-peer.js';
 import {ADMIN_HEADERS,isAdmin,adminDenied,metricExclusions} from './admin-access.js';
 import {createProfileMetrics} from './profile-metrics.js';
@@ -119,8 +119,18 @@ export default {
       return env.FAB_ROOM.getByName('FAB-A-v20').fetch(request);
     }
     if(url.pathname.startsWith('/api/'))return new Response('Not found',{status:404});
+    const googleEnabled=validClientId(env.FAB_GOOGLE_CLIENT_ID);
+    if(googleEnabled && ['GET','HEAD'].includes(request.method) && ['/','/index','/index.html'].includes(url.pathname) &&
+       (!sessionToken(request)||pendingFirstVisit(request)) && url.searchParams.get('play')!=='guest'){
+      const welcome=await env.ASSETS.fetch(new Request(new URL('/account/welcome',url),{method:request.method}));
+      if(welcome.ok) {
+        const headers=new Headers(welcome.headers);
+        headers.set('Cache-Control','private, no-store');headers.set('Vary','Cookie');
+        return new Response(welcome.body,{status:welcome.status,headers});
+      }
+    }
     const asset=await env.ASSETS.fetch(request);
-    if(asset.headers.get('Content-Type')?.includes('text/html'))return serveEntry(asset,request,validClientId(env.FAB_GOOGLE_CLIENT_ID));
+    if(asset.headers.get('Content-Type')?.includes('text/html'))return serveEntry(asset,request,googleEnabled);
     return asset;
   }
 };
@@ -258,6 +268,7 @@ export class FabRoom extends DurableObject {
         this.resettingProfiles.add(id);
         try {
           for(const [ws,s] of this.sockets)if(s.id===id){ws.serializeAttachment?.({retired:true});this.send(ws,{type:'resetting'});this.sockets.delete(ws);try{ws.close(4002,'새로 시작하기');}catch{}}
+          this.accounts.discardCharacterCode(id);
           this.room.remove(id);await this.profiles.remove(id);this.broadcastRoster();
         } finally {this.resettingProfiles.delete(id);}
       }

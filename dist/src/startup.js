@@ -1,6 +1,6 @@
-import {startGame} from './startup-controller.js?v=1092cff843de';
-import {multiplayerConfiguration,embeddedRoomConfig} from './room-config.js?v=1092cff843de';
-import {startUsageTelemetry} from './usage-telemetry.js?v=1092cff843de';
+import {startGame} from './startup-controller.js?v=35964c9802b1';
+import {multiplayerConfiguration,embeddedRoomConfig} from './room-config.js?v=35964c9802b1';
+import {startUsageTelemetry} from './usage-telemetry.js?v=35964c9802b1';
 const script=document.querySelector('script[data-fab-entry]');
 const telemetry=startUsageTelemetry({entry:script.dataset.fabEntry});
 // The production document already set the same HttpOnly session cookie.
