@@ -21,6 +21,7 @@ export async function sessionId(token) {
 export function createProfileStore(storage,{ownerId='',onProfileObserved=()=>{},onProfileRemoved=()=>{}}={}) {
   ownerId=configuredOwnerId(ownerId);
   const pending=new Map(),scores=new Map(),nicknames=createNicknameRegistry();let writes=Promise.resolve(),ranking=[],rankingDirty=true;
+  const edits=new Map();
   if(ownerId)nicknames.reserve(ownerId,'visitor',OWNER_DISPLAY_NAME);
   // Optional read-only projections must never prevent a game profile from
   // being saved. Observers can mark their own data unavailable on failure.
@@ -45,6 +46,7 @@ export function createProfileStore(storage,{ownerId='',onProfileObserved=()=>{},
     nicknameAvailable:(...args)=>nicknames.available(...args),
     replaceNickname:(...args)=>nicknames.replace(...args),
     nicknameVisitorId:name=>nicknames.visitorId(name),
+    visitorName:id=>nicknames.visitorName(id),
     replacementNickname:(...args)=>nicknames.replacement(...args),
     async getEquipment(){await writes.catch(()=>{});return pending.has(EQUIPMENT_KEY)?structuredClone(pending.get(EQUIPMENT_KEY)):storage.get(EQUIPMENT_KEY);},
     saveEquipment(state){pending.set(EQUIPMENT_KEY,structuredClone(state));},
@@ -78,7 +80,13 @@ export function createProfileStore(storage,{ownerId='',onProfileObserved=()=>{},
       await writes.catch(()=>{});
       return pending.has(key)?structuredClone(pending.get(key)):storage.get(key);
     },
-    save(profile){if(profile.id.startsWith('visitor:')){const next=named(profile);pending.set('profile:'+profile.id,structuredClone(next));remember(next);observed(next);}},
+    // Keep an offline update on the newest profile if a save or reset overlaps its storage read.
+    async withLatest(id,apply){
+      const edit=edits.get(id)??{readers:0};edits.set(id,edit);edit.readers++;
+      try{const saved=await this.get(id);return apply(Object.hasOwn(edit,'latest')?edit.latest:saved);}
+      finally{if(!--edit.readers)edits.delete(id);}
+    },
+    save(profile){if(profile.id.startsWith('visitor:')){const next=named(profile);pending.set('profile:'+profile.id,structuredClone(next));if(edits.has(profile.id))edits.get(profile.id).latest=next;remember(next);observed(next);}},
     flush(){
       if(!pending.size)return writes;
       const batch=Object.fromEntries(pending);pending.clear();
@@ -91,6 +99,6 @@ export function createProfileStore(storage,{ownerId='',onProfileObserved=()=>{},
         throw error;
       });return writes;
     },
-    async remove(id){const key='profile:'+id;pending.delete(key);await writes.catch(()=>{});pending.delete(key);await storage.delete(key);scores.delete(id);nicknames.forget(id);rankingDirty=true;try{onProfileRemoved(id);}catch{}}
+    async remove(id){const key='profile:'+id;if(edits.has(id))edits.get(id).latest=null;pending.delete(key);await writes.catch(()=>{});pending.delete(key);await storage.delete(key);scores.delete(id);nicknames.forget(id);rankingDirty=true;try{onProfileRemoved(id);}catch{}}
   };
 }

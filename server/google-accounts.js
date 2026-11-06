@@ -23,7 +23,7 @@ async function deviceKey() {
   const secret=newSessionToken();
   return {secret,hash:await digest('device:'+secret)};
 }
-export function createGoogleAccounts(storage, {profile, resetting = () => false, clock = Date.now}) {
+export function createGoogleAccounts(storage, {profile, resetting = () => false, onRewardDue = () => {}, clock = Date.now}) {
   // These tables are independent of profile:*, score, equipment and wallet storage.
   const sql = storage.sql;
   let initialized = false, characterCodesReady = false;
@@ -49,6 +49,50 @@ export function createGoogleAccounts(storage, {profile, resetting = () => false,
     for (const table of ['google_nonces','google_tickets','google_devices']) sql.exec('DELETE FROM '+table+' WHERE expires <= ?',clock());
   }
   function linked(id) { return exists() && Boolean(row('SELECT 1 FROM google_links WHERE profile=?',id)); }
+  function linkedCount(excluded) {
+    if (!exists()) return 0;
+    const {n}=row('SELECT COUNT(*) AS n FROM google_links');
+    return n-[...excluded].filter(linked).length;
+  }
+  function linkedNames(page,total,excluded,nameOf) {
+    const size=25,pages=Math.max(1,Math.ceil(total/size));
+    page=Math.min(pages,Math.max(1,Number.isSafeInteger(page)?page:1));
+    const ids=[...excluded];
+    const where=ids.length?'WHERE profile NOT IN (SELECT value FROM json_each(?))':'';
+    const rows=total?sql.exec('SELECT profile FROM google_links '+where+' ORDER BY rowid DESC LIMIT ? OFFSET ?',
+      ...(ids.length?[JSON.stringify(ids)]:[]),size,(page-1)*size).toArray():[];
+    return {total,page,pages,names:rows.map(({profile})=>nameOf(profile)??null)};
+  }
+  // These independent redemption keys survive unlinking. They contain no email or link between accounts.
+  // Reserve inside the link transaction. The wallet records actual payment alongside the balance.
+  function reserveReward(id,subject) {
+    sql.exec('CREATE TABLE IF NOT EXISTS google_link_reward_keys (key TEXT PRIMARY KEY, pending INTEGER NOT NULL) WITHOUT ROWID');
+    const google='google:'+subject;
+    if(row('SELECT 1 FROM google_link_reward_keys WHERE key IN (?,?) LIMIT 1',id,google))return false;
+    sql.exec('INSERT INTO google_link_reward_keys VALUES (?,1),(?,0)',id,google);
+    return true;
+  }
+  function rewardEntitled(id) {
+    if(!exists())return false;
+    if(row("SELECT 1 FROM sqlite_master WHERE name='google_link_reward_keys'")){
+      const receipt=row('SELECT pending FROM google_link_reward_keys WHERE key=?',id);
+      if(receipt)return receipt.pending===1;
+    }
+    const link=row('SELECT subject FROM google_links WHERE profile=?',id);
+    return Boolean(link && storage.transactionSync(()=>reserveReward(id,link.subject)));
+  }
+  function closeReward(id) {
+    if(sql && row("SELECT 1 FROM sqlite_master WHERE name='google_link_reward_keys'"))
+      sql.exec('UPDATE google_link_reward_keys SET pending=0 WHERE key=? AND pending=1',id);
+  }
+  async function settle(result) {
+    const {rewardProfile,...response}=result;
+    if(rewardProfile){
+      try{const amount=await onRewardDue(rewardProfile);if(amount>0)response.rewardChips=amount;}
+      catch{console.error('Google link saved; reward will be retried on game entry');}
+    }
+    return response;
+  }
   async function claimEntryNotice(id) {
     if (!await profile(id) || resetting(id) || linked(id)) return false;
     const day = Math.floor((clock() + 9 * 3600000) / 86400000);
@@ -76,6 +120,7 @@ export function createGoogleAccounts(storage, {profile, resetting = () => false,
   function saveLink(profileId,subject,keepReceipt) {
     sql.exec('INSERT INTO google_links(subject,profile) VALUES (?,?)',subject,profileId);
     discardCharacterCode(profileId,subject,keepReceipt);
+    return reserveReward(profileId,subject);
   }
   function installDevice(device,target,key) {
     sql.exec('DELETE FROM google_devices WHERE device=?',device);
@@ -137,7 +182,7 @@ export function createGoogleAccounts(storage, {profile, resetting = () => false,
       const unlink = action === 'unlink' && plan.action === 'linked';
       if (value.device !== device || value.current_profile !== current || value.target !== plan.dest || value.action !== plan.action ||
           (!unlink && (action !== plan.action || action === 'linked'))) fail(409,'캐릭터를 다시 확인해 주세요.');
-      if (action === 'link') saveLink(current,value.subject);
+      const rewardProfile=action==='link' && saveLink(current,value.subject) ? current : null;
       const login = action === 'restore' ? installDevice(device,now.dest,key) : {};
       if (unlink) {
         sql.exec('DELETE FROM google_devices WHERE profile=?',current);
@@ -146,7 +191,7 @@ export function createGoogleAccounts(storage, {profile, resetting = () => false,
         discardCharacterCode(current,value.subject);
       }
       sql.exec('DELETE FROM google_tickets WHERE hash=?',hash);
-      return {ok:true,...login,unlink};
+      return {ok:true,...login,unlink,rewardProfile};
     });
   }
   async function signIn({code,device,current,create}) {
@@ -166,7 +211,7 @@ export function createGoogleAccounts(storage, {profile, resetting = () => false,
       }
       if (resetting(target) || resetting(current)) changed();
       sql.exec('DELETE FROM google_tickets WHERE hash=?',hash);
-      return installDevice(device,target,key);
+      return {...installDevice(device,target,key),rewardProfile:reserveReward(target,proof.subject)?target:null};
     });
   }
   async function issueCharacterCode(device,current) {
@@ -218,11 +263,13 @@ export function createGoogleAccounts(storage, {profile, resetting = () => false,
       sql.exec('DELETE FROM google_tickets WHERE subject=?',proof.subject);
       handoff.revoke(source.profile,proof.subject);
       if(previous)handoff.revoke(previous,proof.subject);
-      return {...installDevice(device,source.profile,key),revokedProfile:previous};
+      return {...installDevice(device,source.profile,key),revokedProfile:previous,rewardProfile:reserveReward(source.profile,proof.subject)?source.profile:null};
     });
   }
   const handoff=createBrowserHandoff({sql,init,row,view,linked,linkedProfile,saveLink,newTicket,clock,fail,transaction:fn=>storage.transactionSync(fn),sourceForCode,resetting});
-  return {start,verified,linked,claimEntryNotice,restoredSession,view,useCode,signIn,issueCharacterCode,recover,discardCharacterCode,handoff,
+  return {start,verified,linked,linkedCount,linkedNames,rewardEntitled,closeReward,claimEntryNotice,restoredSession,view,issueCharacterCode,discardCharacterCode,
+    useCode:args=>useCode(args).then(settle),signIn:args=>signIn(args).then(settle),recover:args=>recover(args).then(settle),
+    handoff:{...handoff,verify:(...args)=>handoff.verify(...args).then(settle)},
     forgetDevice(device) { if (exists()) sql.exec('DELETE FROM google_devices WHERE device=?',device); }
   };
 }

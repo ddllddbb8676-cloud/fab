@@ -1,4 +1,4 @@
-import {DESTRUCTION_TITLES,OPERATOR_TITLE,findTitle,destructionTitle,destructionCount} from './destruction-titles.js?v=8a9c64ec02d8';
+import {DESTRUCTION_TITLES,OPERATOR_TITLE,findTitle,destructionTitle,destructionCount} from './destruction-titles.js?v=04bae36020c1';
 
 export function createTitlePicker({root,command,connected,onChange=()=>{}}) {
   let state=null,busy=false,notice='';

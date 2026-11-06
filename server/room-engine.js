@@ -140,6 +140,16 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
       if(online)changed(online);else onProfileChange(recipient);
     }
   }
+  function awardGoogleLink(id,saved) {
+    const online=players.get(id);
+    if(!online&&!saved)return false; // Google-first registration creates its wallet on room entry.
+    const recipient=online??{...saved,wallet:restoreWallet(saved)};
+    const before=recipient.wallet.chips;
+    if(recipient.wallet.googleLinkReward || !credit(recipient,1000,'google-link'))return 0;
+    recipient.wallet.googleLinkReward=true;
+    if(online)changed(online);else onProfileChange(recipient);
+    return recipient.wallet.chips-before;
+  }
   worldEvents=createWorldEvents({now,random,onChange:onEventsChange,
     contestOptions:{ownerId,gather:gatherContestant,rosterChanged:contestRosterChanged,award:awardContest,
       planRepairs:()=>planContestRepairs(destruction.isDestroyed,id=>!leases.has(id)&&!broken.get(id)?.owner),
@@ -503,5 +513,5 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
   }
   store.initializeStockers();
   foupReady=true;
-  return {titleState,nicknameState,applyNickname,wallet:id=>players.has(id)?walletView(players.get(id)):null,join,remove,pose,command,step,snapshot,roster,ranking,equipmentState,restoreEquipment,restoreFoups,worldEvents,rememberContestProfile,forgetContestProfile:id=>contestProfiles.delete(id),players,fleet,store,residents,safety,destruction,carts,cartReturner,profile:id=>players.has(id)?profile(players.get(id)):null,get time(){return time;}};
+  return {titleState,nicknameState,applyNickname,awardGoogleLink,wallet:id=>players.has(id)?walletView(players.get(id)):null,join,remove,pose,command,step,snapshot,roster,ranking,equipmentState,restoreEquipment,restoreFoups,worldEvents,rememberContestProfile,forgetContestProfile:id=>contestProfiles.delete(id),players,fleet,store,residents,safety,destruction,carts,cartReturner,profile:id=>players.has(id)?profile(players.get(id)):null,get time(){return time;}};
 }

@@ -106,6 +106,21 @@ async function existingLink(f,device,subject='provider-id'){
   assert.equal((await f.call('preview',device,{code})).status,200);
   assert.equal((await f.call('link',device,{code})).status,200);
 }
+test('only verified first links reserve a reward; replays, relinks and moving a Google account cannot farm chips',async t=>{
+  const f=fixture(t),paid=[];
+  const accounts=createGoogleAccounts(f.storage,{profile:id=>f.profiles.get(id),onRewardDue:async id=>{paid.push(id);return 1000;}});
+  const step=async(action,proof,current=primary)=>accounts.useCode({code:proof.code,current,device:current,action});
+  const first=await f.code(deviceA);await step('preview',first);
+  assert.equal(accounts.rewardEntitled(primary),false);assert.deepEqual(paid,[]);
+  assert.equal((await step('link',first)).rewardChips,1000);await assert.rejects(step('link',first));
+  const unlink=await f.code(deviceA);await step('preview',unlink);await step('unlink',unlink);
+  assert.equal(accounts.linked(primary),false);assert.equal(accounts.rewardEntitled(primary),true);
+  const reusedGoogle=await f.code(deviceB);await step('preview',reusedGoogle,secondary);
+  assert.equal((await step('link',reusedGoogle,secondary)).rewardChips,undefined);
+  assert.equal(accounts.rewardEntitled(secondary),false);
+  const otherGoogle=await f.code(deviceA,'brand-new');await step('preview',otherGoogle);
+  assert.equal((await step('link',otherGoogle)).rewardChips,undefined);assert.deepEqual(paid,[primary]);
+});
 const aliasOf=response=>response.headers.get('Set-Cookie').split(';')[0];
 test('the entry notice belongs to the current character and is claimed once per Korean calendar day',async t=>{
   const beforeMidnight=Date.parse('2026-11-06T23:59:59+09:00');

@@ -1,4 +1,4 @@
-import {canWalkSegment,findWalkPath,stepWalker} from './walking.js?v=8a9c64ec02d8';
+import {canWalkSegment,findWalkPath,stepWalker} from './walking.js?v=04bae36020c1';
 
 export const NPC_SPACING=.68;
 const distance=(a,b)=>Math.hypot(a.x-b.x,a.z-b.z);

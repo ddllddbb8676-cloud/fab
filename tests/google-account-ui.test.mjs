@@ -33,6 +33,7 @@ test('the game notice opens account selection for this character directly, inclu
   const game=await readFile(new URL('index.html',root),'utf8');
   const action=/<a href="\/account(\?mode=link)">바로 연동하러 가기<\/a>/.exec(game);
   assert.ok(action);assert.match(game,/<button type="button">다음에 하기<\/button>/);
+  assert.match(game,/첫 구글 연동 보상 1,000칩/);
   const normal=await screen(action[1],google);
   assert.deepEqual(normal.calls.map(c=>c.step),['status','start']);assert.equal(normal.el('auth').hidden,false);
   const key='b'.repeat(64);
@@ -50,9 +51,10 @@ test('first visit offers two labeled choices and an existing Google login enters
   }
 });
 test('selecting an unused Google links the displayed character automatically and a conflict offers case three',async()=>{
-  const initial={...google,preview:{action:'link',target:original},link:{ok:true}};
+  const initial={...google,preview:{action:'link',target:original},link:{ok:true,rewardChips:1000}};
   const ui=await screen('?mode=link',initial);await ui.google();
   assert.equal(ui.el('choice').hidden,true);assert.deepEqual(ui.visits,['/']);assert.equal(ui.calls.at(-1).step,'link');
+  assert.match(ui.el('message').textContent,/1,000칩을 받았어요/);
   const conflict=await screen('?mode=link',{...google,preview:{action:'restore',target:mistaken}});await conflict.google();
   assert.equal(conflict.el('recover-link').hidden,false);assert.deepEqual(conflict.visits,[]);
 });

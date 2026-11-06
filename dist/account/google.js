@@ -83,11 +83,11 @@ function createGoogleBrowserFlow({api,el,panel,message,onResult,onConflict,onMod
       launch(job);
     };
   }
-  function browserState({state,googleName,linked,label,signinCode}){
+  function browserState({state,googleName,linked,label,signinCode,rewardChips}){
     if(linked && recipient.mode==='link'){
       el('heading').textContent='구글 연결 완료';el('intro').textContent='';
       panel('browser-linked');
-      message('‘'+label+'’ 캐릭터를 연결했어요. 다른 브라우저에서도 같은 구글 계정으로 이어갈 수 있어요.');
+      message('‘'+label+'’ 캐릭터를 연결했어요. '+(rewardChips?rewardChips.toLocaleString('ko-KR')+'칩을 받았어요! ':'')+'다른 브라우저에서도 같은 구글 계정으로 이어갈 수 있어요.');
       const play=el('play-linked');
       if(signinCode)play.onclick=event=>{
         event.preventDefault();
@@ -245,8 +245,8 @@ async function accept(code){
     el('recover-link').hidden=false;return;
   }
   if(!current.character || name!==current.character.name)throw Error('현재 닉네임이 바뀌었어요. 게임 메뉴에서 다시 연결해 주세요.');
-  await api('link',{code});ticket=null;
-  enterGame(name+' 구글 연결 완료! 게임으로 돌아가요.');
+  const linked=await api('link',{code});ticket=null;
+  enterGame(name+' 구글 연결 완료! '+(linked.rewardChips?linked.rewardChips.toLocaleString('ko-KR')+'칩을 받았어요.':'게임으로 돌아가요.'));
 }
 async function showGoogle(nonce,complete){
   panel('auth');message('');

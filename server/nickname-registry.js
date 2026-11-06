@@ -15,6 +15,7 @@ export function createNicknameRegistry() {
   }
   return {
     reserve,
+    visitorName(id) {return names.get(ownerKey(id,'visitor'))??null;},
     available(id,name) {const owner=owners.get(nicknameKey(name));return validNickname(name)&&(!owner||owner===ownerKey(id,'visitor'));},
     replace(id,name) {
       const owner=ownerKey(id,'visitor'),key=nicknameKey(name),current=owners.get(key);

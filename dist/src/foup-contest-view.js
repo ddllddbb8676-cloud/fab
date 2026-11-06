@@ -1,4 +1,4 @@
-import {CONTEST_NAME, CONTEST_RULES, CONTEST_ZONES, contestRewards} from './foup-contest.js?v=8a9c64ec02d8';
+import {CONTEST_NAME, CONTEST_RULES, CONTEST_ZONES, contestRewards} from './foup-contest.js?v=04bae36020c1';
 
 // Two instanced floor decals, allocated only when a match is announced.
 export function createContestZones(THREE, scene) {

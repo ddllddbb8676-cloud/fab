@@ -7,7 +7,7 @@
   <meta name="color-scheme" content="light">
   <title>FAB 운영 현황</title>
   <link rel="stylesheet" href="/admin/admin.css">
-  <script type="module" src="/admin/admin.js"></script>
+  <script type="module" src="/admin/admin.js?v=google-links"></script>
 </head>
 <body>
   <main class="dashboard">
@@ -47,6 +47,14 @@
         <ul id="live-users" class="live-users" aria-label="접속 중인 실제 계정 닉네임"></ul>
         <p id="live-users-status" class="section-note">닉네임 목록을 불러오는 중이에요.</p>
         <p id="live-visit-status" class="visit-status" role="status" aria-live="polite" hidden></p>
+      </section>
+      <section class="panel live-users-panel" aria-labelledby="google-links-heading">
+        <div class="section-heading"><h2 id="google-links-heading">구글 연동 계정</h2><strong id="google-links-count" class="muted">—</strong></div>
+        <ul id="google-links-names" class="live-users" aria-labelledby="google-links-heading"></ul>
+        <p id="google-links-status" class="section-note"></p>
+        <nav id="google-links-pages" aria-label="연동 닉네임 목록 페이지" hidden>
+          <button id="google-links-prev" type="button">이전</button> <span id="google-links-page"></span> <button id="google-links-next" type="button">다음</button>
+        </nav>
       </section>
       <section class="panel" aria-labelledby="daily-heading">
         <div class="section-heading"><div><h2 id="daily-heading">일별 접속 계정</h2><p class="muted">하루에 같은 계정은 한 번만 세요.</p></div><span class="muted">최근 30일</span></div>

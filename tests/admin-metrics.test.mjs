@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {fileURLToPath} from 'node:url';
+import {DatabaseSync} from 'node:sqlite';
 import {build} from 'esbuild';
 import {sessionId} from '../server/player-profiles.js';
 import {restoreWallet} from '../server/chip-wallet.js';
@@ -24,7 +25,7 @@ const eventRequest=(value,{cookie=token,method='POST',headers={},raw}={})=>new R
   ...(method==='GET'?{}:{body:raw??JSON.stringify(value)})
 });
 const peer=()=>({packets:[],send(raw){this.packets.push(JSON.parse(raw));},close(){},serializeAttachment(){}});
-async function fixture(){
+async function fixture(db){
   const wallet=restoreWallet({brokenCount:10});wallet.owned.push('helmet-orange');wallet.equipped.head='helmet-orange';
   const records=new Map([[`profile:${ordinary}`,{id:ordinary,name:'기록보존',brokenCount:10,repairedCount:2,wallet}],
     [`profile:${owner}`,{id:owner,name:'운영자',brokenCount:300}],
@@ -32,6 +33,10 @@ async function fixture(){
   let boot,reads=0;const pending=[];
   const storage={get:async key=>structuredClone(records.get(key)),put:async batch=>{for(const [key,value] of Object.entries(batch))records.set(key,structuredClone(value));},
     delete:async keys=>{for(const key of Array.isArray(keys)?keys:[keys])records.delete(key);},list:async({prefix,startAfter,limit=500})=>{reads++;return new Map([...records].filter(([key])=>key.startsWith(prefix)&&(!startAfter||key>startAfter)).sort(([a],[b])=>a.localeCompare(b)).slice(0,limit));}};
+  if(db){
+    storage.sql={exec(query,...args){const rows=db.prepare(query).all(...args);return {toArray:()=>rows};}};
+    storage.transactionSync=fn=>{db.exec('BEGIN');try{const result=fn();db.exec('COMMIT');return result;}catch(e){db.exec('ROLLBACK');throw e;}};
+  }
   const env={FAB_OWNER_VISITOR_ID:owner,FAB_METRICS_EXCLUDED_IDS:probe,ASSETS:{fetch:async()=>new Response('<!doctype html><title>admin</title>',{headers:{'Content-Type':'text/html'}})}};
   const room=new FabRoom({storage,blockConcurrencyWhile:f=>{boot=f();},getWebSockets:()=>[],waitUntil:promise=>pending.push(promise)},env);
   room.start=()=>{};await boot;env.FAB_ROOM={getByName:()=>room};
@@ -46,6 +51,63 @@ test('only server configured owner cookie opens admin or metrics; unauthorized r
   assert.equal(calls,0);
   assert.equal((await worker.fetch(request('/api/admin/metrics',token,'POST'),env)).status,405);
   assert.equal((await worker.fetch(request('/api/admin/metrics',token),{...env,FAB_OWNER_VISITOR_ID:''})).status,403);
+});
+
+test('operator sees only current FAB nicknames across sessions, including offline, with bounded pages',async t=>{
+  const db=new DatabaseSync(':memory:');t.after(()=>db.close());const f=await fixture(db);
+  assert.deepEqual((await f.metrics()).googleLinks,{total:0,page:1,pages:1,names:[]});
+  f.room.accounts.start(ordinary);
+  const insert=db.prepare('INSERT INTO google_links VALUES (?,?)');
+  insert.run('owner-google',owner);insert.run('ordinary-google',ordinary);insert.run('test-google',probe);
+  const reads=f.reads(),first=(await f.metrics()).googleLinks;
+  assert.deepEqual(first,{total:2,page:1,pages:1,names:['기록보존','FAB짱 세미']});
+  assert.equal((await f.metrics()).live.connectedAccounts,0);
+  for(let i=1;i<=25;i++)insert.run('google-'+i,'visitor:'+i.toString(16).padStart(64,'0'));
+  const page=async n=>(await (await worker.fetch(request('/api/admin/metrics?googlePage='+n,token),f.env)).json()).googleLinks;
+  assert.equal((await page(1)).names.length,25);assert.ok((await page(1)).names.every(name=>name===null));
+  assert.deepEqual(await page(99),{total:27,page:2,pages:2,names:first.names});
+  db.prepare('DELETE FROM google_links WHERE profile=?').run(ordinary);
+  assert.deepEqual((await page(2)).names,['FAB짱 세미']);assert.equal(f.reads(),reads);
+  assert.equal((await worker.fetch(request('/api/admin/metrics?googlePage=2',ordinaryToken),f.env)).status,403);
+});
+
+test('a legacy link credits the existing wallet once before welcome and preserves shopping and gameplay progress',async t=>{
+  const db=new DatabaseSync(':memory:');t.after(()=>db.close());const f=await fixture(db);
+  const initial=structuredClone(f.records.get('profile:'+ordinary));f.room.accounts.start(ordinary);
+  db.prepare('INSERT INTO google_links VALUES (?,?)').run('already-linked',ordinary);
+  const p=peer();await f.room.admit(p,ordinary,1);
+  const welcome=p.packets.find(m=>m.type==='welcome');
+  assert.equal(welcome.googleReward,1000);
+  const record=f.records.get('profile:'+ordinary);
+  assert.deepEqual(record.wallet,{...initial.wallet,chips:initial.wallet.chips+1000,earnedChips:initial.wallet.earnedChips+1000,revision:initial.wallet.revision+1,googleLinkReward:true});
+  assert.equal(record.brokenCount,initial.brokenCount);assert.equal(record.repairedCount,initial.repairedCount);
+  await f.room.webSocketMessage(p,JSON.stringify({type:'command',seq:10,kind:'purchase',data:{itemId:'suit-blue'}}));f.room.close(p);
+  await f.room.checkpoint();const spent=f.records.get('profile:'+ordinary).wallet;
+  await Promise.all([f.room.payGoogleLink(ordinary),f.room.payGoogleLink(ordinary)]);
+  const again=peer();await f.room.admit(again,ordinary,2);
+  const next=again.packets.find(m=>m.type==='welcome');
+  assert.equal(next.googleReward,undefined);assert.equal(next.wallet.chips,spent.chips);assert.ok(next.wallet.owned.includes('suit-blue'));
+});
+
+test('an offline reward racing a reconnect survives a stale read and cannot return after an account reset',async t=>{
+  const db=new DatabaseSync(':memory:');t.after(()=>db.close());const f=await fixture(db);
+  f.room.accounts.start(ordinary);db.prepare('INSERT INTO google_links VALUES (?,?)').run('legacy-id',ordinary);
+  assert.equal(f.room.accounts.rewardEntitled(ordinary),true);
+  let release,started;const staleRead=new Promise(r=>{release=r;}),waiting=new Promise(r=>{started=r;});
+  const originalGet=f.storage.get;let stall=true;
+  f.storage.get=async key=>{
+    const value=await originalGet(key);
+    if(stall && key==='profile:'+ordinary){stall=false;started();await staleRead;}
+    return value;
+  };
+  const p=peer(),joining=f.room.admit(p,ordinary,1);await waiting;
+  const initial=f.records.get('profile:'+ordinary).wallet.chips;
+  assert.equal(await f.room.payGoogleLink(ordinary),1000);release();await joining;
+  assert.equal(p.packets.find(m=>m.type==='welcome').wallet.chips,initial+1000);
+  db.prepare('DELETE FROM google_links WHERE profile=?').run(ordinary);
+  await f.room.fetch(request('/api/session/reset',ordinaryToken,'POST'));
+  const fresh=peer();await f.room.admit(fresh,ordinary,2);
+  assert.equal(fresh.packets.find(m=>m.type==='welcome').wallet.chips,0);
 });
 
 test('admin reads aggregates without joining, rescanning, leaking identifiers or altering saved wallet',async()=>{

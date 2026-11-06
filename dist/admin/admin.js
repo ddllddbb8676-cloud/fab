@@ -11,6 +11,7 @@ const localMinute=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Seoul',hour:'2
 const localTime=new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});
 let inFlight=false,lastData=null,lastUpdated=0,selectedDay=null;
 let activeVisit=null,visitButtons=[];
+let googlePage=1;
 const VISIT_KEY='fab-admin-visit-v1';
 const valid=n=>typeof n==='number'&&Number.isFinite(n)&&n>=0;
 const count=n=>valid(n)?integer.format(n):'—';
@@ -74,6 +75,18 @@ function scaleFor(maximum){
   const raw=Math.max(1,maximum)/4,magnitude=10**Math.floor(Math.log10(raw));
   const step=Math.max(1,[1,2,5,10].find(value=>value*magnitude>=raw)*magnitude),top=Math.max(step,Math.ceil(maximum/step)*step);
   return {top,ticks:Array.from({length:Math.round(top/step)+1},(_,index)=>index*step)};
+}
+function renderGoogleLinks(data){
+  const list=$('google-links-names');list.replaceChildren();
+  const known=Number.isSafeInteger(data?.total)&&data.total>=0&&Array.isArray(data.names);
+  text('google-links-count',known?count(data.total)+'계정':'—');
+  text('google-links-status',!known?'연동 현황을 확인하지 못했어요.':data.total?'오프라인 캐릭터도 포함해요.':'현재 구글을 연동한 캐릭터가 없어요.');
+  $('google-links-pages').hidden=!known||data.pages<=1;
+  if(!known)return;
+  googlePage=data.page;
+  for(const name of data.names)cell(list,name??'닉네임 등록 전','li');
+  text('google-links-page',data.page+' / '+data.pages);
+  $('google-links-prev').disabled=data.page<=1;$('google-links-next').disabled=data.page>=data.pages;
 }
 function shortDay(day){return day?Number(day.slice(5,7))+'/'+Number(day.slice(8,10)):'—';}
 function dayTime(day){if(typeof day!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(day))return null;const at=date(day+'T00:00:00+09:00');return at&&localDate.format(at)===day?at:null;}
@@ -182,23 +195,24 @@ function render(data){
   text('connections',count(today?.connections)+'회');text('https-connections',count(today?.httpsConnections)+'회');
   text('collection-start','시간별 통계 수집 시작 · '+stamp(data.startedAt)+' (한국 시간)');
   $('report').hidden=false;
-  liveUsers(live.users);daily(data);hourly(data);purchases(profiles);
+  liveUsers(live.users);renderGoogleLinks(data.googleLinks);daily(data);hourly(data);purchases(profiles);
   growthDashboard.render(data.growth,{today:data.today?.date,generatedAt:data.generatedAt});
   const notes=$('server-notes');notes.replaceChildren();
   for(const value of Array.isArray(data.notes)?data.notes:[]){if(typeof value!=='string')continue;const item=document.createElement('li');item.textContent=value;notes.append(item);}
   notes.hidden=!notes.childElementCount;
   $('report').hidden=false;
 }
-async function refresh(){
+async function refresh(page=googlePage){
   if(inFlight)return;
   inFlight=true;$('refresh').disabled=true;
   setStatus(lastData?'최신 현황을 불러오고 있어요.':'운영자 권한을 확인하고 있어요.','loading');
   const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),8000);
   try{
-    const response=await fetch('/api/admin/metrics',{credentials:'same-origin',cache:'no-store',signal:controller.signal,headers:{Accept:'application/json'}});
+    const response=await fetch('/api/admin/metrics'+(page>1?'?googlePage='+page:''),{credentials:'same-origin',cache:'no-store',signal:controller.signal,headers:{Accept:'application/json'}});
     if(response.status===401||response.status===403){
       lastData=null;lastUpdated=0;$('report').hidden=true;
       growthDashboard.clear();
+      renderGoogleLinks(null);googlePage=1;
       activeVisit?.controller.abort();activeVisit=null;visitButtons=[];visitStatus('');
       $('live-users').replaceChildren();text('live-users-count','—');text('live-users-status','');
       showMessage('운영자 계정으로만 볼 수 있어요.\nFAB짱 세미로 게임에 접속한 브라우저에서 이 주소를 열어 주세요. 인스타 앱과 Safari는 계정이 다를 수 있어요.');
@@ -212,7 +226,9 @@ async function refresh(){
     text('updated-at',lastData?'마지막 정상 갱신 · '+stamp(lastData.generatedAt):'게임 기록과 칩에는 영향을 주지 않아요.');
   }finally{clearTimeout(timeout);inFlight=false;$('refresh').disabled=false;}
 }
-$('refresh').addEventListener('click',refresh);
+$('refresh').addEventListener('click',()=>refresh());
+$('google-links-prev').addEventListener('click',()=>refresh(googlePage-1));
+$('google-links-next').addEventListener('click',()=>refresh(googlePage+1));
 $('refresh').addEventListener('click',()=>eventControls.refresh());
 $('hourly-day').addEventListener('change',()=>{selectedDay=$('hourly-day').value;if(lastData)hourly(lastData);});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&Date.now()-lastUpdated>=60000)refresh();});

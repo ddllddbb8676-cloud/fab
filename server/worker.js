@@ -145,7 +145,7 @@ export class FabRoom extends DurableObject {
     this.profiles=createProfileStore(ctx.storage,{ownerId:env.FAB_OWNER_VISITOR_ID,onProfileObserved:p=>this.observeProfile(p),onProfileRemoved:id=>{this.room?.forgetContestProfile(id);this.profileMetrics.remove(id);this.metricProfiles.delete(id);}});
     this.httpPeers=new Map();this.connectionOrders=new Map();
     this.resettingProfiles=new Set();
-    this.accounts=createGoogleAccounts(ctx.storage,{profile:id=>this.room.profile(id)||this.profiles.get(id),resetting:id=>this.resettingProfiles.has(id)});
+    this.accounts=createGoogleAccounts(ctx.storage,{profile:id=>this.room.profile(id)||this.profiles.get(id),resetting:id=>this.resettingProfiles.has(id),onRewardDue:id=>this.payGoogleLink(id)});
     this.room=createRoom({ownerId:env.FAB_OWNER_VISITOR_ID,eventExcludedIds:excludedIds,onEventsChange:s=>this.profiles.saveEvents(s),nicknameAvailable:(...args)=>this.profiles.nicknameAvailable(...args),replaceNickname:(...args)=>this.profiles.replaceNickname(...args),claimName:(...args)=>this.profiles.claimName(...args),getHistoricalScores:()=>this.profiles.ranking(),onEquipmentChange:s=>this.profiles.saveEquipment(s),onFoupChange:s=>this.profiles.saveFoups(s),onProfileChange:p=>this.profiles.save(p),onReward:event=>this.trackGrowth(()=>this.growthMetrics.reward(event.id,event.kind,event.amount)),onRosterChange:()=>{this.rosterDirty=true;},onCatch:event=>{
       for(const [ws,s] of this.sockets)if(s.id===event.guardId)this.send(ws,{type:'safety-catch',...event});
     }});this.timer=null;this.tickCount=0;this.previous=Date.now();
@@ -169,7 +169,12 @@ export class FabRoom extends DurableObject {
       await this.checkpoint();
       for(const ws of ctx.getWebSockets()) {
         const {id,order,auth}=ws.deserializeAttachment()||{},saved=id?await this.profiles.get(id):null;
-        if(id&&this.sessionValid(id,auth)&&this.room.join(id,saved).ok){this.sockets.set(ws,{id,auth,rate:0,at:Date.now()});this.connectionOrders.set(id,{order:order??0,at:Date.now()});this.welcome(ws,id);this.trackGrowth(()=>this.growthMetrics.connect(id,{existing:Boolean(saved),transport:'restored',profile:this.room.profile(id)}));}
+        if(id&&this.sessionValid(id,auth)&&this.room.join(id,saved).ok){
+          const reward=this.payGoogleLinkOnEntry(id);
+          if(reward){await this.checkpoint();this.accounts.closeReward(id);}
+          this.sockets.set(ws,{id,auth,rate:0,at:Date.now()});this.connectionOrders.set(id,{order:order??0,at:Date.now()});
+          this.welcome(ws,id,reward);this.trackGrowth(()=>this.growthMetrics.connect(id,{existing:Boolean(saved),transport:'restored',profile:this.room.profile(id)}));
+        }
         else try{ws.close(1012,'다시 연결해 주세요');}catch{}
       }
       await this.checkpoint();if(this.sockets.size)this.start();
@@ -216,7 +221,19 @@ export class FabRoom extends DurableObject {
       .sort((a,b)=>a.name.localeCompare(b.name,'ko'));
   }
   async checkpoint(){do{await this.profiles.flush();}while(this.profiles.hasPending);}
-  welcome(ws,id){const p=this.room.players.get(id);this.send(ws,{type:'welcome',v:PROTOCOL,id,name:p.name,privileges:{unlimitedChips:Boolean(p.chipUnlimited),ownerSpeech:Boolean(p.chipUnlimited),speech:true},wallet:this.room.wallet(id),nickname:this.room.nicknameState(id),titles:this.room.titleState(id),resume:p.hasEntered?p.groundPosition:null,roster:this.room.roster(),frame:this.room.snapshot(true)});}
+  googleLinkCount(){return this.accounts.linkedCount(this.metricExcludedIds);}
+  async payGoogleLink(id){
+    const award=saved=>!this.resettingProfiles.has(id)&&this.room.awardGoogleLink(id,saved);
+    const paid=this.room.players.has(id)?award():await this.profiles.withLatest(id,award);
+    if(paid){await this.checkpoint();this.accounts.closeReward(id);this.sendWallets();}
+    return paid;
+  }
+  payGoogleLinkOnEntry(id){
+    try{
+      if(!this.room.players.get(id).wallet.googleLinkReward && this.accounts.rewardEntitled(id))return this.room.awardGoogleLink(id);
+    }catch{console.error('Google link reward deferred until next entry');}
+  }
+  welcome(ws,id,googleReward){const p=this.room.players.get(id);this.send(ws,{type:'welcome',v:PROTOCOL,id,name:p.name,...(googleReward?{googleReward}:{}),privileges:{unlimitedChips:Boolean(p.chipUnlimited),ownerSpeech:Boolean(p.chipUnlimited),speech:true},wallet:this.room.wallet(id),nickname:this.room.nicknameState(id),titles:this.room.titleState(id),resume:p.hasEntered?p.groundPosition:null,roster:this.room.roster(),frame:this.room.snapshot(true)});}
   sendWallets(){for(const [ws,s] of this.sockets){const player=this.room.players.get(s.id);if(s.ready!==false&&player&&s.walletRevision!==player.wallet.revision){const wallet=this.room.wallet(s.id);this.send(ws,{type:'wallet',wallet});s.walletRevision=wallet.revision;}}}
   broadcastRoster(){const data=JSON.stringify({type:'roster',roster:this.room.roster(),count:this.room.players.size});for(const [ws,s] of this.sockets)if(s.ready!==false)this.send(ws,data);}
   async fetch(request) {
@@ -254,8 +271,13 @@ export class FabRoom extends DurableObject {
       this.track(()=>this.activityMetrics.sync(this.room.players.keys()));
       if(this.metricsUnavailable)return httpResult(503,{error:'통계를 준비하지 못했어요. 게임은 계속 이용할 수 있어요.'});
       const activity=this.activityMetrics.snapshot();
+      let googleLinks=null;
+      try{
+        const page=Number(new URL(request.url).searchParams.get('googlePage'));
+        googleLinks=this.accounts.linkedNames(page,this.googleLinkCount(),this.metricExcludedIds,this.profiles.visitorName);
+      }catch{console.error('Google link report unavailable');}
       this.ctx.waitUntil(this.flushMetrics());
-      return Response.json({...activity,generatedAt:Date.now(),timezone:'Asia/Seoul',live:{...activity.live,npcs:AUTOMATED_COUNT,users:this.connectedUsers()},profiles:this.profileMetricsUnavailable?null:this.profileMetrics.snapshot(),notes:['평균 동시 접속은 서버가 관측한 시간 기준이에요. 수집 공백과 수집 이전 시간은 포함하지 않아요.',...(this.metricsWriteDelayed?['최근 통계 저장이 지연되어 서버 재시작 시 일부 수집값이 누락될 수 있어요.']:[])]},{headers:ADMIN_HEADERS});
+      return Response.json({...activity,googleLinks,generatedAt:Date.now(),timezone:'Asia/Seoul',live:{...activity.live,npcs:AUTOMATED_COUNT,users:this.connectedUsers()},profiles:this.profileMetricsUnavailable?null:this.profileMetrics.snapshot(),notes:['평균 동시 접속은 서버가 관측한 시간 기준이에요. 수집 공백과 수집 이전 시간은 포함하지 않아요.',...(this.metricsWriteDelayed?['최근 통계 저장이 지연되어 서버 재시작 시 일부 수집값이 누락될 수 있어요.']:[])]},{headers:ADMIN_HEADERS});
     }
     if(new URL(request.url).pathname==='/api/room-http')return this.httpRoom(request);
     if(new URL(request.url).pathname==='/api/leaderboard')return Response.json({scope:'all-time',rows:this.room.ranking(),recordedVisitors:this.profiles.rankedVisitorCount,highestVisitorScore:this.profiles.ranking()[0]?.brokenCount??0},{headers:{'Cache-Control':'no-store'}});
@@ -269,6 +291,7 @@ export class FabRoom extends DurableObject {
         try {
           for(const [ws,s] of this.sockets)if(s.id===id){ws.serializeAttachment?.({retired:true});this.send(ws,{type:'resetting'});this.sockets.delete(ws);try{ws.close(4002,'새로 시작하기');}catch{}}
           this.accounts.discardCharacterCode(id);
+          this.accounts.closeReward(id);
           this.room.remove(id);await this.profiles.remove(id);this.broadcastRoster();
         } finally {this.resettingProfiles.delete(id);}
       }
@@ -309,9 +332,15 @@ export class FabRoom extends DurableObject {
     const ticket={order:order??prior?.order??0,at:Date.now(),reading:true};
     this.connectionOrders.delete(id);
     this.connectionOrders.set(id,ticket);
-    let saved;
-    try{saved=this.room.profile(id)||await this.profiles.get(id);}
+    const open=saved=>this.admitLoaded(peer,id,auth,ticket,saved);
+    try{
+      const online=this.room.profile(id);
+      return online?await open(online):await this.profiles.withLatest(id,open);
+    }
     finally{ticket.reading=false;}
+  }
+  async admitLoaded(peer,id,auth,ticket,saved) {
+    ticket.reading=false;
     if(this.connectionOrders.get(id)!==ticket || !this.sessionValid(id,auth)){this.retire(peer);return;}
     const current=this.room.profile(id)||saved;
     for(const [other,s] of this.sockets)if(s.id===id)this.retire(other);
@@ -320,13 +349,14 @@ export class FabRoom extends DurableObject {
     if(!joined.ok){
       const full={type:'full',message:joined.message};this.send(peer,full);peer.close(1008,'Room full');return full;
     }
+    const googleReward=this.payGoogleLinkOnEntry(id);
     peer.serializeAttachment?.({id,order:ticket.order,...(auth?{auth}:{})});
     const session={id,auth,rate:0,at:Date.now(),ready:false};
     this.sockets.set(peer,session);
-    try{await this.checkpoint();}
+    try{await this.checkpoint();if(googleReward)this.accounts.closeReward(id);}
     catch(error){try{peer.close(1013,'Try again');}catch{}this.close(peer);throw error;}
     if(!this.sockets.has(peer))return;
-    this.welcome(peer,id);session.ready=true;session.walletRevision=this.room.players.get(id).wallet.revision;this.broadcastRoster();this.start();
+    this.welcome(peer,id,googleReward);session.ready=true;session.walletRevision=this.room.players.get(id).wallet.revision;this.broadcastRoster();this.start();
     this.track(()=>{this.activityMetrics.sync(this.room.players.keys());this.activityMetrics.connect(id,peer instanceof HttpRoomPeer?'https':'websocket');});
     this.trackGrowth(()=>this.growthMetrics.connect(id,{existing:Boolean(current),transport:peer instanceof HttpRoomPeer?'https':'websocket',profile:this.room.profile(id)}));this.updateGrowthPresence(true);
   }

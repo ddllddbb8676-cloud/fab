@@ -86,12 +86,12 @@ export function createBrowserHandoff({sql,init,row,view,linked,linkedProfile,sav
         // Never replace either side of an existing link or give a conflicting
         // request the name or login of the other Google account's character.
         if(original===job.profile || (!original && !linked(job.profile))){
-          if(!original)saveLink(job.profile,subject,job.receipt);
+          const rewardProfile=!original && saveLink(job.profile,subject,job.receipt)?job.profile:null;
           sql.exec("UPDATE google_handoffs SET state='ready',subject=?,hint=?,nonce=NULL WHERE launch=?",subject,hint,launch);
           // Only the browser that submitted Google's signed credential gets
           // this single-use login. Opening the URL or polling cannot issue one.
           sql.exec("INSERT INTO google_tickets(hash,subject,hint,expires,device,current_profile,scope) VALUES(?,?,?,?,?,?,'login')",play.hash,subject,hint,job.expires,browser,current);
-          return {state:'ready',linked:true,label:job.label,signinCode:play.code};
+          return {state:'ready',linked:true,label:job.label,signinCode:play.code,rewardProfile};
         }
       }else if(job.mode!=='unlink'||original===job.profile){
         sql.exec("UPDATE google_handoffs SET state='approve',subject=?,hint=?,nonce=NULL WHERE launch=?",subject,hint,launch);

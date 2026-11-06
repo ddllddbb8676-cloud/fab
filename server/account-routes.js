@@ -106,7 +106,7 @@ export async function accountInRoom(request,env,accounts,retireDevice) {
     if (output.revokedProfile) retireDevice(null,output.revokedProfile);
     if (output.setDevice) retireDevice(device);
     const headers = output.setDevice || output.unlink ? {'Set-Cookie':deviceCookie(output.secret || '',request.url)} : {};
-    const response=result(200,{ok:true},headers);
+    const response=result(200,{ok:true,...(output.rewardChips?{rewardChips:output.rewardChips}:{})},headers);
     if(pendingFirstVisit(request) && (output.setDevice || action==='link')) response.headers.append('Set-Cookie',firstVisitCookie(request.url,false));
     return response;
   } catch (error) {
