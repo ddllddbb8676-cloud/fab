@@ -59,6 +59,18 @@ test('D1 and D7 count exact KST dates and remain pending until their follow-up d
   assert.deepEqual(metrics.snapshot().daily.map(d=>d.date),['2026-11-04','2026-11-05','2026-11-06','2026-11-11']);
 });
 
+test('a follow-up day without visit observations stays unknown; observed zero returns is measurable',()=>{
+  const {metrics,set}=setup('2026-11-04T04:00:00Z');
+  metrics.connect(id(1),{existing:false});
+  set('2026-11-06T04:00:00Z');
+  const d1=metrics.snapshot().daily[0].retention.d1;
+  assert.equal(d1.status,'unobserved');assert.equal(d1.rate,null);
+  set('2026-11-11T04:00:00Z');metrics.connect(id(2),{existing:false});
+  set('2026-11-12T04:00:00Z');
+  const d7=metrics.snapshot().daily[0].retention.d7;
+  assert.equal(d7.status,'complete');assert.equal(d7.rate,0);assert.equal(d7.cohortAccounts,1);
+});
+
 test('observed activity excludes idle, hidden, reconnect and restart gaps; one-action accounts stay in duration distributions',async()=>{
   const state=setup(),{metrics,add}=state;metrics.connect(id(1));metrics.connect(id(2));metrics.presence([person(1),person(2)]);
   metrics.activity(id(1),'move');metrics.activity(id(2),'emote');add(10000);metrics.activity(id(1),'move');

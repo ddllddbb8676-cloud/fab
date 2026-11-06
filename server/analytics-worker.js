@@ -34,6 +34,15 @@ export class FabAnalytics extends DurableObject{
       });
     }catch(error){this.reloadRequired=true;try{await this.load();this.reloadRequired=false;}catch{}throw error;}
   }
+  growthReport(persistMaintenance=false){
+    return this.enqueue(async()=>{
+      const value=this.metrics.snapshot();
+      value.delivery={droppedEvents:this.dropped};
+      if(this.dropped){value.limited=true;value.notes.push('게임 응답을 우선해 전송하지 못한 분석 기록이 있어요. 일부 수치는 누락될 수 있어요.');}
+      if(persistMaintenance)await this.persist();
+      return value;
+    });
+  }
   async fetch(request){
     const url=new URL(request.url);
     if(url.hostname==='fab-analytics.internal'&&url.pathname==='/ingest'&&request.method==='POST'){
@@ -65,11 +74,7 @@ export class FabAnalytics extends DurableObject{
     if(url.pathname==='/api/admin/metrics'){
       if(!await isAdmin(request,this.env))return new Response(null,{status:403,headers:PRIVATE});
       if(request.method!=='GET')return new Response(null,{status:405,headers:PRIVATE});
-      return this.enqueue(async()=>{
-        const value=this.metrics.snapshot();value.delivery={droppedEvents:this.dropped};
-        if(this.dropped){value.limited=true;value.notes.push('게임 응답을 우선해 전송하지 못한 분석 기록이 있어요. 일부 수치는 누락될 수 있어요.');}
-        await this.persist();return Response.json(value,{headers:ADMIN_HEADERS});
-      }).catch(()=>new Response(null,{status:503,headers:PRIVATE}));
+      return this.growthReport(true).then(value=>Response.json(value,{headers:ADMIN_HEADERS})).catch(()=>new Response(null,{status:503,headers:PRIVATE}));
     }
     return new Response(null,{status:404,headers:PRIVATE});
   }

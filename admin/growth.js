@@ -12,6 +12,11 @@ const shiftDay=(day,offset)=>new Date(new Date(day+'T00:00:00Z').getTime()+offse
 const fraction=(numerator,denominator)=>numeric(numerator)&&numeric(denominator)?`${number(numerator)} / ${number(denominator)}`:'—';
 function percent(numerator,denominator,limited=false){return !limited&&numeric(numerator)&&numeric(denominator)&&denominator>0&&numerator<=denominator?decimal.format(numerator/denominator*100)+'%':'—';}
 function rateDetail(numerator,denominator,limited=false){if(!numeric(numerator)||!numeric(denominator))return '—';return `${percent(numerator,denominator,limited)} (${fraction(numerator,denominator)}계정)${limited?' · 집계 한도':''}`;}
+function observedRate(numerator,denominator,limited){
+  if(!numeric(denominator)||!numeric(numerator)||numerator>denominator)return '—';
+  if(denominator===0)return '접속 기록 없음';
+  return rateDetail(numerator,denominator)+(limited?' · 관측값':'');
+}
 function duration(seconds){
   if(!numeric(seconds))return '—';
   if(seconds<60)return decimal.format(seconds)+'초';
@@ -19,17 +24,31 @@ function duration(seconds){
   return number(Math.floor(seconds/3600))+'시간 '+Math.floor(seconds%3600/60)+'분';
 }
 function retention(rows,key,known,limited){
-  let cohort=0,returned=0,completeDays=0,pendingAccounts=0,skipped=0;
+  let cohort=0,returned=0,completeDays=0,pendingAccounts=0,nextDate='',missing=0;
+  let incomplete=limited;
   for(const row of rows){
     const record=row.retention?.[key];
-    if(!record)continue;
-    if(row.limited){skipped++;continue;}
-    if(record.status==='pending'){if(numeric(record.cohortAccounts))pendingAccounts+=record.cohortAccounts;continue;}
-    if(record.status==='complete'&&numeric(record.cohortAccounts)&&record.cohortAccounts>0&&numeric(record.returnedAccounts)&&record.returnedAccounts<=record.cohortAccounts){cohort+=record.cohortAccounts;returned+=record.returnedAccounts;completeDays++;}
+    if(!record||!numeric(record.cohortAccounts)){missing++;continue;}
+    if(!record.cohortAccounts)continue;
+    if(record.status==='pending'){
+      pendingAccounts+=record.cohortAccounts;
+      const date=shiftDay(row.date,key==='d1'?2:8);
+      if(!nextDate||date<nextDate)nextDate=date;
+    }else if(record.status==='complete'&&numeric(record.returnedAccounts)&&record.returnedAccounts<=record.cohortAccounts){
+      cohort+=record.cohortAccounts;returned+=record.returnedAccounts;completeDays++;
+      incomplete ||= row.limited||record.limited;
+    }else missing++;
   }
-  const blocked=limited||skipped>0;
-  const status=!known?'미수집':blocked?'집계 한도':completeDays?`판단 완료 ${completeDays}일${pendingAccounts?' · 대기 '+number(pendingAccounts)+'계정':''}`:pendingAccounts?'관찰 날짜 종료 대기 · '+number(pendingAccounts)+'계정':'판단 가능한 신규 계정 없음';
-  return {value:percent(returned,cohort,blocked),fraction:known?fraction(returned,cohort):'—',status,detail:completeDays?`${fraction(returned,cohort)}계정 · ${status}`:status};
+  const status=[];
+  if(!known)status.push('미수집');
+  else{
+    if(completeDays)status.push(incomplete?'관측값 · 일부 기록 누락 가능':`집계 완료 ${completeDays}일`);
+    if(pendingAccounts)status.push(`${completeDays?'대기':'관찰 날짜 종료 대기'} ${number(pendingAccounts)}계정${completeDays?'':' · '+nextDate.slice(5).replace('-','/')+' 0시부터'}`);
+    if(missing)status.push('일부 날짜 방문 기록 부족');
+    if(!status.length)status.push('판단 가능한 신규 계정 없음');
+  }
+  const counts=cohort?fraction(returned,cohort):'—',message=status.join(' · ');
+  return {value:percent(returned,cohort),fraction:counts,status:message,detail:cohort?`${counts}계정 · ${message}`:message};
 }
 const ACTIONS=[['move','이동'],['emote','감정표현'],['destroy','장비 파괴'],['repair','장비 수리'],['throw','FOUP 던지기'],['clean','FOUP 청소'],['board','OHT 탑승'],['equip','아이템 착용']];
 const SHOP=[['shopOpen','상점 열기'],['tryOn','시착'],['purchased','구매'],['insufficientChips','칩 부족']];
@@ -56,29 +75,45 @@ export function createGrowthDashboard(document=globalThis.document){
     for(const day of [...dates].reverse()){const option=document.createElement('option');option.value=day;option.textContent=day+(day===today?' · 오늘':'');fragment.append(option);}
     select.replaceChildren(fragment);select.value=selectedDate||'';select.disabled=dates.length<2;
     const row=daily.find(day=>day.date===selectedDate),limited=Boolean(data?.limited||row?.limited),generated=parseTime(data?.generatedAt),delayed=Boolean(generated&&now-generated>120000),notices=[];
+    const todayRow=daily.find(day=>day.date===today);
+    const todayRate=observedRate(todayRow?.visits?.returningAccounts,todayRow?.visits?.accounts,data?.limited||todayRow?.limited);
+    text('today-return-link','오늘 일반 계정 재방문율 '+todayRate+' · 자세히 보기 ↓');
     let status='기록 확인',statusKind='ready';
     if(!data){status='확인 대기';statusKind='unknown';notices.push('분석 데이터를 준비하고 있거나 갱신이 늦어지고 있어요. 확인되지 않은 수치는 —로 표시해요.');}
     else if(!row){status='수집 대기';statusKind='collecting';notices.push('수집을 시작했어요. 날짜별 기록이 쌓이면 여기에 표시돼요.');}
     if(row?.partial)notices.push('선택한 날짜는 일부 시간만 수집한 기록이에요. 하루 전체와 직접 비교하지 마세요.');
     if(row&&(row.ongoing||row.date===today)){status='수집 중';statusKind='collecting';notices.push('오늘 기록은 진행 중이라 계속 바뀔 수 있어요.');}
-    if(limited){status='집계 한도';statusKind='limited';notices.push('일부 집계가 보관 한도에 도달했어요. 정확한 비율을 계산하기 어려운 곳은 —로 표시해요.');}
+    if(limited){status='일부 기록 누락 가능';statusKind='limited';notices.push('일부 기록이 빠졌을 수 있어요. 관측값은 서버에 기록된 계정으로 계산해요.');}
     if(delayed){status='갱신 지연';statusKind='delayed';notices.push('분석 기록의 갱신이 늦어졌어요. 마지막 분석 갱신: '+stamp(data.generatedAt));}
     text('growth-status',status);$('growth-status').dataset.state=statusKind;
     text('growth-notice',notices.join(' '));$('growth-notice').hidden=!notices.length;
     text('growth-period',data?'수집 시작 '+stamp(data.startedAt)+' · '+(selectedDate||'날짜 기록 대기'):'새 분석 수집을 확인하고 있어요.');
     text('growth-active-label',(selectedDate===today?'오늘':'선택한 날')+' 플레이한 계정');text('growth-active',unit(row?.activity?.accounts,'계정'));
-    text('growth-return-label',(selectedDate===today?'오늘':'선택한 날')+' 다시 찾은 계정');text('growth-return',unit(row?.visits?.returningAccounts,'계정'));
     const visits=row?.visits,activity=row?.activity,economy=row?.economy,funnel=row?.funnel,quality=row?.quality,safety=row?.safety;
-    text('growth-return-detail',row?`${rateDetail(visits?.returningAccounts,visits?.accounts,limited)}${visits?.unknownHistoryAccounts>0?' · 과거 이력 미확인 '+number(visits.unknownHistoryAccounts)+'계정이 있어 확인된 재방문 비율이에요.':''}`:'이전 날짜 방문을 확인할 수 있어야 재방문으로 세요.');
+    text('growth-return-label',(selectedDate===today?'오늘':'선택한 날')+' 재방문율');
+    const returnRate=percent(visits?.returningAccounts,visits?.accounts);
+    text('growth-return',returnRate);
+    const returnDetail=returnRate==='—'?(visits?.accounts===0?'접속 기록 없음':'접속 기록 확인 대기'):`접속 ${number(visits.accounts)}계정 중 이전 날짜에도 온 ${number(visits.returningAccounts)}계정${limited?' · 관측값':''}`;
+    const history=visits?.unknownHistoryAccounts;
+    text('growth-return-detail',returnDetail+(returnRate!=='—'&&history>0?' · 과거 이력 미확인 '+number(history)+'계정':''));
     const d1=retention(daily,'d1',Boolean(data),Boolean(data?.limited)),d7=retention(daily,'d7',Boolean(data),Boolean(data?.limited));
     text('growth-d1',d1.value);text('growth-d1-detail',d1.detail);
     text('growth-repeat',unit(data?.last7Days?.repeatActiveAccounts,'계정'));
-    text('growth-repeat-detail',data?.last7Days?`${rateDetail(data.last7Days.repeatActiveAccounts,data.last7Days.activeAccounts,Boolean(data.limited))} · 오늘 기준 최근 7일 활동 계정 중`:'오늘 기준 최근 7일 · 같은 날 여러 번 해도 하루예요.');
+    const week=data?.last7Days;
+    text('growth-repeat-detail',week?.activeAccounts===0?'최근 7일 활동 기록 없음':week?observedRate(week.repeatActiveAccounts,week.activeAccounts,data.limited)+' · 최근 7일 활동 계정 중':'오늘 기준 최근 7일 · 같은 날 여러 번 해도 하루예요.');
     text('growth-scope','이 분석 영역은 운영자·NPC·검증 계정을 제외해요. 계정 수는 사람 수와 달라요. D1과 최근 7일 카드는 날짜 선택과 별개로 최근 보관 기록을 보여줘요.');
-    text('growth-retention-note','보관 중인 최근 30일 신규 계정 묶음 가운데, 정확히 다음 날(D1)·7일 뒤(D7)가 끝난 묶음만 합산해요. 표의 분모는 판단 가능한 신규 계정 수예요. 접속 여부를 보는 지표예요.');
+    text('growth-retention-note','아래 표는 최근 30일의 신규 계정 전체가 기준이에요. 처음 만든 날짜의 정확히 다음 날(D1) 또는 7일 뒤(D7)가 끝난 계정만 합산해요.');
     table('growth-retention-rows',[['D1',d1.fraction,d1.value,d1.status],['D7',d7.fraction,d7.value,d7.status]],4);
+    const selectedCohort=key=>{
+      const result=retention(row?[row]:[],key,Boolean(row),limited);
+      return result.value==='—'?result.status:result.value+' ('+result.fraction+'계정)'+(limited||row.retention?.[key]?.limited?' · 관측값':'');
+    };
     records('growth-visits',[
-      ['선택한 날 접속 계정',unit(visits?.accounts,'계정')],['새로 만들어진 계정',unit(visits?.newAccounts,'계정')],['기존 계정을 처음 관측',unit(visits?.legacyFirstObserved,'계정')],['과거 방문 이력 미확인',unit(visits?.unknownHistoryAccounts,'계정')],['당일 첫 행동이 확인된 계정',unit(funnel?.firstAction,'계정')],['접속 계정 중 첫 행동 확인',rateDetail(funnel?.firstAction,visits?.accounts,limited)]
+      ['선택한 날 재방문율',observedRate(visits?.returningAccounts,visits?.accounts,limited)],
+      ['선택한 날 접속 계정',unit(visits?.accounts,'계정')],['새로 만들어진 계정',unit(visits?.newAccounts,'계정')],
+      ['기존 계정을 처음 관측',unit(visits?.legacyFirstObserved,'계정')],['그중 과거 방문 이력 미확인',unit(history,'계정')],
+      ['당일 첫 행동이 확인된 계정',unit(funnel?.firstAction,'계정')],['접속 계정 중 첫 행동 확인',observedRate(funnel?.firstAction,visits?.accounts,limited)],
+      ['이날 신규 계정의 다음 날 재방문',selectedCohort('d1')],['이날 신규 계정의 7일 뒤 재방문',selectedCohort('d7')]
     ]);
     records('growth-activity',[
       ['선택한 날 활동 추정 시간 합계',duration(activity?.observedSeconds)],['활동 계정당 평균 추정 시간',numeric(activity?.accounts)&&activity.accounts>0&&numeric(activity?.observedSeconds)?duration(activity.observedSeconds/activity.accounts):'—'],['계정별 활동 시간 중앙값 / 95% 지점',duration(activity?.medianAccountSeconds)+' / '+duration(activity?.p95AccountSeconds)],['지금 최근 30초 활동 계정',unit(data?.live?.activeAccounts30s,'계정')]

@@ -1,4 +1,4 @@
-import {createGrowthDashboard} from './growth.js';
+import {createGrowthDashboard} from './growth.js?v=retention-20261106';
 import {createEventControls} from './events.js';
 const $=id=>document.getElementById(id);
 const growthDashboard=createGrowthDashboard(document);

@@ -222,6 +222,10 @@ export class FabRoom extends DurableObject {
   }
   async checkpoint(){do{await this.profiles.flush();}while(this.profiles.hasPending);}
   googleLinkCount(){return this.accounts.linkedCount(this.metricExcludedIds);}
+  activityReport(){
+    this.track(()=>this.activityMetrics.sync(this.room.players.keys()));
+    return this.metricsUnavailable?null:this.activityMetrics.snapshot();
+  }
   async payGoogleLink(id){
     const award=saved=>!this.resettingProfiles.has(id)&&this.room.awardGoogleLink(id,saved);
     const paid=this.room.players.has(id)?award():await this.profiles.withLatest(id,award);
@@ -268,9 +272,8 @@ export class FabRoom extends DurableObject {
     if(new URL(request.url).pathname==='/api/admin/metrics'){
       if(!await isAdmin(request,this.adminEnv,this.accounts))return httpResult(403);
       if(request.method!=='GET')return httpResult(405);
-      this.track(()=>this.activityMetrics.sync(this.room.players.keys()));
-      if(this.metricsUnavailable)return httpResult(503,{error:'통계를 준비하지 못했어요. 게임은 계속 이용할 수 있어요.'});
-      const activity=this.activityMetrics.snapshot();
+      const activity=this.activityReport();
+      if(!activity)return httpResult(503,{error:'통계를 준비하지 못했어요. 게임은 계속 이용할 수 있어요.'});
       let googleLinks=null;
       try{
         const page=Number(new URL(request.url).searchParams.get('googlePage'));

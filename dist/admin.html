@@ -7,7 +7,7 @@
   <meta name="color-scheme" content="light">
   <title>FAB 운영 현황</title>
   <link rel="stylesheet" href="/admin/admin.css">
-  <script type="module" src="/admin/admin.js?v=google-links"></script>
+  <script type="module" src="/admin/admin.js?v=retention-20261106"></script>
 </head>
 <body>
   <main class="dashboard">
@@ -41,6 +41,7 @@
           <article class="stat-card"><p>오늘 최고 동시 접속</p><strong id="today-peak">—</strong><span>실제 계정 기준</span></article>
         </div>
         <p class="section-note" id="live-note"></p>
+        <a class="section-note" href="#growth-panel" id="today-return-link">오늘 일반 계정 재방문율 보기 ↓</a>
       </section>
       <section class="panel live-users-panel" aria-labelledby="live-users-heading">
         <div class="section-heading"><h2 id="live-users-heading">지금 접속 중인 닉네임</h2><span id="live-users-count" class="muted">—</span></div>
@@ -113,16 +114,15 @@
         <div class="date-filter"><label for="growth-day">분석할 날짜</label><select id="growth-day" aria-label="이용 흐름 분석 날짜"></select><span>한국 시간</span></div>
         <div class="growth-core">
           <article><p id="growth-active-label">플레이한 계정</p><strong id="growth-active">—</strong><small>실제 행동이 관측된 계정</small></article>
-          <article><p id="growth-return-label">다시 찾은 계정</p><strong id="growth-return">—</strong><small id="growth-return-detail">이전 날짜에도 방문한 계정</small></article>
-          <article><p>다음 날 다시 방문 · D1</p><strong id="growth-d1">—</strong><small id="growth-d1-detail">판단할 수 있는 신규 계정 묶음 기준</small></article>
+          <article><p id="growth-return-label">재방문율</p><strong id="growth-return">—</strong><small id="growth-return-detail">접속 계정 중 이전 날짜에도 온 비율</small></article>
+          <article><p>신규 계정의 다음 날 재방문율 · D1</p><strong id="growth-d1">—</strong><small id="growth-d1-detail">신규 계정의 다음 날 방문 기록</small></article>
           <article><p>최근 7일 중 2일 이상 플레이</p><strong id="growth-repeat">—</strong><small id="growth-repeat-detail">같은 날 여러 번 해도 하루로 계산</small></article>
         </div>
         <p id="growth-scope" class="section-note">이 분석 영역은 운영자·NPC·검증 계정을 제외해요. 기기·브라우저가 다르면 같은 사람도 여러 계정일 수 있어요.</p>
         <details class="growth-detail"><summary>재방문과 첫 플레이</summary>
+          <dl id="growth-visits" class="record-list"></dl>
           <p id="growth-retention-note" class="section-note"></p>
           <div class="table-scroll"><table class="growth-table growth-retention-table"><caption class="sr-only">판단 가능한 신규 계정 묶음의 D1·D7 재방문</caption><thead><tr><th scope="col">기준</th><th scope="col">재방문 / 대상</th><th scope="col">비율</th><th scope="col">상태</th></tr></thead><tbody id="growth-retention-rows"></tbody></table></div>
-          <dl id="growth-visits" class="record-list"></dl>
-          <p class="section-note">수집 전에 만들어진 계정을 처음 관측했다고 신규 계정으로 세지 않아요. 아직 다음 날·7일 뒤가 끝나지 않은 묶음은 재방문율을 확정하지 않아요.</p>
         </details>
         <details class="growth-detail"><summary>무엇을 하고 얼마나 머물렀을까</summary>
           <dl id="growth-activity" class="record-list"></dl>

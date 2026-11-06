@@ -93,7 +93,15 @@ export function createGrowthMetrics({now=Date.now,ownerId='',excludedIds=[]}={})
     if(!Object.hasOwn(values,name))values[name]={label:name,pages:0,connected:0,connectErrors:0,clientErrors:0};
     return values[name];
   }
-  function retention(b,offset,t){const total=b.visits.newAccounts,n=b.returned[offset===1?'d1':'d7'],status=!total?'empty':day(t)<=b.day+offset?'pending':'complete';return {status,cohortAccounts:total,returnedAccounts:n,rate:status==='complete'?n/total:null};}
+  function retention(b,offset,t){
+    const total=b.visits.newAccounts,n=b.returned[offset===1?'d1':'d7'],followUp=days.get(b.day+offset);
+    let status='empty';
+    if(total){
+      if(day(t)<=b.day+offset)status='pending';
+      else status=followUp?.visits.accounts?'complete':'unobserved';
+    }
+    return {status,cohortAccounts:total,returnedAccounts:n,rate:status==='complete'?n/total:null,limited:Boolean(b.limited||followUp?.limited)};
+  }
   function publicDay(b,t){
     const values=[];for(const a of accounts.values()){const i=accountIndex(a,b.day,false);if(i>=0&&(a.days[i+1]&FLAGS.active))values.push(a.days[i+2]);}const q=b.quality;
     return {date:label(b.day),partial:day(Date.parse(startedAt))===b.day&&Date.parse(startedAt)>start(b.day),ongoing:b.day===day(t),limited:b.limited,

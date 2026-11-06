@@ -41,7 +41,8 @@ test('retention combines eligible cohort counts rather than averaging rates and 
   const data=snapshot();data.daily=[data.daily.at(-1)];f.ui.render(data,context);assert.equal(f.get('growth-d1').textContent,'—');assert.match(f.get('growth-d1-detail').textContent,/종료 대기/);assert.equal(f.get('growth-retention-rows').children[1].children[2].textContent,'—');
 });
 test('return and repeat percentages show the account numerator and denominator with unknown-history context',()=>{
-  const f=fixture();f.ui.render(snapshot(),context);assert.equal(f.get('growth-return').textContent,'2계정');assert.match(f.get('growth-return-detail').textContent,/25% \(2 \/ 8계정\)/);assert.match(f.get('growth-return-detail').textContent,/이력 미확인 1계정/);
+  const f=fixture();f.ui.render(snapshot(),context);assert.equal(f.get('growth-return').textContent,'25%');assert.match(f.get('growth-return-detail').textContent,/접속 8계정 중 이전 날짜에도 온 2계정/);
+  assert.equal(f.record('growth-visits','선택한 날 재방문율'),'25% (2 / 8계정)');assert.equal(f.record('growth-visits','그중 과거 방문 이력 미확인'),'1계정');
   assert.equal(f.get('growth-repeat').textContent,'6계정');assert.match(f.get('growth-repeat-detail').textContent,/30% \(6 \/ 20계정\)/);
   assert.equal(f.record('growth-visits','접속 계정 중 첫 행동 확인'),'50% (4 / 8계정)');
 });
@@ -61,11 +62,31 @@ test('all supplied labels and notes stay text, including keys present on Object.
 });
 test('date selection survives updates, partial days are labelled, and expired selection falls back to today',()=>{
   const f=fixture(),data=snapshot();f.ui.render(data,context);f.get('growth-day').value='2026-11-02';f.get('growth-day').events.change();assert.equal(f.get('growth-active').textContent,'3계정');assert.match(f.get('growth-notice').textContent,/일부 시간/);
+  assert.match(f.get('today-return-link').textContent,/25% \(2 \/ 8계정\)/);assert.equal(f.record('growth-visits','이날 신규 계정의 다음 날 재방문'),'40% (2 / 5계정)');
   data.daily[0].activity.accounts=6;f.ui.render(data,context);assert.equal(f.get('growth-day').value,'2026-11-02');assert.equal(f.get('growth-active').textContent,'6계정');
   data.daily.shift();f.ui.render(data,context);assert.equal(f.get('growth-day').value,'2026-11-10');assert.match(f.get('growth-notice').textContent,/진행 중/);
 });
 test('limits and delayed snapshots are distinguished, and clearing removes previous analysis',()=>{
-  const f=fixture(),data=snapshot();data.limited=true;f.ui.render(data,context);assert.equal(f.get('growth-status').textContent,'집계 한도');assert.equal(f.get('growth-d1').textContent,'—');assert.match(f.get('growth-return-detail').textContent,/집계 한도/);
+  const f=fixture(),data=snapshot();data.limited=true;f.ui.render(data,context);assert.equal(f.get('growth-status').textContent,'일부 기록 누락 가능');assert.equal(f.get('growth-d1').textContent,'25%');assert.match(f.get('growth-d1-detail').textContent,/관측값/);assert.match(f.get('growth-return-detail').textContent,/관측값/);
+  assert.match(f.get('growth-repeat-detail').textContent,/30% \(6 \/ 20계정\) · 관측값/);
+  data.last7Days={activeAccounts:0,repeatActiveAccounts:0};f.ui.render(data,context);assert.equal(f.get('growth-repeat-detail').textContent,'최근 7일 활동 기록 없음');
   data.limited=false;data.generatedAt='2026-11-10T02:00:00Z';f.ui.render(data,context);assert.equal(f.get('growth-status').textContent,'갱신 지연');assert.match(f.get('growth-notice').textContent,/마지막 분석 갱신/);
   f.ui.clear();assert.equal(f.get('growth-active').textContent,'—');assert.equal(f.get('growth-item-rows').children[0].children.length,1);assert.equal(f.get('growth-notes').childElementCount,0);assert.equal(f.get('growth-day').disabled,true);
+});
+test('daily returning share stays visible independently of immature, missing and limited new cohorts',()=>{
+  const f=fixture(),data=snapshot();
+  data.daily=[data.daily.at(-1)];const row=data.daily[0];
+  row.visits={accounts:164,returningAccounts:39,newAccounts:108,legacyFirstObserved:17,unknownHistoryAccounts:17};
+  row.limited=true;row.retention={d1:pending(108),d7:pending(108)};
+  f.ui.render(data,context);assert.equal(f.get('growth-return').textContent,'23.8%');
+  assert.equal(f.record('growth-visits','선택한 날 재방문율'),'23.8% (39 / 164계정) · 관측값');
+  const cohortRow=key=>f.get('growth-retention-rows').children[key].children.map(cell=>cell.textContent);
+  assert.deepEqual(cohortRow(0),['D1','—','—','관찰 날짜 종료 대기 108계정 · 11/12 0시부터']);
+  assert.match(f.record('growth-visits','이날 신규 계정의 다음 날 재방문'),/11\/12 0시부터/);
+  assert.match(cohortRow(1)[3],/11\/18 0시부터/);
+  row.retention.d1={status:'unobserved',cohortAccounts:108};f.ui.render(data,context);
+  assert.deepEqual(cohortRow(0),['D1','—','—','일부 날짜 방문 기록 부족']);
+  row.visits.returningAccounts=0;row.retention.d1=complete(108,0);f.ui.render(data,context);
+  assert.equal(f.get('growth-return').textContent,'0%');assert.deepEqual(cohortRow(0).slice(1,3),['0 / 108','0%']);
+  row.visits.accounts=0;f.ui.render(data,context);assert.equal(f.get('growth-return').textContent,'—');assert.equal(f.get('growth-return-detail').textContent,'접속 기록 없음');
 });
