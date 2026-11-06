@@ -4,11 +4,11 @@ import * as THREE from 'three';
 import {createRemotePeople} from '../src/remote-people.js';
 import {createAvatar} from '../src/avatar.js';
 
-function harness(maxDetailed=32){
+function harness(maxDetailed=32,cartPose){
   const oldDocument=globalThis.document;
   globalThis.document={createElement:()=>{const draws=[];return {draws,getContext:()=>({clearRect(){draws.length=0;},beginPath(){},roundRect(){},fill(){},measureText:text=>({width:String(text).length*48}),fillText(text){draws.push(text);},strokeText(){}})};}};
   const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(),reference=createAvatar(THREE),geometry=reference.root.getObjectByName('hood').geometry;
-  const view=createRemotePeople({THREE,scene,store:{getCarried:()=>null},maxDetailed});
+  const view=createRemotePeople({THREE,scene,store:{getCarried:()=>null},maxDetailed,cartPose});
   const actor=(id,x,posture)=>({id,name:id,role:'visitor',x,y:0,z:0,heading:0,speed:0,posture,phase:'idle',time:0,targetId:null,vehicleId:null,carrying:false,hidden:false});
   const rows=[actor('lying',-1,'lie'),actor('standing',1,'stand')];view.setRoster(rows.map(a=>[a.id,a.name,a.role]));view.synchronize(rows);
   function heads(){const batch=scene.children.find(o=>o.isInstancedMesh&&o.geometry===geometry),result=[];if(!batch)return result;
@@ -45,6 +45,19 @@ test('real posture changes still animate for the same visitor',()=>{
     for(let i=0;i<60;i++)h.view.update(1/30,h.camera);assert.ok(h.heads().find(p=>p.x<0).y>1);
     h.rows[0].posture='lie';h.view.synchronize(h.rows);for(let i=0;i<60;i++)h.view.update(1/30,h.camera);
     assert.ok(h.heads().find(p=>p.x<0).y<.6);
+  }finally{h.dispose();}
+});
+
+test('a remote passenger body follows the seat between animation ticks on the driver screen',()=>{
+  let z=0;
+  const h=harness(1,id=>id==='standing'?{x:1,y:.15,z,heading:0,speed:0,posture:'sit'}:null);
+  try{
+    h.camera.position.set(1,2,3);
+    for(let i=0;i<60;i++)h.view.update(1/60,h.camera);
+    for(let i=0;i<9;i++){
+      const before=h.heads()[0].z;z+=.08;h.view.update(1/60,h.camera);
+      assert.ok(Math.abs(h.heads()[0].z-before-.08)<1e-4);
+    }
   }finally{h.dispose();}
 });
 

@@ -11,7 +11,7 @@ function element(){
   return {children,dataset:{},append(...items){children.push(...items);},setAttribute(){},addEventListener(){},
     classList:{contains:k=>classes.has(k),add:k=>classes.add(k),remove:k=>classes.delete(k),toggle(k,v){v?classes.add(k):classes.delete(k);}},
     querySelector(k){if(!queries.has(k))queries.set(k,element());return queries.get(k);},
-    querySelectorAll(k){return k==='[data-level]'?[0,1].map(level=>({dataset:{level}})):[];},
+    querySelectorAll(k){if(k!=='[data-level]')return [];if(!queries.has(k))queries.set(k,[0,1].map(level=>({dataset:{level}})));return queries.get(k);},
     getContext:()=>({fillRect(){},fillText(){}})};
 }
 function setup(level){
@@ -22,11 +22,12 @@ function setup(level){
   const explorer=createExplorer({THREE,scene,camera,avatar,colliders:[],vehicles:[],orbit:{target:new THREE.Vector3(),update(){}},
     canvas:{addEventListener:(k,v)=>events.set(k,v),setPointerCapture(){},getBoundingClientRect:()=>({left:0,top:0,width:390,height:844})},
     onMode(){},onInspect(){},onToast(){},onActionTap:()=>true,onGroundMotion:applyWalkwayMotion});
-  const carts=createCartControls({THREE,scene,explorer,avatar,store:{carts:new Map(),cartItems:()=>[],moveCart(){}},network:{},getId:()=> 'rider',ready:()=>true,toast(){}});
+  const commands=[];
+  const carts=createCartControls({THREE,scene,explorer,avatar,store:{carts:new Map(),cartItems:()=>[],moveCart(){}},network:{async command(kind,data){commands.push([kind,data]);return {ok:true};}},getId:()=> 'rider',ready:()=>true,toast(){}});
   const cart={id:'CART01',x:0,z:0,yaw:0,driver:'driver',riders:level===null?[null,null]:level?[null,'rider']:['rider',null]};
-  const tick=()=>{carts.prepare(1/60);explorer.update(1/60);carts.update();};
+  const tick=time=>{carts.prepare(1/60,time);explorer.update(1/60);carts.update();};
   carts.frame({carts:[cart]},true);tick();
-  return {cart,carts,explorer,camera,events,tick,close(){scene.traverse(o=>{o.geometry?.dispose();o.material?.map?.dispose();o.material?.dispose();});Object.assign(globalThis,old);}};
+  return {cart,carts,explorer,camera,events,tick,commands,close(){scene.traverse(o=>{o.geometry?.dispose();o.material?.map?.dispose();o.material?.dispose();});Object.assign(globalThis,old);}};
 }
 
 test('both cart seats retain a camera drag across render frames and cart movement without moving the rider off the seat',()=>{
@@ -57,6 +58,42 @@ test('both cart seats retain a camera drag across render frames and cart movemen
       h.explorer.moveJoystick(0,1);h.tick();assert.ok(state.speed>0,'normal movement returns after dismount');
     }finally{h.close();}
   }
+});
+
+test('a passing cart offers one-tap boarding and the body menu leaves just its unoccupied deck usable',async()=>{
+  const h=setup(null);try{
+    h.explorer.state.position.set(2.8,0,0);
+    const [panel,quick]=document.body.children;
+    const moving={...h.cart,riders:['other',null]};
+    h.carts.frame({t:1,carts:[moving]},true);h.tick(1);
+    await quick.onclick();assert.deepEqual(h.commands,[['cart-board',{id:'CART01',level:'any'}]]);
+    assert.equal(quick.textContent,'카트 타기');assert.equal(quick.classList.contains('hidden'),false);
+    assert.equal(h.carts.tap(new THREE.Ray(new THREE.Vector3(0,3,0),new THREE.Vector3(0,-1,0))),true);
+    assert.equal(panel.classList.contains('hidden'),false);assert.equal(panel.querySelector('.cart-pull').disabled,true);
+    const seats=panel.querySelectorAll('[data-level]');assert.equal(seats[0].disabled,true);assert.equal(seats[1].disabled,false);
+    await seats[1].onclick();assert.deepEqual(h.commands.at(-1),['cart-board',{id:'CART01',level:1}]);
+  }finally{h.close();}
+});
+
+test('cart, passenger and remote handle advance evenly between sparse driver poses, including batched and repeated frames',()=>{
+  const h=setup(1);try{
+    const speed=2,packet=(t,poseTime)=>{
+      const z=speed*poseTime,cart={...h.cart,z,towTime:poseTime};
+      return {t,carts:[cart],people:[['driver',0,0,z+CART_SIZE.tow,0]]};
+    };
+    h.carts.frame(packet(0,0),true);
+    for(let i=1;i<=18;i++)h.carts.frame(packet(i*.2,Math.floor(i/2)*.4),false);
+    let last;
+    for(let i=0;i<=48;i++){
+      h.tick(1.6+i/60);
+      const cart=h.carts.state,driver=h.carts.occupantPose('driver'),seat=cartSeatPose(cart,1);
+      assert.ok(Math.abs(driver.z-cart.z-CART_SIZE.tow)<1e-7);
+      assert.ok(Math.abs(h.explorer.state.position.z-seat.z)<1e-7);
+      if(last!==undefined)assert.ok(Math.abs(cart.z-last-speed/60)<1e-7,'each display frame advances instead of easing to a halt');
+      last=cart.z;
+    }
+    h.tick(8);assert.equal(h.carts.state.z,7.2,'a stalled stream never projects beyond the last server position');
+  }finally{h.close();}
 });
 
 test('late snapshots on both belts never rewind the local cart, and a rejected pose corrects the pair once',()=>{

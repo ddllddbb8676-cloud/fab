@@ -1,7 +1,7 @@
-import { isBlocked, machines, bays, SEATED_FOUP_Y } from './layout.js?v=04bae36020c1';
-import {entranceBounds} from './entrance-layout.js?v=04bae36020c1';
-import {CART_HOMES,cartCargoPose,cartFits,cartPoint} from './cart-layout.js?v=04bae36020c1';
-import {stockers,stockerById,stockerBounds,stockerSlot,stockerRecordPose,STOCKER_CAPACITY,STOCKER_TRANSFER_SECONDS,STOCKER_OUT_CUE_AT} from './stocker-layout.js?v=04bae36020c1';
+import { isBlocked, machines, bays, SEATED_FOUP_Y } from './layout.js?v=a73f61bfaf6e';
+import {entranceBounds} from './entrance-layout.js?v=a73f61bfaf6e';
+import {CART_HOMES,cartCargoPose,cartFits,cartPoint} from './cart-layout.js?v=a73f61bfaf6e';
+import {stockers,stockerById,stockerBounds,stockerSlot,stockerRecordPose,STOCKER_CAPACITY,STOCKER_TRANSFER_SECONDS,STOCKER_OUT_CUE_AT} from './stocker-layout.js?v=a73f61bfaf6e';
 const stockModes=new Set(['stored','stocking','retrieving','stocker-out']);
 // Accept the retired units only while reading older saved worlds.
 const retiredStockers=new Set(['STK03','STK04','STK05','STK06']);
@@ -136,7 +136,7 @@ export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () 
     return Boolean(r&&r.id===expectedId&&pickup(r.id,owner,true));
   }
   function cartItems(cartId){return [...records.values()].filter(r=>r.mode==='cart'&&r.cartId===cartId);}
-  function moveCart(c){for(const r of cartItems(c.id))Object.assign(r,cartCargoPose(c,r.cartSlot));}
+  function moveCart(c,items=cartItems(c.id)){for(const r of items)Object.assign(r,cartCargoPose(c,r.cartSlot));}
   function place(portId, owner = 'player') {
     const record = records.get(hands.get(owner)), p = byPort.get(portId);
     if (!record || !p || occupancy.has(portId) || isDestroyed(p.machineId)) return false;

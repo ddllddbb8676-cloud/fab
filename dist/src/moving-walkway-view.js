@@ -1,4 +1,4 @@
-import { WALKWAY_LANES, WALKWAY_SPEED } from './moving-walkway.js?v=04bae36020c1';
+import { WALKWAY_LANES, WALKWAY_SPEED } from './moving-walkway.js?v=a73f61bfaf6e';
 
 export function createMovingWalkwayView(THREE, scene) {
   const root = new THREE.Group(); root.name = 'moving-walkways'; scene.add(root);

@@ -1,5 +1,5 @@
-import { ports } from './layout.js?v=04bae36020c1';
-import { actorFromPacket,foupFromPacket } from './shared-protocol.js?v=04bae36020c1';
+import { ports } from './layout.js?v=a73f61bfaf6e';
+import { actorFromPacket,foupFromPacket } from './shared-protocol.js?v=a73f61bfaf6e';
 
 export function createSharedWorldView({fleet,store,destruction,onPeople,onCue,onCount,onSelf=()=>{}}) {
   const portMap=new Map(ports.map(p=>[p.id,p])), targets=new Map();let selfId=null,lastTime=-1,renderTime=null,totals={},bufferDelay=.3;
@@ -49,5 +49,5 @@ export function createSharedWorldView({fleet,store,destruction,onPeople,onCue,on
     }
     store.interpolate(dt);
   }
-  return {welcome,apply,update,get totals(){return totals;},get playback(){return {bufferDelay,lag:renderTime===null?null:lastTime-renderTime};}};
+  return {welcome,apply,update,get totals(){return totals;},get playbackTime(){return renderTime;},get playback(){return {bufferDelay,lag:renderTime===null?null:lastTime-renderTime};}};
 }

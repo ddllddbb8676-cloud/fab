@@ -136,7 +136,7 @@ export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () 
     return Boolean(r&&r.id===expectedId&&pickup(r.id,owner,true));
   }
   function cartItems(cartId){return [...records.values()].filter(r=>r.mode==='cart'&&r.cartId===cartId);}
-  function moveCart(c){for(const r of cartItems(c.id))Object.assign(r,cartCargoPose(c,r.cartSlot));}
+  function moveCart(c,items=cartItems(c.id)){for(const r of items)Object.assign(r,cartCargoPose(c,r.cartSlot));}
   function place(portId, owner = 'player') {
     const record = records.get(hands.get(owner)), p = byPort.get(portId);
     if (!record || !p || occupancy.has(portId) || isDestroyed(p.machineId)) return false;

@@ -6,6 +6,7 @@ export const CART_HOMES=Object.freeze([
 ]);
 export const CART_HOME=CART_HOMES[0];
 export const CART_SIZE=Object.freeze({width:1.06,depth:1.70,lower:.27,upper:1.42,handle:1.2,tow:1.67});
+export const CART_USE_RANGE=2.2, CART_BOARD_RANGE=3;
 export function cartPoint(c,x,y,z){const a=Math.cos(c.yaw),b=Math.sin(c.yaw);return {x:c.x+a*x+b*z,y,z:c.z-b*x+a*z};}
 export function cartCargoPose(c,slot){return {...cartPoint(c,0,(slot<2?CART_SIZE.lower:CART_SIZE.upper)+.24,slot%2?.44:-.44),yaw:c.yaw+Math.PI};}
 export function cartSeatPose(c,level){return {...cartPoint(c,0,(level?CART_SIZE.upper:CART_SIZE.lower)-.12,-.73),heading:c.yaw+Math.PI,posture:'sit',speed:0};}

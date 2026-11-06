@@ -49,5 +49,5 @@ export function createSharedWorldView({fleet,store,destruction,onPeople,onCue,on
     }
     store.interpolate(dt);
   }
-  return {welcome,apply,update,get totals(){return totals;},get playback(){return {bufferDelay,lag:renderTime===null?null:lastTime-renderTime};}};
+  return {welcome,apply,update,get totals(){return totals;},get playbackTime(){return renderTime;},get playback(){return {bufferDelay,lag:renderTime===null?null:lastTime-renderTime};}};
 }

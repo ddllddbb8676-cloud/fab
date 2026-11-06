@@ -1,6 +1,6 @@
 import {isBlocked} from '../src/layout.js';
 import {floorSpot} from '../src/foup-play.js';
-import {cartPoint,cartSeatPose,cartFits,pullCart,CART_SIZE} from '../src/cart-layout.js';
+import {cartPoint,cartSeatPose,cartFits,pullCart,CART_SIZE,CART_USE_RANGE,CART_BOARD_RANGE} from '../src/cart-layout.js';
 import {walkwayAt,WALKWAY_SPEED} from '../src/moving-walkway.js';
 import {WALK_SPEED} from '../src/locomotion.js';
 import {canWalkSegment} from '../src/walking.js';
@@ -29,19 +29,30 @@ function plausibleTow(from,to,distance,elapsed){
 export function createFoupCarts({store,players,now=()=>0,wallNow=Date.now}){
   let dirty=false,lastSaved=0,correctionSeq=0;
   const lastUse=new Map([...store.carts.keys()].map(id=>[id,now()]));
+  const recentTow=new Map();
   const touch=(c,p)=>{if(!p||!p.id.startsWith('resident:'))lastUse.set(c.id,now());};
   const membership=id=>[...store.carts.values()].find(c=>c.driver===id||c.riders.includes(id));
-  function nearby(p,c){
-    if(Math.hypot(p.x-c.x,p.z-c.z)>2.2)return false;
-    for(let i=1;i<=8;i++)if(isBlocked(p.x+(c.x-p.x)*i/8,p.z+(c.z-p.z)*i/8,.1))return false;
+  function nearby(p,c,range){
+    const distance=Math.hypot(p.x-c.x,p.z-c.z);
+    if(distance>range)return false;
+    const steps=Math.max(1,Math.ceil(distance/.25));
+    for(let i=1;i<=steps;i++)if(isBlocked(p.x+(c.x-p.x)*i/steps,p.z+(c.z-p.z)*i/steps,.1))return false;
     return true;
+  }
+  function canReach(p,c,boarding){
+    if(nearby(p,c,boarding?CART_BOARD_RANGE:CART_USE_RANGE))return true;
+    if(!boarding||!c.driver||!nearby(p,c,CART_BOARD_RANGE+1.5))return false;
+    // A slowly passing cart may have moved since the passenger saw it.
+    // Check only recent server positions of this tow, with a clear path to both.
+    const cutoff=wallNow()-1250;
+    return recentTow.get(c.id)?.some(point=>point.at>=cutoff&&nearby(p,point,CART_BOARD_RANGE))??false;
   }
   function placeRiders(c){c.riders.forEach((id,level)=>{const p=players.get(id);if(p)Object.assign(p,cartSeatPose(c,level),{phase:'cart-riding'});});}
   function save(){dirty=false;lastSaved=now();store.notifyChange();}
   function leave(p){
     const c=membership(p.id);if(!c)return null;
     touch(c,p);
-    if(c.driver===p.id){c.driver=null;delete c.poseAt;delete c.correction;}
+    if(c.driver===p.id){c.driver=null;delete c.poseAt;delete c.towTime;delete c.correction;recentTow.delete(c.id);}
     const level=c.riders.indexOf(p.id);
     if(level>=0){
       c.riders[level]=null;
@@ -57,6 +68,7 @@ export function createFoupCarts({store,players,now=()=>0,wallNow=Date.now}){
     if(c.driver!==p.id)return {...data,...cartSeatPose(c,c.riders.indexOf(p.id))};
     if(data.y>.15){leave(p);return data;}
     const distance=Math.hypot(data.x-p.x,data.z-p.z),receivedAt=wallNow();
+    c.towTime=now();
     const elapsed=Math.max(0,now()-p.lastSeen,(receivedAt-(c.poseAt??receivedAt))/1000);
     if(distance>0)c.poseAt=receivedAt;
     // Bound a single collision sweep after a long stall. A rejected move
@@ -69,25 +81,31 @@ export function createFoupCarts({store,players,now=()=>0,wallNow=Date.now}){
       return {...data,x:p.x,y:0,z:p.z,speed:0,posture:'stand'};
     }
     delete c.correction;
-    if(Math.hypot(next.x-c.x,next.z-c.z)>.0001||Math.abs(next.yaw-c.yaw)>.0001){Object.assign(c,{x:next.x,z:next.z,yaw:next.yaw});store.moveCart(c);placeRiders(c);dirty=true;touch(c,p);}
+    if(Math.hypot(next.x-c.x,next.z-c.z)>.0001||Math.abs(next.yaw-c.yaw)>.0001){
+      const trail=recentTow.get(c.id);
+      if(trail){trail.push({x:c.x,z:c.z,at:receivedAt});if(trail.length>12)trail.shift();}
+      Object.assign(c,{x:next.x,z:next.z,yaw:next.yaw});store.moveCart(c);placeRiders(c);dirty=true;touch(c,p);
+    }
     return {...data,y:0,posture:'stand'};
   }
   function command(p,kind,data){
     if(kind==='cart-leave'){const position=leave(p);return position?{ok:true,cartExit:position}:{ok:true};}
     const c=store.carts.get(data.id);
-    if(!c||p.hidden||p.y>.15||p.posture!=='stand'||p.vehicleId!=null||!['idle','approach'].includes(p.phase)||membership(p.id)||!nearby(p,c))return fail('카트 옆으로 가까이 와주세요');
+    const boarding=kind==='cart-board';
+    if(!c||p.hidden||p.y>.15||p.posture!=='stand'||p.vehicleId!=null||!['idle','approach'].includes(p.phase)||membership(p.id)||!canReach(p,c,boarding))return fail('카트 옆으로 가까이 와주세요');
     if(c.returning&&c.returning!==p.id)return fail('NPC가 카트를 정리하고 있어요. 잠시만 기다려주세요');
-    if(c.driver)return fail('이동 중이에요. 손잡이를 놓은 뒤 이용해 주세요');
+    if(c.driver&&!boarding)return fail('이동 중이에요. 손잡이를 놓은 뒤 이용해 주세요');
     if(kind==='cart-pull'){
       if(store.getCarried(p.id))return fail('FOUP을 카트에 싣거나 내려놓아 주세요');
       const handle=cartPoint(c,0,0,CART_SIZE.tow);
       if(isBlocked(handle.x,handle.z,.295))return fail('손잡이 앞이 좁아요. 반대편에서 카트를 이용해 주세요');
       // Mounting only moves the player the short distance to the handle.
       Object.assign(p,handle,{heading:c.yaw,posture:'stand',speed:0,phase:'cart-pulling',cartId:c.id,cartLevel:null});
-      c.driver=p.id;c.poseAt=wallNow();touch(c,p);save();return {ok:true,cartHandle:handle};
+      c.driver=p.id;c.poseAt=wallNow();c.towTime=now();recentTow.set(c.id,[]);touch(c,p);save();return {ok:true,cartHandle:handle};
     }
     if(kind==='cart-board'){
-      const level=data.level;
+      const level=data.level==='any'?c.riders.indexOf(null):data.level;
+      if(data.level==='any'&&level===-1)return fail('위아래 칸에 이미 사람이 타고 있어요');
       if(!Number.isInteger(level)||level<0||level>1)return fail('아래칸 또는 위칸을 골라주세요');
       if(c.riders[level])return fail('이미 다른 사람이 타고 있어요');
       if(store.getCarried(p.id))return fail('들고 있는 FOUP을 먼저 싣거나 내려놓아 주세요');
@@ -116,6 +134,6 @@ export function createFoupCarts({store,players,now=()=>0,wallNow=Date.now}){
     Object.assign(c,{x:next.x,z:next.z,yaw:next.yaw});Object.assign(p,handle,{heading:c.yaw,speed,phase:'cart-pulling'});
     store.moveCart(c);dirty=true;return true;
   }
-  function snapshot(){return [...store.carts.values()].map(c=>({id:c.id,x:+c.x.toFixed(3),z:+c.z.toFixed(3),yaw:+c.yaw.toFixed(3),driver:c.driver,riders:[...c.riders],returning:Boolean(c.returning),...(c.correction?{correction:c.correction}:{})}));}
+  function snapshot(){return [...store.carts.values()].map(c=>({id:c.id,x:+c.x.toFixed(3),z:+c.z.toFixed(3),yaw:+c.yaw.toFixed(3),driver:c.driver,riders:[...c.riders],returning:Boolean(c.returning),...(c.driver&&!c.returning&&Number.isFinite(c.towTime)?{towTime:+c.towTime.toFixed(3)}:{}),...(c.correction?{correction:c.correction}:{})}));}
   return {command,pose,leave,membership,step,snapshot,moveNpc,lastUsed:id=>lastUse.get(id)??now(),touch};
 }

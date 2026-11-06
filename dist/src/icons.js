@@ -1,4 +1,4 @@
-import {suitColor} from './cosmetics-catalog.js?v=04bae36020c1';
+import {suitColor} from './cosmetics-catalog.js?v=a73f61bfaf6e';
 
 export function itemIcon(id) {
   let drawing = '';

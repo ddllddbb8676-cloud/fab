@@ -1,16 +1,16 @@
-import {createAvatarAppearance} from './avatar-appearance.js?v=04bae36020c1';
-import {suitColor} from './cosmetics-catalog.js?v=04bae36020c1';
-import {isSafety} from './safety-team.js?v=04bae36020c1';
-import { createAvatar } from './avatar.js?v=04bae36020c1';
-import { createVisitorBadge } from './visitor-name.js?v=04bae36020c1';
-import { getEmoApproach } from './emo-interaction.js?v=04bae36020c1';
-import { machines } from './layout.js?v=04bae36020c1';
-import { safetyColor, isSuitMesh } from './safety-team.js?v=04bae36020c1';
-import {createEmoteView} from './emote-view.js?v=04bae36020c1';
-import {npcDestructionTitle} from './destruction-titles.js?v=04bae36020c1';
+import {createAvatarAppearance} from './avatar-appearance.js?v=a73f61bfaf6e';
+import {suitColor} from './cosmetics-catalog.js?v=a73f61bfaf6e';
+import {isSafety} from './safety-team.js?v=a73f61bfaf6e';
+import { createAvatar } from './avatar.js?v=a73f61bfaf6e';
+import { createVisitorBadge } from './visitor-name.js?v=a73f61bfaf6e';
+import { getEmoApproach } from './emo-interaction.js?v=a73f61bfaf6e';
+import { machines } from './layout.js?v=a73f61bfaf6e';
+import { safetyColor, isSuitMesh } from './safety-team.js?v=a73f61bfaf6e';
+import {createEmoteView} from './emote-view.js?v=a73f61bfaf6e';
+import {npcDestructionTitle} from './destruction-titles.js?v=a73f61bfaf6e';
 
 // A shared pool of articulated bodies; distant visitors use two tiny instances.
-export function createRemotePeople({THREE,scene,store,fleet=null,maxDetailed=40,cartSeat=()=>null,cartGrip=()=>null}) {
+export function createRemotePeople({THREE,scene,store,fleet=null,maxDetailed=40,cartPose=()=>null,cartGrip=()=>null}) {
   // Only the server's welcome privilege enables this local viewing aid.
   // Neither display names, titles nor safety-team roles establish ownership.
   let identifyNpcs=false;
@@ -41,7 +41,7 @@ export function createRemotePeople({THREE,scene,store,fleet=null,maxDetailed=40,
       if(a.goal){for(const k of ['x','y','z','speed','time'])a[k]+=(a.goal[k]-a[k])*f;a.heading+=Math.atan2(Math.sin(a.goal.heading-a.heading),Math.cos(a.goal.heading-a.heading))*f;}
       const car=a.phase==='riding'&&fleet?.vehicles[a.vehicleId]?.state.car;
       if(car)Object.assign(a,{x:car.x,y:2.16,z:car.z,heading:car.yaw,speed:0});
-      const seat=cartSeat(a.id);if(seat)Object.assign(a,seat);
+      const onCart=cartPose(a.id);a.onCart=Boolean(onCart);if(onCart)Object.assign(a,onCart);
       a.distance=Math.hypot(a.x-camera.position.x,a.z-camera.position.z);if(!a.hidden&&(overview||a.distance<95))visible.push(a);
       const lift=a.phase==='cart-unload'?Math.min(1,a.time/.8):0;
       const held=store.getCarried(a.id);if(held)Object.assign(held,{x:a.x+Math.sin(a.heading)*(.34+.16*lift),y:a.y+(a.posture==='sit'?.48:a.posture==='lie'?.62:.82)+.70*lift,z:a.z+Math.cos(a.heading)*(.34+.16*lift),yaw:a.heading+Math.PI});
@@ -71,6 +71,12 @@ export function createRemotePeople({THREE,scene,store,fleet=null,maxDetailed=40,
         const target=plan&&(working?{...plan.button,y:.96+.16*Math.sin(a.time*15),z:plan.button.z+plan.button.sign*.09}:pressing?plan.button:null);
         avatar.update(Math.min(.1,slot.clock),{speed:a.speed,heading:a.heading,posture:a.posture,hanging:a.phase==='riding'||a.role==='rider',carrying:a.carrying,snap:slot.resetPose,
           repairTime:working?a.time:null,cleanTime:a.phase==='cleaning'?a.time:null,pressTarget:target,pressProgress:working?1:pressing?Math.min(1,a.time/.48):0,crouch:a.phase==='climb'?.7:0});slot.clock=0;slot.resetPose=false;
+      }else if(a.onCart){
+        // Keep the body on its moving cart between the cheaper animation ticks.
+        const root=slot.avatar.root;
+        if(root.position.x!==a.x||root.position.y!==a.y||root.position.z!==a.z){
+          root.position.set(a.x,a.y,a.z);root.updateMatrixWorld(true);
+        }
       }
       slot.appearance.update(true);
       slot.badge.update(slot.avatar,a.posture,{headwear:slot.appearance.headwear,camera});slot.badge.sprite.visible=a.distance<18&&labelled.has(a.id);

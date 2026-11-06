@@ -7,8 +7,8 @@ import {CART_HOME,CART_SIZE,cartPoint,cartSeatPose,cartFits,pullCart} from '../s
 import {foupPacket,foupFromPacket} from '../src/shared-protocol.js';
 
 const id='visitor:'+'a'.repeat(64),second='visitor:'+'b'.repeat(64),third='visitor:'+'c'.repeat(64);
-function setup(){
-  const room=createRoom({random:()=>.5,now:()=>Date.UTC(2026,10,5,4,0)});
+function setup(now=()=>Date.UTC(2026,10,5,4,0)){
+  const room=createRoom({random:()=>.5,now});
   for(const who of [id,second,third]){room.join(who,{hasEntered:true,optOut:true});room.pose(who,{x:CART_HOME.x-.95,y:0,z:CART_HOME.z,heading:0,speed:0,posture:'stand',hidden:false});}
   return room;
 }
@@ -100,6 +100,26 @@ test('remote commands, occupied handle and malformed slots cannot mutate cargo o
   assert.equal(command(room,second,'cart-board',{level:2}).ok,false);
   assert.equal(command(room,second,'cart-pull').ok,true);
   assert.equal(command(room,third,'cart-pull').ok,false);
-  assert.equal(command(room,third,'cart-board',{level:1}).ok,false);
+  assert.equal(command(room,third,'cart-take',{slot:0,recordId:'old'}).ok,false);
+  assert.equal(command(room,third,'cart-board',{level:1}).ok,true);
   assert.deepEqual(room.wallet(id),wallet);
+});
+
+test('passengers can board a held or passing cart within reach, filling distinct tiers without taking its handle',()=>{
+  let at=Date.UTC(2026,10,5,4);const room=setup(()=>at),cart=room.store.carts.get(CART_HOME.id);
+  Object.assign(cart,{x:0,z:30,yaw:Math.PI});
+  const stand=(who,x,z)=>room.pose(who,{x,y:0,z,heading:Math.PI,posture:'stand',hidden:false});
+  stand(id,0,29);assert.equal(command(room,id,'cart-pull').ok,true);
+  stand(second,2.9,30);assert.equal(command(room,second,'cart-board',{level:'any'}).ok,false,'equipment obstructs this side');
+  stand(second,0,32.9);assert.equal(command(room,second,'cart-board',{level:'any'}).ok,true);
+  const driver=room.players.get(id);at+=250;stand(id,driver.x,driver.z-.8);
+  stand(third,0,33.9);assert.equal(command(room,third,'cart-board',{level:'any'}).ok,false,'beyond recent and current range');
+  stand(third,0,32.9);at+=1300;assert.equal(command(room,third,'cart-board',{level:'any'}).ok,false,'an expired near position gives no access');
+  stand(third,0,31.9);at+=200;stand(id,driver.x,driver.z-.65);
+  assert.equal(command(room,third,'cart-board',{level:0}).ok,false,'occupied deck');
+  assert.equal(command(room,third,'cart-board',{level:'any'}).ok,true,'a near tap can arrive shortly after the cart passed');
+  assert.deepEqual(cart.riders,[second,third]);assert.equal(cart.driver,id);
+  const wallet=room.wallet(third);assert.ok(command(room,third,'cart-leave').ok);
+  assert.deepEqual(room.wallet(third),wallet);assert.equal(cart.driver,id);assert.equal(cart.riders[0],second);
+  cart.returning='resident:0';stand(third,cart.x,cart.z);assert.equal(command(room,third,'cart-board',{level:1}).ok,false,'NPC recovery stays reserved');
 });
