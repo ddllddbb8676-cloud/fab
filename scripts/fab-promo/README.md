@@ -1,4 +1,51 @@
-# FAB 58-second film
+# FAB promotional films
+
+## Update film — 2026-11-09
+
+The 30-second portrait update film focuses on bay destruction, black/white FOUP
+contest and stealing, golden FOUP delivery, stocker IN/OUT, and two-seat cart
+rides. It uses current game models and poses in scripted scenes, with short
+Korean captions, an original 150 BPM backing track, game effects, and the
+project's own stocker piano cue. `fab.semitoon.com` stays visible throughout;
+the final 4.4 seconds invite anyone to play on PC or mobile.
+
+The ignored output root is `outputs/fab-promo-2026-11-09/`. Use the same local
+dependencies described below. Production game source is unchanged.
+
+1. `node scripts/fab-promo/make-update-film.mjs` exports all ten clips together.
+2. Run Blender with `scripts/fab-promo/render-film.py`, passing the clip IDs
+   followed by `--root=outputs/fab-promo-2026-11-09 --samples=16` after `--`.
+   The ten IDs and their times are in the generated `timeline.json`.
+3. `python scripts/fab-promo/edit-update-film.py --assets-only` prepares the
+   animated titles and audio; this can run while Blender renders.
+4. `python scripts/fab-promo/edit-update-film.py --compose-only` makes
+   `FAB-update-30s.mp4` (1080x1920, 30 fps, H.264/AAC with faststart).
+5. `python scripts/fab-promo/verify-update-film.py` decodes every video frame,
+   checks the persistent URL contrast and audio, and extracts twenty final
+   frames into `qa/contact-sheet.jpg` for visual review.
+
+Do not reuse encoded clips after rerendering their source frames. Preserve old
+outputs first, then rebuild the affected encoded clips. The shared asset-index
+rule below also applies to this update film.
+
+Validated output: 30.00 seconds, 1080x1920, 30 fps, H.264/AAC stereo 48 kHz,
+11,090,170 bytes. All 900 decoded frames passed the URL contrast check; twenty
+extracted final frames were visually reviewed across all ten scenes. Decoded
+audio peak is -0.89 dBFS without clipping. Source game revision:
+`98590eb2bc114b6f99193cd2989ca1e5b555a7c6`.
+
+- SHA-256: `68ed43d1a882484379417aa6dbe4444afe7a87a237d14fe0005bbf9e64cce6c6`
+- The page returned HTTP 200; media and download targets exist, and the copied
+  MP4 hash matches the verified deliverable.
+- Browser playback was unavailable because Work settings disable local browser
+  use; physical-phone playback was not tested.
+- The previous 58-second film remains available from `2026-11-02.html` on the
+  same owner-private review Site.
+- Private review and download: https://fab-promo-film.ddllddbb8676.chatgpt.site
+- Sites deployment: `appgdep_6af0a49057588191951def18108e2e83` (succeeded).
+- Review Site source: `d18f88a3fb214d7660f24b0f4e149121159b3dea`.
+
+## Original 58-second film
 
 This is an isolated, scripted promo scene using the shipped game's Three.js model
 builders, avatar poses, cosmetics, destruction, FOUP debris, emote textures and

@@ -23,8 +23,8 @@ export async function createFilmWorld({bayIds=[3,4,5,13]}={}) {
     const cyl=(m,x,y,z,r,h)=>solid(cylinderGeometry,m,x,y,z,r,h,r);
     function mesh(parent,g,m,x,y,z,sx,sy,sz){const o=new THREE.Mesh(g,m);o.position.set(x,y,z);o.scale.set(sx,sy,sz);if(g===planeGeometry&&m===aoMat)o.name='shadow';(parent===scene?currentRoot:parent).add(o);return o;}
     ${slice('function canvasTexture(','// A continuous cleanroom floor.')}
-    ${slice('const screenTexture =','for (const layout of layoutMachines)')}
-    ${slice('function movingFoup(','const fleet = createFleet()')}
+    ${slice('const screenTexture =','for (let i=0;i<layoutMachines.length;i++)')}
+    ${slice('function movingFoup(',"await startupStep('transport')")}
     ${slice('function createOHT(','for (const controller of fleet.vehicles)')}
     return {M,scene,build(layout){const root=new THREE.Group();root.name='equipment:'+layout.id;scene.add(root);currentRoot=root;machine(layout,{...processFamilies[layout.familyIndex],material:M[processFamilies[layout.familyIndex].materialKey]});return root;},
       foup(){const p=new THREE.Group();const o=movingFoup(p);return o;},oht(){currentRoot=scene;createOHT({state:{car:{x:0,z:0}}});const v=vehicles.pop();v.root.removeFromParent();v.foup.removeFromParent();return v.root;}};`;

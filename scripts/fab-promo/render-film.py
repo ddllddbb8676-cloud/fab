@@ -3,6 +3,8 @@ from mathutils import Matrix, Vector
 
 ROOT=os.path.abspath(os.path.join(os.path.dirname(__file__),'../../outputs/fab-promo-2026-11-02'))
 args=sys.argv[sys.argv.index('--')+1:] if '--' in sys.argv else []
+root_arg=next((a.split('=',1)[1] for a in args if a.startswith('--root=')),None)
+if root_arg:ROOT=os.path.abspath(root_arg)
 clip_ids=(args[0] if args else '01-emo,02-bay').split(',')
 preview='--preview' in args
 width=540 if preview else 1080
@@ -18,7 +20,8 @@ scene.render.resolution_x=width;scene.render.resolution_y=height;scene.render.re
 scene.render.image_settings.file_format='PNG';scene.render.image_settings.color_mode='RGB';scene.render.image_settings.compression=15
 scene.render.fps=30
 scene.render.use_persistent_data=True
-if hasattr(scene.eevee,'taa_render_samples'):scene.eevee.taa_render_samples=16 if preview else 24
+samples_arg=next((a.split('=',1)[1] for a in args if a.startswith('--samples=')),None)
+if hasattr(scene.eevee,'taa_render_samples'):scene.eevee.taa_render_samples=int(samples_arg) if samples_arg else (16 if preview else 24)
 scene.render.film_transparent=False
 scene.view_settings.view_transform='AgX';scene.view_settings.look='AgX - Medium High Contrast';scene.view_settings.exposure=-.5
 scene.world=bpy.data.worlds.new('FAB soft blue world');scene.world.use_nodes=True
