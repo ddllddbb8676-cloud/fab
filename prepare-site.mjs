@@ -2,9 +2,10 @@ import { mkdir, readFile, writeFile, copyFile, readdir } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url';
 import {moduleRevision,versionLocalModules} from './scripts/versioned-modules.mjs';
 import {build} from 'esbuild';
+import {collectionItems} from './src/collection-catalog.js';
 const root = new URL('.', import.meta.url);
 const dist = new URL('./dist/', root);
-for (const dir of ['src/', 'docs/', 'vendor/nipplejs/', 'vendor/three/', 'vendor/addons/controls/', 'vendor/addons/environments/', 'vendor/addons/objects/', 'vendor/addons/lights/']) await mkdir(new URL(dir, dist), { recursive: true });
+for (const dir of ['src/', 'docs/', 'assets/cosmetics/', 'vendor/nipplejs/', 'vendor/three/', 'vendor/addons/controls/', 'vendor/addons/environments/', 'vendor/addons/objects/', 'vendor/addons/lights/', 'vendor/addons/utils/']) await mkdir(new URL(dir, dist), { recursive: true });
 let html = await readFile(new URL('index.html', root), 'utf8');
 html = html.replace('/node_modules/three/build/three.module.js', '/vendor/three/three.module.js').replace('/node_modules/three/examples/jsm/', '/vendor/addons/');
 html = html.replace('/node_modules/nipplejs/dist/index.mjs', '/vendor/nipplejs/index.mjs');
@@ -38,6 +39,10 @@ await copyFile(new URL('src/google-entry-notice.js',root),new URL('src/google-en
 for(const name of ['capture-time.js','capture-time.css'])await copyFile(new URL('src/'+name,root),new URL('src/'+name,dist));
 await copyFile(new URL('src/scene-depth.js', root), new URL('src/scene-depth.js', dist));
 await copyFile(new URL('src/playful-accessories.js', root), new URL('src/playful-accessories.js', dist));
+for(const name of ['collection-catalog.js','collection-accessories.js','patterned-suits.js'])await copyFile(new URL('src/'+name,root),new URL('src/'+name,dist));
+for(const item of collectionItems)for(const ext of item.slot==='suit'?['webp','png']:['webp']){
+  const path='assets/cosmetics/'+item.id+'-v1.'+ext;await copyFile(new URL(path,root),new URL(path,dist));
+}
 await copyFile(new URL('src/foup-debris.js', root), new URL('src/foup-debris.js', dist));
 for(const name of ['destruction-titles.js','title-picker.js'])await copyFile(new URL('src/'+name,root),new URL('src/'+name,dist));
 for(const name of ['repair-ranking.js','repair-ranking-worker.js'])await copyFile(new URL('src/'+name,root),new URL('src/'+name,dist));
@@ -48,7 +53,7 @@ await copyFile(new URL('docs/licenses/nipplejs.txt', root), new URL('vendor/nipp
 for(const name of ['emotes.js','emote-view.js','emote-strip.js','safety-proximity.js','npc-navigation.js']) await copyFile(new URL('src/'+name,root),new URL('src/'+name,dist));
 for(const name of ['room-population.js','safety-team.js','rest-area.js','rest-area-view.js','leaderboard.js','multiplayer.js','shared-protocol.js','shared-world-view.js','remote-people.js']) await copyFile(new URL('src/'+name,root),new URL('src/'+name,dist));
 for (const name of ['three.module.js', 'three.core.js']) await copyFile(new URL('node_modules/three/build/' + name, root), new URL('vendor/three/' + name, dist));
-for (const name of ['controls/OrbitControls.js', 'environments/RoomEnvironment.js', 'objects/Reflector.js', 'lights/RectAreaLightUniformsLib.js', 'lights/RectAreaLightTexturesLib.js']) await copyFile(new URL('node_modules/three/examples/jsm/' + name, root), new URL('vendor/addons/' + name, dist));
+for (const name of ['controls/OrbitControls.js', 'environments/RoomEnvironment.js', 'objects/Reflector.js', 'lights/RectAreaLightUniformsLib.js', 'lights/RectAreaLightTexturesLib.js', 'utils/BufferGeometryUtils.js']) await copyFile(new URL('node_modules/three/examples/jsm/' + name, root), new URL('vendor/addons/' + name, dist));
 await copyFile(new URL('node_modules/three/LICENSE', root), new URL('vendor/three/LICENSE.txt', dist));
 await copyFile(new URL('docs/capacity-plan.html', root), new URL('docs/capacity-plan.html', dist));
 await copyFile(new URL('connection-check.html', root), new URL('connection-check.html', dist));

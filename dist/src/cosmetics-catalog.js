@@ -1,3 +1,4 @@
+import {collectionItems,collectionSuitColors} from './collection-catalog.js?v=bc076b3298da';
 export const items = [
   { id: 'helmet-white', name: '흰색 헬멧', slot: 'head', price: null },
   { id: 'helmet-orange', name: '주황 헬멧', slot: 'head', price: null },
@@ -57,10 +58,11 @@ const PRICES = {
   'bag-cloud':1600,'bag-gamepad':2400,'bag-whale':3400
 };
 for (const item of items) if (item.price !== 0) item.price = PRICES[item.id];
+items.push(...collectionItems);
 
 export const DEFAULT_OUTFIT = Object.freeze({head:null,face:null,bag:null,suit:'suit-default',beauty:'eyes-default'});
 export const findItem = id => items.find(item => item.id === id);
 const SUIT_COLORS = Object.freeze({
   'suit-pink': '#f6d1dc', 'suit-blue': '#9ecde3', 'suit-green': '#a7d5bd', 'suit-black': '#35434f'
 });
-export const suitColor = outfit => SUIT_COLORS[outfit?.suit] ?? '#ffffff';
+export const suitColor = outfit => SUIT_COLORS[outfit?.suit] ?? collectionSuitColors[outfit?.suit] ?? '#ffffff';

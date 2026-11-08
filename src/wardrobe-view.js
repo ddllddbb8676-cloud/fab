@@ -22,7 +22,13 @@ export function createWardrobeView(THREE,canvas,name) {
     camera.position.set(.1,target+(focus?.29:.83),distance);camera.lookAt(0,target,0);camera.updateProjectionMatrix();
     badge.update(avatar,'stand',{headwear:appearance.headwear,camera,viewportHeight:height});renderer.render(scene,camera);
   }
-  const observer=new ResizeObserver(draw);observer.observe(canvas);draw();
-  return {setOutfit(outfit){appearance.setOutfit(outfit);draw();},setTitle(id){badge.setTitle(id);draw();},setSlot(slot){focus=slot==='beauty';angle=slot==='bag'?Math.PI-.3:-.25;draw();},rotate(){angle+=Math.PI/4;draw();},
-    dispose(){observer.disconnect();badge.dispose();appearance.dispose();avatar.dispose();floor.geometry.dispose();floor.material.dispose();renderer.dispose();}};
+  let frame=0,lastFrame=0,wasAnimating=false;
+  function refresh(time){
+    frame=requestAnimationFrame(refresh);const animate=appearance.needsAnimation;
+    if(!document.hidden&&time-lastFrame>=1000/15&&(animate||wasAnimating)){draw();lastFrame=time;wasAnimating=animate;}
+    else if(animate)wasAnimating=true;
+  }
+  const observer=new ResizeObserver(draw);observer.observe(canvas);draw();frame=requestAnimationFrame(refresh);
+  return {setOutfit(outfit){appearance.setOutfit(outfit);wasAnimating=appearance.needsAnimation;draw();},setTitle(id){badge.setTitle(id);draw();},setSlot(slot){focus=slot==='beauty';angle=slot==='bag'?Math.PI-.3:-.25;draw();},rotate(){angle+=Math.PI/4;draw();},
+    dispose(){cancelAnimationFrame(frame);observer.disconnect();badge.dispose();appearance.dispose();avatar.dispose();floor.geometry.dispose();floor.material.dispose();renderer.dispose();}};
 }

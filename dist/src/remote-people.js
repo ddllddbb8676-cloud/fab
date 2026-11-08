@@ -1,13 +1,13 @@
-import {createAvatarAppearance} from './avatar-appearance.js?v=0aef8956b0b4';
-import {suitColor} from './cosmetics-catalog.js?v=0aef8956b0b4';
-import {isSafety} from './safety-team.js?v=0aef8956b0b4';
-import { createAvatar } from './avatar.js?v=0aef8956b0b4';
-import { createVisitorBadge } from './visitor-name.js?v=0aef8956b0b4';
-import { getEmoApproach } from './emo-interaction.js?v=0aef8956b0b4';
-import { machines } from './layout.js?v=0aef8956b0b4';
-import { safetyColor, isSuitMesh } from './safety-team.js?v=0aef8956b0b4';
-import {createEmoteView} from './emote-view.js?v=0aef8956b0b4';
-import {npcDestructionTitle} from './destruction-titles.js?v=0aef8956b0b4';
+import {createAvatarAppearance} from './avatar-appearance.js?v=bc076b3298da';
+import {suitColor} from './cosmetics-catalog.js?v=bc076b3298da';
+import {isSafety} from './safety-team.js?v=bc076b3298da';
+import { createAvatar } from './avatar.js?v=bc076b3298da';
+import { createVisitorBadge } from './visitor-name.js?v=bc076b3298da';
+import { getEmoApproach } from './emo-interaction.js?v=bc076b3298da';
+import { machines } from './layout.js?v=bc076b3298da';
+import { safetyColor, isSuitMesh } from './safety-team.js?v=bc076b3298da';
+import {createEmoteView} from './emote-view.js?v=bc076b3298da';
+import {npcDestructionTitle} from './destruction-titles.js?v=bc076b3298da';
 
 // A shared pool of articulated bodies; distant visitors use two tiny instances.
 export function createRemotePeople({THREE,scene,store,fleet=null,maxDetailed=40,cartPose=()=>null,cartGrip=()=>null}) {
@@ -15,6 +15,7 @@ export function createRemotePeople({THREE,scene,store,fleet=null,maxDetailed=40,
   // Neither display names, titles nor safety-team roles establish ownership.
   let identifyNpcs=false;
   const actors=new Map(),roster=new Map(),pool=[],groups=new Map(),zero=new THREE.Matrix4().makeScale(0,0,0),dummy=new THREE.Object3D();
+  const suitGroups=new Map(),suitSources=[];
   const softMaterial=new THREE.MeshStandardMaterial({color:'#c8dbdf',roughness:.8});
   const tint=new THREE.Color(),white=new THREE.Color('#ffffff');
   const ball=new THREE.SphereGeometry(1,8,5),proxy=new THREE.InstancedMesh(ball,softMaterial,280);proxy.count=0;proxy.frustumCulled=false;scene.add(proxy);
@@ -22,7 +23,7 @@ export function createRemotePeople({THREE,scene,store,fleet=null,maxDetailed=40,
     const avatar=createAvatar(THREE);avatar.update(0,{repairTime:0});avatar.update(0,{cleanTime:0});avatar.update(0,{});
     const badge=createVisitorBadge(THREE,scene,'',{resident:true});
     const slot={avatar,badge,appearance:createAvatarAppearance(THREE,avatar,{scene,external:true}),emote:createEmoteView(THREE,scene),actor:null,clock:1,resetPose:true};
-    avatar.root.traverse(mesh=>{if(!mesh.isMesh||mesh.name==='face')return;const key=mesh.parent.name==='sweep-broom'?mesh.name:mesh.parent.name==='repair-hammer'?`hammer:${mesh.geometry.type}`:mesh.geometry.uuid+mesh.material.uuid;
+    avatar.root.traverse(mesh=>{if(!mesh.isMesh||mesh.name==='face')return;if(isSuitMesh(mesh.name)){suitSources.push({mesh,slot});return;}const key=mesh.parent.name==='sweep-broom'?mesh.name:mesh.parent.name==='repair-hammer'?`hammer:${mesh.geometry.type}`:mesh.geometry.uuid+mesh.material.uuid;
       if(!groups.has(key)){const instance=new THREE.InstancedMesh(mesh.geometry,mesh.material,maxDetailed*2);instance.count=0;instance.frustumCulled=false;instance.instanceMatrix.setUsage(THREE.DynamicDrawUsage);scene.add(instance);groups.set(key,{instance,sources:[]});}
       groups.get(key).sources.push({mesh,slot});});
     pool.push(slot);return slot;
@@ -84,6 +85,17 @@ export function createRemotePeople({THREE,scene,store,fleet=null,maxDetailed=40,
       slot.emote.update(slot.avatar,a.posture,dt,a.distance<24,{camera,anchor:slot.badge.sprite.position,title:Boolean(a.titleId)});
     }
     for(const group of groups.values()){group.instance.count=group.sources.length;group.sources.forEach(({mesh,slot},i)=>{let shown=Boolean(slot.actor);for(let n=mesh;n&&shown;n=n.parent)shown=n.visible;group.instance.setMatrixAt(i,shown?mesh.matrixWorld:zero);group.instance.setColorAt(i,isSuitMesh(mesh.name)?tint.set(isSafety(slot.actor?.role)?safetyColor(slot.actor.role):suitColor(slot.actor?.outfit)):white);});group.instance.instanceMatrix.needsUpdate=true;if(group.instance.instanceColor)group.instance.instanceColor.needsUpdate=true;}
+    // Patterned bodies share geometry/material batches, including after a pooled
+    // body changes owner or temporarily wears the safety/event uniform.
+    for(const instance of suitGroups.values())instance.count=0;
+    for(const {mesh,slot} of suitSources){
+      let shown=Boolean(slot.actor);for(let node=mesh;node&&shown;node=node.parent)shown=node.visible;if(!shown)continue;
+      const key=mesh.geometry.uuid+mesh.material.uuid;let instance=suitGroups.get(key);
+      if(!instance){instance=new THREE.InstancedMesh(mesh.geometry,mesh.material,maxDetailed*2);instance.name='remote-suit-batch';instance.count=0;instance.frustumCulled=false;instance.instanceMatrix.setUsage(THREE.DynamicDrawUsage);scene.add(instance);suitGroups.set(key,instance);}
+      const index=instance.count++;instance.setMatrixAt(index,mesh.matrixWorld);
+      instance.setColorAt(index,mesh.userData.patternedSuit?white:tint.set(isSafety(slot.actor.role)?safetyColor(slot.actor.role):suitColor(slot.actor.outfit)));
+    }
+    for(const instance of suitGroups.values())if(instance.count){instance.instanceMatrix.needsUpdate=true;instance.instanceColor.needsUpdate=true;}
     const full=new Set(detailed.map(a=>a.id));let n=0;
     for(const a of visible)if(!full.has(a.id)) {
       tint.set(isSafety(a.role)?safetyColor(a.role):suitColor(a.outfit));proxy.setColorAt(n,tint);proxy.setColorAt(n+1,tint);
@@ -106,5 +118,5 @@ export function createRemotePeople({THREE,scene,store,fleet=null,maxDetailed=40,
     return 12;
   }
   return {setRoster,synchronize,setViewerPrivileges,update,speechAnchor,get safetyActors(){return [...actors.values()].filter(a=>a.role==='safety-red'||a.role==='safety-orange');},get state(){return {total:actors.size,details:pool.filter(p=>p.actor).length,people:[...actors.values()].map(a=>({id:a.id,name:a.name,role:a.role,x:a.x,y:a.y,z:a.z,phase:a.phase,posture:a.posture}))};},
-    dispose(){for(const g of groups.values()){g.instance.removeFromParent();g.instance.dispose();}for(const s of pool){s.badge.dispose();s.emote.dispose();s.appearance.dispose();s.avatar.dispose();}proxy.removeFromParent();proxy.dispose();ball.dispose();softMaterial.dispose();}};
+    dispose(){for(const g of groups.values()){g.instance.removeFromParent();g.instance.dispose();}for(const instance of suitGroups.values()){instance.removeFromParent();instance.dispose();}for(const s of pool){s.badge.dispose();s.emote.dispose();s.appearance.dispose();s.avatar.dispose();}proxy.removeFromParent();proxy.dispose();ball.dispose();softMaterial.dispose();}};
 }

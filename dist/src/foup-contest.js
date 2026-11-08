@@ -1,4 +1,4 @@
-import {BAY_CENTERS} from './layout.js?v=0aef8956b0b4';
+import {BAY_CENTERS} from './layout.js?v=bc076b3298da';
 
 export const CONTEST_NAME = '흑백 풉 쟁탈전';
 export const CONTEST_RULES = Object.freeze({recruitMs:30_000, playMs:180_000, resultMs:12_000, radius:2.45, win:30, lose:15, tie:20});

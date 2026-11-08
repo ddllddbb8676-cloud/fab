@@ -1,6 +1,8 @@
 import {suitColor} from './cosmetics-catalog.js';
+import {getCollectionItem} from './collection-catalog.js';
 
 export function itemIcon(id) {
+  if(getCollectionItem(id))return `<svg viewBox="0 0 48 48" aria-hidden="true"><image href="/assets/cosmetics/${id}-v1.webp" x="0" y="-6" width="48" height="60"/></svg>`;
   let drawing = '';
   if (id.startsWith('eyes')) {
     drawing = '<ellipse cx="24" cy="24" rx="21" ry="21" fill="#e8c9b5"/><path d="M8 29q16-5 32 0l-3 13H11z" fill="#f0f6f2" stroke="#bad0d3"/>';
