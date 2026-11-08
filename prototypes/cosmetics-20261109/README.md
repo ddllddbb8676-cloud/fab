@@ -1,7 +1,10 @@
-# FAB cosmetics review: 30 unreleased candidates
+# FAB cosmetics review: 30 numbered candidates
 
-This is a separate review collection. No production catalog, ownership records,
-prices, game routes or game deployment were changed. Candidate numbers are
+This folder preserves the original separate review collection. On 2026-11-09,
+the owner approved numbers 1, 2, 4, 6, 7, 8, 10, 11, 13, 15, 17, 20, 21, 22, 24, 25, 26, 29, 30; those 19 designs shipped
+at their reviewed prices. The other 11 remain proposals. See
+../../docs/cosmetics-collection-2026-11-09.md for the production release.
+The original review creation did not change production. Candidate numbers are
 stable; a number selected by the owner refers to the same ID in catalog.js.
 
 The existing src/avatar.js is used directly. Accessories are real Three.js
