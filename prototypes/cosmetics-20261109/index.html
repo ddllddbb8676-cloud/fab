@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#f1f2e9">
+  <meta name="robots" content="noindex,nofollow">
+  <title>팹뿌 아이템 랩 · 30종 컨펌 룸</title>
+  <meta name="description" content="무지개 방진복부터 미니 스토커 가방까지. 실제 팹뿌 캐릭터에 입혀 보는 새 아이템 30종.">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <header class="mast"><a href="#" class="brand">FAB<span>뿌</span><small>ITEM LAB</small></a><span class="review-label"><i></i> 출시 전 컨펌 룸</span></header>
+  <main>
+    <section class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">DROP 02 / 30 NEW IDEAS</p>
+        <h1>팹에서는<br>좀 <em>튀어도</em> 돼.</h1>
+        <p class="intro">무지개 방진복부터 등에 메는 스토커까지.<br>직접 돌려보고, 마음에 드는 번호를 골라주세요.</p>
+        <a class="primary" href="#collection">30종 둘러보기 <span>↘</span></a>
+        <p class="hero-note">모두 실제 캐릭터에 장착한 3D 시안이에요.<br>게임에는 컨펌한 아이템만 추가할 예정이에요.</p>
+      </div>
+      <button class="hero-art" data-open="suit-prism" aria-label="01 프리즘 무지개 방진복 3D 보기">
+        <span class="orbit-word">BE YOUR OWN COLOR</span>
+        <div class="hero-ring"></div>
+        <img src="thumbs/01.webp" alt="실제 팹뿌 캐릭터가 입은 프리즘 무지개 방진복" width="600" height="750" fetchpriority="high">
+        <span class="hero-item"><b>01</b><span>프리즘 무지개 방진복<small>12,000칩 · 제안가</small></span><span class="hero-arrow">↗</span></span>
+        <span class="turn-badge">터치해서 3D로 보기</span>
+      </button>
+    </section>
+    <section class="collection" id="collection">
+      <div class="section-heading"><div><p class="eyebrow">CHOOSE YOUR NEXT LOOK</p><h2>이번 후보, 30종.</h2></div><a class="sheet-link" href="FAB-items-30.jpg" download>전체 시안 저장 ↓</a></div>
+      <div class="filter-row" aria-label="아이템 분류">
+        <button data-filter="all" aria-pressed="true">전체 <small>30</small></button>
+        <button data-filter="suit" aria-pressed="false">방진복 <small>8</small></button>
+        <button data-filter="head" aria-pressed="false">머리 <small>8</small></button>
+        <button data-filter="face" aria-pressed="false">안경·고글 <small>6</small></button>
+        <button data-filter="bag" aria-pressed="false">가방 <small>8</small></button>
+        <button data-filter="selected" aria-pressed="false">담은 후보 <small id="filter-count">0</small></button>
+      </div>
+      <p class="grid-hint">이미지를 누르면 3D로 입어볼 수 있어요. 가격은 모두 칩 기준 제안가예요.</p>
+      <div id="grid" class="grid"></div>
+      <p id="empty" class="empty" hidden>아직 담은 후보가 없어요. 아이템의 + 버튼으로 골라보세요.</p>
+    </section>
+    <section class="price-note"><h2>가격은 이렇게 잡았어요.</h2><p>기존 상점의 액세서리·가방·검정 방진복 가격대를 기준으로,<br class="desktop"> 형태와 눈에 띄는 정도에 따라 제안했어요. 컨펌하면서 조정할 수 있어요.</p>
+      <div class="price-tiers"><div><span>가볍게 포인트</span><b>900~2,800칩</b></div><div><span>확실한 존재감</span><b>3,200~6,200칩</b></div><div><span>프리미엄 룩</span><b>6,500~12,000칩</b></div></div>
+    </section>
+    <footer><b>FAB뿌 ITEM LAB</b><p>외형을 꾸미는 아이템 시안이에요. 이동 속도나 게임 능력은 바뀌지 않아요.<br>후보 선택은 이 브라우저에만 보관돼요. 선택 번호를 대화로 보내주시면 컨펌에 반영할게요.</p></footer>
+  </main>
+  <aside id="selection-bar" class="selection-bar" hidden><span><b id="selected-count">0</b>개 골랐어요</span><button id="review-selection">선택 번호 확인 ↗</button></aside>
+  <dialog id="viewer" aria-labelledby="viewer-name">
+    <div class="modal-head"><span id="viewer-kicker"></span><button id="close-viewer" class="icon-button" aria-label="3D 보기 닫기">×</button></div>
+    <div class="viewer-layout">
+      <div class="stage-wrap"><img id="fallback" alt="" width="600" height="750"><div id="stage"></div><span class="drag-hint" id="drag-hint">손가락으로 돌려보기 · 두 손가락으로 확대</span></div>
+      <div class="viewer-info">
+        <h2 id="viewer-name"></h2><p id="viewer-description"></p><p class="viewer-price"><b id="viewer-price"></b><span>칩 · 제안가</span></p>
+        <div class="view-controls"><button id="front">앞모습</button><button id="back">뒷모습</button><button id="zoom">전체 보기</button></div>
+        <div class="view-controls"><button id="stand" aria-pressed="true">서 있기</button><button id="walk" aria-pressed="false">걷기</button><button id="sit" aria-pressed="false">앉기</button><button id="rotate" aria-pressed="false">자동 회전</button></div>
+        <button id="pick-item" class="primary pick-item"></button>
+        <div class="next-row"><button id="previous">← 이전</button><span id="position"></span><button id="next">다음 →</button></div>
+        <p class="preview-note">실제 게임 캐릭터에 장착한 시안이에요.<br>조명에 따라 게임 안에서는 색감이 조금 달라질 수 있어요.</p>
+      </div>
+    </div>
+  </dialog>
+  <dialog id="selection-dialog" aria-labelledby="selection-title">
+    <div class="modal-head"><h2 id="selection-title">이 후보들, 어때요?</h2><button id="close-selection" class="icon-button" aria-label="선택 목록 닫기">×</button></div>
+    <p>아래 번호를 복사해서 대화로 보내주세요.<br>가격이나 색상을 바꾸고 싶은 번호도 함께 알려주시면 돼요.</p>
+    <textarea id="selection-text" readonly aria-label="선택한 아이템 번호와 가격"></textarea>
+    <button id="copy-selection" class="primary">선택 목록 복사</button><p id="copy-status" role="status"></p>
+  </dialog>
+  <script type="module" src="./preview.js"></script>
+</body>
+</html>

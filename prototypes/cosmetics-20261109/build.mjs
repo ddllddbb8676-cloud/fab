@@ -1,0 +1,13 @@
+import {build} from 'esbuild';
+import {cp,mkdir,writeFile} from 'node:fs/promises';
+import {fileURLToPath} from 'node:url';
+import {candidates} from './catalog.js';
+const repo=fileURLToPath(new URL('../../',import.meta.url));
+const source=fileURLToPath(new URL('./',import.meta.url));
+const dist=repo+'outputs/cosmetics-20261109/site/dist/';
+await mkdir(dist,{recursive:true});
+await cp(source+'index.html',dist+'index.html');await cp(source+'styles.css',dist+'styles.css');
+await cp(repo+'node_modules/three/LICENSE',dist+'THIRD-PARTY-LICENSES.txt');
+await build({entryPoints:[source+'preview.js'],bundle:true,format:'esm',target:['es2020'],minify:true,legalComments:'none',outfile:dist+'preview.js'});
+await writeFile(dist+'catalog.json',JSON.stringify(candidates,null,2));
+console.log('Review site built at '+dist);
