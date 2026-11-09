@@ -1,5 +1,5 @@
-import {createAvatar} from './avatar.js?v=44e1daec1fd6';
-import {isPatternedSuit,collectionSuitColors} from './collection-catalog.js?v=44e1daec1fd6';
+import {createAvatar} from './avatar.js?v=bb8913c38810';
+import {isPatternedSuit,collectionSuitColors} from './collection-catalog.js?v=bb8913c38810';
 
 const suitNames=new Set(['hood','torso','pants','upperArm','forearm']);
 function parts(avatar){

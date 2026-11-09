@@ -1,4 +1,4 @@
-import { sampleLoop, SEATED_FOUP_Y, CARRIED_FOUP_Y } from './layout.js?v=44e1daec1fd6';
+import { sampleLoop, SEATED_FOUP_Y, CARRIED_FOUP_Y } from './layout.js?v=bb8913c38810';
 const smooth = t => t * t * (3 - 2 * t);
 export function transportSchedule(bay, speed = 2.3) {
   const travel = bay.loop.length / speed;

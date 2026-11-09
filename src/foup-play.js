@@ -44,7 +44,7 @@ export function supportHeight(x, z) {
 }
 
 // A FOUP keeps the same identity across port, hands, throw and ground states.
-export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () => {}, showOriginal = () => {}, isDestroyed = () => false, onImpact = () => {}, onShatter = () => {}, onChange = () => {}, seedStockers=false, canSupplyStocker=()=>true, canPickup=()=>true, onStockerOut=()=>{} }) {
+export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () => {}, showOriginal = () => {}, isDestroyed = () => false, onImpact = () => {}, onShatter = () => {}, hitFlight = null, onChange = () => {}, seedStockers=false, canSupplyStocker=()=>true, canPickup=()=>true, onStockerOut=()=>{} }) {
   const byPort = new Map(ports.map(p => [p.id, p])), records = new Map(), occupancy = new Map();
   const hands = new Map();
   const carts=new Map();
@@ -162,15 +162,17 @@ export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () 
     if (record.original) { hideOriginal(record.portId); record.original = false; }
     delete record.cartId;delete record.cartSlot;
     if (record.portId) occupancy.delete(record.portId);
+    record.throwerId=record.owner??null;
     if (record.owner) hands.delete(record.owner); delete record.owner;
     Object.assign(record, pose, { mode: 'flying', portId: null, vx: velocity.x, vy: velocity.y, vz: velocity.z, bounce: 0, shatter }); onChange(); return true;
   }
-  function breakFoup(record, silent = false) {
+  function breakFoup(record, silent = false, guardId = null) {
     const spot = floorSpot(record, .48) ?? floorSpot(record, .24);
     if (spot) Object.assign(record, spot);
     Object.assign(record, {mode:'broken',y:.035,damageAge:silent?2:0,breakSeq:(record.breakSeq||0)+1,shatter:false,cleaner:null,cleanProgress:0});
     delete record.goal;
-    if (!silent) onShatter(record);
+    if (!silent) onShatter(record,guardId);
+    delete record.throwerId;
     onChange();
   }
   function beginCleanup(id, owner, breakSeq) {
@@ -352,16 +354,21 @@ export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () 
     const steps = Math.max(1, Math.ceil(Math.min(dt, .1) / .016)), h = Math.min(dt, .1) / steps;
     for (let i = 0; i < steps; i++) for (const record of records.values()) {
       if (record.mode !== 'flying') continue;
+      const previous=hitFlight&&record.shatter?{x:record.x,y:record.y,z:record.z}:null;
       const x = record.x + record.vx * h, z = record.z + record.vz * h;
       if (Math.abs(x) < 58.5 && Math.abs(z) < 88.2 && record.y - .22 > supportHeight(x, z)) { record.x = x; record.z = z; }
       else { record.vx *= -.25; record.vz *= -.25; }
       record.vy -= 9.8 * h; record.y += record.vy * h; record.yaw += h * 5;
+      if(previous){
+        const hit=hitFlight(record,previous,record);
+        if(hit){Object.assign(record,hit.point);breakFoup(record,false,hit.guardId);continue;}
+      }
       if (record.y <= .225) {
         if(record.shatter){breakFoup(record);continue;}
         if (Math.abs(record.vy) > 1) onImpact(record, Math.abs(record.vy));
         record.y = .225;
         if (Math.abs(record.vy) > 1 && record.bounce++ < 2) { record.vy = -record.vy * .25; record.vx *= .4; record.vz *= .4; }
-        else { const spot = floorSpot(record, .24); if (spot) Object.assign(record, spot); record.mode = 'ground'; onChange(record); }
+        else { const spot = floorSpot(record, .24); if (spot) Object.assign(record, spot); record.mode = 'ground'; delete record.throwerId; onChange(record); }
       }
     }
   }

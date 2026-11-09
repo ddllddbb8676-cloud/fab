@@ -24,6 +24,7 @@ import {createCartReturner} from './cart-returner.js';
 import {markCatch} from '../src/catch-reaction.js';
 import {markSafetyDizzy} from '../src/safety-dizzy.js';
 import {createSafetyThrowDemo} from './safety-throw-demo.js';
+import {firstSafetyFlightHit} from './safety-flight-hit.js';
 import {canSelectTitle,restoreTitlePreference,destructionTitle,npcDestructionTitle,OPERATOR_TITLE} from '../src/destruction-titles.js';
 import {isRestArea,canSafetyTraverse,restAreaExit,SAFETY_CLEARANCE} from '../src/rest-area.js';
 import {createWorldEvents} from './world-events.js';
@@ -84,9 +85,10 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
       for(const p of players.values())if(!p.hidden&&distance(p,r)<=20)return false;
       return true;
     },
-    onImpact:r=>emit('bounce',r),onShatter:r=>{
+    hitFlight:(r,from,to)=>firstSafetyFlightHit(r,from,to,[...safety.people,...players.values()]),
+    onImpact:r=>emit('bounce',r),onShatter:(r,guardId)=>{
       emit('shatter',r);
-      for(const guard of [...safety.people,...players.values()])if(markSafetyDizzy(guard,r,time)&&players.has(guard.id))release(guard);
+      for(const guard of [...safety.people,...players.values()])if(markSafetyDizzy(guard,guard.id===guardId?guard:r,time)&&players.has(guard.id))release(guard);
     },onStockerOut:p=>emit('stocker-out',p),onChange:record=>{
       if(record)worldEvents?.contest.moved(record);
       if(foupReady)onFoupChange(store.checkpoint());

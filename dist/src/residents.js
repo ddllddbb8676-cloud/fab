@@ -1,26 +1,26 @@
-import { machines, bays, ports, BAY_CENTERS } from './layout.js?v=44e1daec1fd6';
-import { NPC_WALK_SPEED, NPC_REPAIR_SPEED } from './locomotion.js?v=44e1daec1fd6';
-import { findWalkPath } from './walking.js?v=44e1daec1fd6';
-import {stepNpc,rerouteNpc,npcDestination} from './npc-navigation.js?v=44e1daec1fd6';
-import { getEmoApproach } from './emo-interaction.js?v=44e1daec1fd6';
-import { findRestHeading } from './posture.js?v=44e1daec1fd6';
-import { createVisitorName, createVisitorBadge } from './visitor-name.js?v=44e1daec1fd6';
-import {npcDestructionTitle} from './destruction-titles.js?v=44e1daec1fd6';
-import { createAvatar } from './avatar.js?v=44e1daec1fd6';
-import {createAvatarAppearance} from './avatar-appearance.js?v=44e1daec1fd6';
-import {npcOutfit} from './npc-outfits.js?v=44e1daec1fd6';
-import { floorSpot } from './foup-play.js?v=44e1daec1fd6';
-import { reservedPortIds } from './network-transport.js?v=44e1daec1fd6';
-import {isEventBay,avoidsEventBay} from './safety-team.js?v=44e1daec1fd6';
+import { machines, bays, ports, BAY_CENTERS } from './layout.js?v=bb8913c38810';
+import { NPC_WALK_SPEED, NPC_REPAIR_SPEED } from './locomotion.js?v=bb8913c38810';
+import { findWalkPath } from './walking.js?v=bb8913c38810';
+import {stepNpc,rerouteNpc,npcDestination} from './npc-navigation.js?v=bb8913c38810';
+import { getEmoApproach } from './emo-interaction.js?v=bb8913c38810';
+import { findRestHeading } from './posture.js?v=bb8913c38810';
+import { createVisitorName, createVisitorBadge } from './visitor-name.js?v=bb8913c38810';
+import {npcDestructionTitle} from './destruction-titles.js?v=bb8913c38810';
+import { createAvatar } from './avatar.js?v=bb8913c38810';
+import {createAvatarAppearance} from './avatar-appearance.js?v=bb8913c38810';
+import {npcOutfit} from './npc-outfits.js?v=bb8913c38810';
+import { floorSpot } from './foup-play.js?v=bb8913c38810';
+import { reservedPortIds } from './network-transport.js?v=bb8913c38810';
+import {isEventBay,avoidsEventBay} from './safety-team.js?v=bb8913c38810';
 
-import { RESIDENT_ROLES } from './room-population.js?v=44e1daec1fd6';
+import { RESIDENT_ROLES } from './room-population.js?v=bb8913c38810';
 export { RESIDENT_ROLES };
 export const REPAIR_STOCK=Object.freeze({minimum:50,target:60,repairGraceSeconds:45});
 const distance = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const clamp = n => Math.max(0, Math.min(1, n));
 
 /** World state, separate from rendering: shared cargo identities and per-tool claims. */
-export function createResidentSimulation({ fleet, store, destruction, detachCargo, protectedIds = () => [], getNeighbors=()=>[], onCue = () => {}, random = Math.random, excludedNames = [] }) {
+export function createResidentSimulation({ fleet, store, destruction, detachCargo, protectedIds = () => [], getNeighbors=()=>[], getSafetyThrow=()=>null, refreshSafetyThrow=()=>false, onCue = () => {}, random = Math.random, excludedNames = [] }) {
   const reservedNames = [...excludedNames];
   const people = [], claims = new Map(), portMap = new Map(ports.map(p => [p.id, p]));
   const totals = { throws: 0, repairs: 0, breaks: 0, pickups: 0, placements: 0 };
@@ -158,7 +158,10 @@ export function createResidentSimulation({ fleet, store, destruction, detachCarg
       const target = floorSpot({ x: previous.x, z: previous.z + .55 });
       if (target && go(actor, target, 'retrieve')) return;
     }
-    if (previous && ['flying', 'carried', 'broken', 'cleared'].includes(previous.mode)) { actor.wait = 2; return; }
+    if (previous && ['flying', 'carried', 'broken', 'cleared'].includes(previous.mode)) {
+      if(previous.mode==='broken'&&refreshSafetyThrow(actor))actor.recordId=null;
+      else {actor.wait=2;return;}
+    }
     const candidates = ports.filter(p => !reservedPortIds.has(p.id) && !reserved(p.machineId) && store.atPort(p.id)&&!store.atPort(p.id).gold&&!people.some(other=>other!==actor&&other.recordId===store.atPort(p.id).id))
       .sort((a,b) => distance(actor, a) - distance(actor,b)).slice(0, 12);
     const p = choose(candidates);
@@ -277,8 +280,15 @@ export function createResidentSimulation({ fleet, store, destruction, detachCarg
           // Turn from the loadport toward its open aisle before throwing.
           actor.heading = p?.sign === 1 ? 0 : Math.PI;
           if (actor.time >= 1.3) {
+            const demo=!record.gold&&getSafetyThrow(actor);
+            let speed=2.8;
+            if(demo){
+              actor.heading=Math.atan2(demo.x-actor.x,demo.z-actor.z);
+              const flight=(3.2+Math.sqrt(3.2**2+2*9.8*(.9-.225)))/9.8;
+              speed=Math.max(0,(distance(actor,demo)-.4)/flight);
+            }
             store.launch(record, { x: actor.x + Math.sin(actor.heading) * .4, y: .9, z: actor.z + Math.cos(actor.heading) * .4, yaw: actor.heading },
-              { x: Math.sin(actor.heading) * 2.8, y: 3.2, z: Math.cos(actor.heading) * 2.8 }, {shatter:true});
+              { x: Math.sin(actor.heading) * speed, y: 3.2, z: Math.cos(actor.heading) * speed }, {shatter:true});
             totals.throws++; actor.actions++; cue(actor,'throw'); actor.phase = 'idle'; actor.wait = 2.5;
           }
         } else { actor.phase = 'idle'; actor.wait = 1; }
