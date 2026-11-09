@@ -21,6 +21,7 @@ import {configuredOwnerId,hasUnlimitedChips} from './owner-privileges.js';
 import {createRoomSpeech} from './owner-speech.js';
 import {createFoupCarts} from './foup-carts.js';
 import {createCartReturner} from './cart-returner.js';
+import {createFoupCleaners} from './foup-cleaners.js';
 import {markCatch} from '../src/catch-reaction.js';
 import {markFoupDizzy} from '../src/safety-dizzy.js';
 import {createSafetyThrowDemo} from './safety-throw-demo.js';
@@ -112,6 +113,7 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
     protectedIds:()=>[...leases.keys(),...(worldEvents?.protectedIds()??[]),...(worldEvents?.contest.live()?contestMachineIds:[])],onCue:emit});
   const safety=createSafetyPatrols({random,excludedNames:residents.people.map(p=>p.name)});
   const cartReturner=createCartReturner({store,carts,residents,players,now:()=>time,canRun:()=>!worldEvents?.contest.live()&&!worldEvents?.bayRunning()&&!worldEvents?.view().lastResult,onCue:emit});
+  const foupCleaners=createFoupCleaners({store,residents,players,now:()=>time,canRun:()=>!worldEvents?.contest.live()&&!worldEvents?.bayRunning()&&!worldEvents?.view().lastResult,onCue:emit});
   function rememberContestProfile(saved) {
     if(worldEvents?.contest.hasMember(saved.id))contestProfiles.set(saved.id,saved);
   }
@@ -184,7 +186,7 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
     assignSafety:bayId=>{
       safety.setEventBay(bayId);const paused=worldEvents?.contest.safetyPaused();safety.setPaused(paused);
       if(paused)for(const p of players.values())if(isSafety(p.role))finishDuty(p,p.optOut);
-      if(worldEvents?.bayRunning())cartReturner.update(0);residents.setEventBays(bayId);
+      if(worldEvents?.bayRunning())cartReturner.update(0);foupCleaners.update(0);residents.setEventBays(bayId);
     },spawnGolden:(event,count)=>store.spawnGolden(event,count),expireGolden:(id,at)=>store.expireGolden(id,at),
     goldenRemaining:id=>[...store.records.values()].filter(r=>r.gold?.eventId===id&&!r.gold.throwPaid&&!['broken','cleared'].includes(r.mode)).length,
     reward:(id,amount,eventId,seriesId)=>{const p=players.get(id);if(p&&credit(p,amount,'bay-event',{eventId,seriesId}))changed(p);}});
@@ -399,6 +401,7 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
       if(!r||r.mode!=='broken'||r.breakSeq!==data.breakSeq)return fail('이미 치워진 잔해예요');
       if(p.hidden||p.posture!=='stand'||p.y>.15||distance(p,r)>1.65)return fail('잔해 가까이 다가가 주세요');
       if(store.getCarried(id)||p.vehicleId!=null)return fail('FOUP을 내려놓고 청소해 주세요');
+      foupCleaners.yieldRecord(r.id);
       if(r.cleaner&&r.cleaner!==id)return fail('다른 사람이 청소하고 있어요');
       if(r.damageAge<1.4)return fail('웨이퍼가 바닥에 떨어진 뒤 치워주세요');
       release(p);
@@ -497,7 +500,7 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
       p.emoteLeft=Math.max(0,(p.emoteUntil||0)-time);if(!p.emoteLeft)p.emote='';
     }
     for(const p of players.values())if(time-p.lastSeen>40)remove(p.id);
-    worldEvents.update();fleet.step(dt);store.step(dt);residents.update(dt);cartReturner.update(dt);carts.step();
+    worldEvents.update();fleet.step(dt);store.step(dt);residents.update(dt);cartReturner.update(dt);foupCleaners.update(dt);carts.step();
     for(const [id,l] of leases)if(time>l.expires){const p=players.get(l.owner);if(p)release(p);else leases.delete(id);}
     for(const p of players.values()) {
       if(time-p.lastSeen>40){remove(p.id);continue;}
@@ -544,5 +547,5 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
   }
   store.initializeStockers();
   foupReady=true;
-  return {titleState,nicknameState,applyNickname,awardGoogleLink,wallet:id=>players.has(id)?walletView(players.get(id)):null,join,remove,pose,command,step,snapshot,roster,ranking,equipmentState,restoreEquipment,restoreFoups,worldEvents,rememberContestProfile,forgetContestProfile:id=>contestProfiles.delete(id),players,fleet,store,residents,safety,destruction,carts,cartReturner,profile:id=>players.has(id)?profile(players.get(id)):null,get time(){return time;}};
+  return {titleState,nicknameState,applyNickname,awardGoogleLink,wallet:id=>players.has(id)?walletView(players.get(id)):null,join,remove,pose,command,step,snapshot,roster,ranking,equipmentState,restoreEquipment,restoreFoups,worldEvents,rememberContestProfile,forgetContestProfile:id=>contestProfiles.delete(id),players,fleet,store,residents,safety,destruction,carts,cartReturner,foupCleaners,profile:id=>players.has(id)?profile(players.get(id)):null,get time(){return time;}};
 }

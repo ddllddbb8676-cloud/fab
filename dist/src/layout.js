@@ -1,8 +1,8 @@
-import { AIR_SHOWER } from './air-shower.js?v=cd6ea967d28e';
-import { bayFamilyIndices } from './equipment-catalog.js?v=cd6ea967d28e';
-import { isRuntimeBlocked } from './runtime-obstacles.js?v=cd6ea967d28e';
-import { stockerBounds, STOCKER_WALK_OUTER_X } from './stocker-layout.js?v=cd6ea967d28e';
-import { entranceBounds, ENTRANCE } from './entrance-layout.js?v=cd6ea967d28e';
+import { AIR_SHOWER } from './air-shower.js?v=2cbe557a8370';
+import { bayFamilyIndices } from './equipment-catalog.js?v=2cbe557a8370';
+import { isRuntimeBlocked } from './runtime-obstacles.js?v=2cbe557a8370';
+import { stockerBounds, STOCKER_WALK_OUTER_X } from './stocker-layout.js?v=2cbe557a8370';
+import { entranceBounds, ENTRANCE } from './entrance-layout.js?v=2cbe557a8370';
 // Metres. A viewing model informed by bay-layout research, not a construction plan.
 export const HALL = { width: 120, length: 180, height: 5 };
 export const AISLE = 5.2, SERVICE_AISLE = 1.4, SIDE_GAP = .65, TOOL_SCALE_X = 103 / 120;

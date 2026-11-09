@@ -11,7 +11,7 @@ export function isFoupHitTarget(actor){
   // NPC cart recovery keep their state even when a FOUP passes through them.
   return !actor.hidden&&(actor.y||0)<=.15&&!isRestArea(actor)&&
     (actor.posture||'stand')==='stand'&&['idle','patrol','chase'].includes(actor.phase||'idle')&&
-    actor.targetId==null&&actor.vehicleId==null&&!actor.cartTask&&!actor.lap&&
+    actor.targetId==null&&actor.vehicleId==null&&!actor.cartTask&&!actor.cleanTask&&!actor.lap&&
     actor.cleanTargetId==null&&!(actor.caughtLeft>0)&&!(actor.catchLeft>0);
 }
 

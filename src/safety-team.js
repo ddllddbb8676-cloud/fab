@@ -19,7 +19,7 @@ export function createSafetyName(random=Math.random,excluded=[],preferred='') {
 export function canCatch(guard, person, time) {
   if(guard.id?.startsWith('safety:')&&(guard.avoidBayIds??[guard.avoidBayId]).some(id=>isEventBay(person,id,1)))return false;
   return isSafety(guard.role) && !(guard.dizzyLeft>0) && !guard.hidden && !person.hidden && !isSafety(person.role) && !isRestArea(person) && !isRestArea(guard) &&
-    !person.penalty && !(person.dizzyLeft>0) && time >= (person.safeUntil || 0) && !['repair','riding','climb'].includes(person.phase) &&
+    !person.penalty && !person.cleanTask && !(person.dizzyLeft>0) && time >= (person.safeUntil || 0) && !['repair','riding','climb'].includes(person.phase) &&
     !['riding','climb','repair','event-rest'].includes(guard.phase) && distance(guard,person) < .95 && canWalkSegment(guard,person);
 }
 export function isEventBay(point,id,margin=0){

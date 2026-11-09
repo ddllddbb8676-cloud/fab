@@ -186,8 +186,20 @@ export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () 
     Object.assign(r,{mode:'cleared',cleaner:null,cleanProgress:0,refillIn:FOUP_RESTOCK_SECONDS});onChange();return true;
   }
   function restock(r,notify=true) {
-    const available=id=>{const p=byPort.get(id);return p&&initialPortIds.includes(id)&&!occupancy.has(id)&&!isDestroyed(p.machineId);};
-    const id=available(r.homePortId)?r.homePortId:initialPortIds.find(available),p=byPort.get(id);
+    // Recycle into the least supplied working bay, rather than repeatedly
+    // filling the first bay while the far half of the fab stays empty.
+    const capacity=new Map(),stock=new Map(),toolStock=new Map(),available=[];
+    for(const id of initialPortIds){const p=byPort.get(id);if(!p||isDestroyed(p.machineId))continue;
+      const bay=machines[p.machineId].bayId;capacity.set(bay,(capacity.get(bay)||0)+1);if(!occupancy.has(id))available.push(p);
+    }
+    if(!available.length)return;
+    for(const id of occupancy.keys()){const p=byPort.get(id);if(!p||isDestroyed(p.machineId))continue;
+      const bay=machines[p.machineId].bayId;stock.set(bay,(stock.get(bay)||0)+1);toolStock.set(p.machineId,(toolStock.get(p.machineId)||0)+1);
+    }
+    const fill=p=>(stock.get(machines[p.machineId].bayId)||0)/capacity.get(machines[p.machineId].bayId);
+    const homeBay=machines[byPort.get(r.homePortId)?.machineId]?.bayId;
+    available.sort((a,b)=>fill(a)-fill(b)||Number(machines[b.machineId].bayId===homeBay)-Number(machines[a.machineId].bayId===homeBay)||(toolStock.get(a.machineId)||0)-(toolStock.get(b.machineId)||0)||Number(b.id===r.homePortId)-Number(a.id===r.homePortId));
+    const p=available[0],id=p?.id;
     if(!p)return;
     Object.assign(r,{mode:'port',portId:id,homePortId:id,x:p.x,y:SEATED_FOUP_Y,z:p.z,yaw:p.sign===1?Math.PI:0,damageAge:0});
     occupancy.set(id,r.id);if(notify)onChange();

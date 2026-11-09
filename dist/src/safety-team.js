@@ -1,10 +1,10 @@
-import { bays, BAY_PITCH } from './layout.js?v=cd6ea967d28e';
-import { NPC_SAFETY_SPEED } from './locomotion.js?v=cd6ea967d28e';
-import { canWalkSegment, findWalkPath } from './walking.js?v=cd6ea967d28e';
-import {stepNpc,rerouteNpc} from './npc-navigation.js?v=cd6ea967d28e';
-import { VISITOR_ADJECTIVES, createUniqueNickname } from './visitor-name.js?v=cd6ea967d28e';
-import { SAFETY_PATROL_ROLES } from './room-population.js?v=cd6ea967d28e';
-import {isRestArea,canSafetyTraverse,restAreaExit,SAFETY_CLEARANCE} from './rest-area.js?v=cd6ea967d28e';
+import { bays, BAY_PITCH } from './layout.js?v=2cbe557a8370';
+import { NPC_SAFETY_SPEED } from './locomotion.js?v=2cbe557a8370';
+import { canWalkSegment, findWalkPath } from './walking.js?v=2cbe557a8370';
+import {stepNpc,rerouteNpc} from './npc-navigation.js?v=2cbe557a8370';
+import { VISITOR_ADJECTIVES, createUniqueNickname } from './visitor-name.js?v=2cbe557a8370';
+import { SAFETY_PATROL_ROLES } from './room-population.js?v=2cbe557a8370';
+import {isRestArea,canSafetyTraverse,restAreaExit,SAFETY_CLEARANCE} from './rest-area.js?v=2cbe557a8370';
 
 export const PENALTY_MESSAGE = '안전팀에게 걸려 패널티를 부여받았습니다. 장비를 3대 고쳐야 다시 팹뿌를 하실 수 있습니다.';
 export const SAFETY_CATCH_GOAL=3;
@@ -19,7 +19,7 @@ export function createSafetyName(random=Math.random,excluded=[],preferred='') {
 export function canCatch(guard, person, time) {
   if(guard.id?.startsWith('safety:')&&(guard.avoidBayIds??[guard.avoidBayId]).some(id=>isEventBay(person,id,1)))return false;
   return isSafety(guard.role) && !(guard.dizzyLeft>0) && !guard.hidden && !person.hidden && !isSafety(person.role) && !isRestArea(person) && !isRestArea(guard) &&
-    !person.penalty && !(person.dizzyLeft>0) && time >= (person.safeUntil || 0) && !['repair','riding','climb'].includes(person.phase) &&
+    !person.penalty && !person.cleanTask && !(person.dizzyLeft>0) && time >= (person.safeUntil || 0) && !['repair','riding','climb'].includes(person.phase) &&
     !['riding','climb','repair','event-rest'].includes(guard.phase) && distance(guard,person) < .95 && canWalkSegment(guard,person);
 }
 export function isEventBay(point,id,margin=0){
