@@ -1,8 +1,8 @@
-import { isBlocked, machines, bays, SEATED_FOUP_Y } from './layout.js?v=bb8913c38810';
-import {canTraverseRuntimeObstacles} from './runtime-obstacles.js?v=bb8913c38810';
-import {entranceBounds} from './entrance-layout.js?v=bb8913c38810';
-import {CART_HOMES,cartCargoPose,cartFits,cartPoint} from './cart-layout.js?v=bb8913c38810';
-import {stockers,stockerById,stockerBounds,stockerSlot,stockerRecordPose,STOCKER_CAPACITY,STOCKER_TRANSFER_SECONDS,STOCKER_OUT_CUE_AT} from './stocker-layout.js?v=bb8913c38810';
+import { isBlocked, machines, bays, SEATED_FOUP_Y } from './layout.js?v=cd6ea967d28e';
+import {canTraverseRuntimeObstacles} from './runtime-obstacles.js?v=cd6ea967d28e';
+import {entranceBounds} from './entrance-layout.js?v=cd6ea967d28e';
+import {CART_HOMES,cartCargoPose,cartFits,cartPoint} from './cart-layout.js?v=cd6ea967d28e';
+import {stockers,stockerById,stockerBounds,stockerSlot,stockerRecordPose,STOCKER_CAPACITY,STOCKER_TRANSFER_SECONDS,STOCKER_OUT_CUE_AT} from './stocker-layout.js?v=cd6ea967d28e';
 const stockModes=new Set(['stored','stocking','retrieving','stocker-out']);
 // Accept the retired units only while reading older saved worlds.
 const retiredStockers=new Set(['STK03','STK04','STK05','STK06']);
@@ -166,12 +166,12 @@ export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () 
     if (record.owner) hands.delete(record.owner); delete record.owner;
     Object.assign(record, pose, { mode: 'flying', portId: null, vx: velocity.x, vy: velocity.y, vz: velocity.z, bounce: 0, shatter }); onChange(); return true;
   }
-  function breakFoup(record, silent = false, guardId = null) {
+  function breakFoup(record, silent = false, targetId = null) {
     const spot = floorSpot(record, .48) ?? floorSpot(record, .24);
     if (spot) Object.assign(record, spot);
     Object.assign(record, {mode:'broken',y:.035,damageAge:silent?2:0,breakSeq:(record.breakSeq||0)+1,shatter:false,cleaner:null,cleanProgress:0});
     delete record.goal;
-    if (!silent) onShatter(record,guardId);
+    if (!silent) onShatter(record,targetId);
     delete record.throwerId;
     onChange();
   }
@@ -361,7 +361,7 @@ export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () 
       record.vy -= 9.8 * h; record.y += record.vy * h; record.yaw += h * 5;
       if(previous){
         const hit=hitFlight(record,previous,record);
-        if(hit){Object.assign(record,hit.point);breakFoup(record,false,hit.guardId);continue;}
+        if(hit){Object.assign(record,hit.point);breakFoup(record,false,hit.targetId);continue;}
       }
       if (record.y <= .225) {
         if(record.shatter){breakFoup(record);continue;}

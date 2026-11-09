@@ -1,5 +1,5 @@
-import {PROTOCOL} from './shared-protocol.js?v=bb8913c38810';
-import {HttpRoomSocket} from './http-room-socket.js?v=bb8913c38810';
+import {PROTOCOL} from './shared-protocol.js?v=cd6ea967d28e';
+import {HttpRoomSocket} from './http-room-socket.js?v=cd6ea967d28e';
 
 const attempts=new WeakMap(),preferHttp=new WeakSet(),preferenceKey='fab-https-room-until-v1';
 export const SWITCH_AFTER_MS=2200;

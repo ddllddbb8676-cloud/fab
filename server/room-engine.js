@@ -22,9 +22,9 @@ import {createRoomSpeech} from './owner-speech.js';
 import {createFoupCarts} from './foup-carts.js';
 import {createCartReturner} from './cart-returner.js';
 import {markCatch} from '../src/catch-reaction.js';
-import {markSafetyDizzy} from '../src/safety-dizzy.js';
+import {markFoupDizzy} from '../src/safety-dizzy.js';
 import {createSafetyThrowDemo} from './safety-throw-demo.js';
-import {firstSafetyFlightHit} from './safety-flight-hit.js';
+import {firstFoupFlightHit} from './safety-flight-hit.js';
 import {canSelectTitle,restoreTitlePreference,destructionTitle,npcDestructionTitle,OPERATOR_TITLE} from '../src/destruction-titles.js';
 import {isRestArea,canSafetyTraverse,restAreaExit,SAFETY_CLEARANCE} from '../src/rest-area.js';
 import {createWorldEvents} from './world-events.js';
@@ -85,10 +85,10 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
       for(const p of players.values())if(!p.hidden&&distance(p,r)<=20)return false;
       return true;
     },
-    hitFlight:(r,from,to)=>firstSafetyFlightHit(r,from,to,[...safety.people,...players.values()]),
-    onImpact:r=>emit('bounce',r),onShatter:(r,guardId)=>{
+    hitFlight:(r,from,to)=>firstFoupFlightHit(r,from,to,[...safety.people,...residents.people,...players.values()]),
+    onImpact:r=>emit('bounce',r),onShatter:(r,targetId)=>{
       emit('shatter',r);
-      for(const guard of [...safety.people,...players.values()])if(markSafetyDizzy(guard,guard.id===guardId?guard:r,time)&&players.has(guard.id))release(guard);
+      for(const actor of [...safety.people,...residents.people,...players.values()])if(actor.id!==r.throwerId&&markFoupDizzy(actor,actor.id===targetId?actor:r,time)&&players.has(actor.id))release(actor);
     },onStockerOut:p=>emit('stocker-out',p),onChange:record=>{
       if(record)worldEvents?.contest.moved(record);
       if(foupReady)onFoupChange(store.checkpoint());
@@ -201,7 +201,7 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
   }
   function assignSafetyDuty() {
     if(worldEvents.bayRunning()||worldEvents.contest.safetyPaused()||time<nextSafetyAt||[...players.values()].some(p=>isSafety(p.role)))return;
-    const candidates=[...players.values()].filter(p=>!worldEvents.contest.team(p.id)&&!p.hidden&&!isRestArea(p,SAFETY_CLEARANCE)&&!p.optOut&&!p.penalty&&p.phase==='idle'&&p.targetId==null&&p.posture==='stand'&&!p.carrying&&time-p.lastSeen<12&&
+    const candidates=[...players.values()].filter(p=>!worldEvents.contest.team(p.id)&&!p.hidden&&!isRestArea(p,SAFETY_CLEARANCE)&&!p.optOut&&!p.penalty&&!p.dizzyLeft&&p.phase==='idle'&&p.targetId==null&&p.posture==='stand'&&!p.carrying&&time-p.lastSeen<12&&
       p.activeSeconds>=Math.max(SAFETY_DUTY.warmup,p.eligibleAfter)&&time>=p.assignAfter&&(Math.abs(p.x)>6||p.z<70));
     candidates.sort((a,b)=>a.safetyTurns-b.safetyTurns||a.joinOrder-b.joinOrder);
     const p=candidates[0];if(!p)return;

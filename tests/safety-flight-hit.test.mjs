@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {firstSafetyFlightHit,SAFETY_FLIGHT_RADIUS} from '../server/safety-flight-hit.js';
+import {firstFoupFlightHit,SAFETY_FLIGHT_RADIUS} from '../server/safety-flight-hit.js';
 import {createFoupStore} from '../src/foup-play.js';
 import {createRoom} from '../server/room-engine.js';
 import {machines,isBlocked} from '../src/layout.js';
@@ -11,41 +11,41 @@ const thrown={shatter:true,throwerId:'thrower'};
 
 test('a swept flight hits the first safety body even when both frame endpoints miss it',()=>{
   const near=guard('near',2),far=guard('far',4);
-  const hit=firstSafetyFlightHit(thrown,point(0),point(6),[far,near]);
-  assert.equal(hit.guardId,'near');assert.ok(Math.abs(hit.point.z-(2-SAFETY_FLIGHT_RADIUS))<1e-9);assert.equal(hit.point.y,1);
-  assert.equal(firstSafetyFlightHit(thrown,point(6),point(0),[near,far]).guardId,'far','reversed flight still finds its first contact');
+  const hit=firstFoupFlightHit(thrown,point(0),point(6),[far,near]);
+  assert.equal(hit.targetId,'near');assert.ok(Math.abs(hit.point.z-(2-SAFETY_FLIGHT_RADIUS))<1e-9);assert.equal(hit.point.y,1);
+  assert.equal(firstFoupFlightHit(thrown,point(6),point(0),[near,far]).targetId,'far','reversed flight still finds its first contact');
 });
 
 test('a forgiving body width catches edge grazes but not sideways misses or high overhead flights',()=>{
-  assert.ok(firstSafetyFlightHit(thrown,point(0),point(3),[guard('edge',1.5,.60)]));
-  assert.equal(firstSafetyFlightHit(thrown,point(0),point(3),[guard('miss',1.5,.64)]),null);
-  assert.equal(firstSafetyFlightHit(thrown,point(0,2.1),point(3,2.1),[guard('under',1.5)]),null);
-  const falling=firstSafetyFlightHit(thrown,point(1.5,3),point(1.5,.5),[guard('below',1.5)]);
+  assert.ok(firstFoupFlightHit(thrown,point(0),point(3),[guard('edge',1.5,.60)]));
+  assert.equal(firstFoupFlightHit(thrown,point(0),point(3),[guard('miss',1.5,.64)]),null);
+  assert.equal(firstFoupFlightHit(thrown,point(0,2.1),point(3,2.1),[guard('under',1.5)]),null);
+  const falling=firstFoupFlightHit(thrown,point(1.5,3),point(1.5,.5),[guard('below',1.5)]);
   assert.ok(falling);assert.ok(Math.abs(falling.point.y-1.75)<1e-8);
-  assert.equal(firstSafetyFlightHit(thrown,point(0,3),point(3,1.8),[guard('under',1.5)]),null,'horizontal and vertical contacts must occur at the same time');
+  assert.equal(firstFoupFlightHit(thrown,point(0,3),point(3,1.8),[guard('under',1.5)]),null,'horizontal and vertical contacts must occur at the same time');
 });
 
-test('drops, the thrower, civilians, hidden or riding guards and paused safety are not flight targets',()=>{
-  assert.equal(firstSafetyFlightHit({shatter:false},point(0),point(3),[guard('a',1.5)]),null);
-  for(const change of [{id:'thrower'},{role:'visitor'},{hidden:true},{y:2.16},{phase:'riding'},{phase:'cart-riding'},{phase:'climb'},{phase:'event-rest'}]){
-    assert.equal(firstSafetyFlightHit(thrown,point(0),point(3),[{...guard('a',1.5),...change}]),null,JSON.stringify(change));
+test('drops, the thrower, busy or hidden actors, riders and paused safety are not flight targets',()=>{
+  assert.equal(firstFoupFlightHit({shatter:false},point(0),point(3),[guard('a',1.5)]),null);
+  for(const change of [{id:'thrower'},{phase:'repair'},{hidden:true},{y:2.16},{phase:'riding'},{phase:'cart-riding'},{phase:'climb'},{phase:'event-rest'}]){
+    assert.equal(firstFoupFlightHit(thrown,point(0),point(3),[{...guard('a',1.5),...change}]),null,JSON.stringify(change));
   }
-  assert.ok(firstSafetyFlightHit(thrown,point(0),point(3),[{...guard('immune',1.5),dizzyLeft:1,dizzyReadyAt:99}]),'immunity stops another stun, not the physical FOUP collision');
+  assert.ok(firstFoupFlightHit(thrown,point(0),point(3),[{...guard('immune',1.5),dizzyLeft:1,dizzyReadyAt:99}]),'immunity stops another stun, not the physical FOUP collision');
 });
 
 test('a flight cannot hit a safety guard through equipment',()=>{
   const m=machines[0],g={...guard('behind',m.z),x:m.x};
-  assert.equal(firstSafetyFlightHit(thrown,{x:m.x-8,y:1,z:m.z},{x:m.x+8,y:1,z:m.z},[g]),null);
+  assert.equal(firstFoupFlightHit(thrown,{x:m.x-8,y:1,z:m.z},{x:m.x+8,y:1,z:m.z},[g]),null);
   // Real walkable points on opposite sides of a cabinet, beyond its front/back.
   const b=m.walkBounds.find(b=>b.part==='cabinet'),z=(b.minZ+b.maxZ)/2;
   const from={x:b.minX-.32,y:1,z},to={x:b.maxX+.32,y:1,z};
   assert.equal(isBlocked(from.x,z,.295),false);assert.equal(isBlocked(to.x,z,.295),false);
-  assert.equal(firstSafetyFlightHit(thrown,from,to,[{...g,x:to.x,z}]),null);
+  assert.equal(firstFoupFlightHit(thrown,from,to,[{...g,x:to.x,z}]),null);
 });
 
 test('the physics store shatters a fast airborne FOUP once at contact and preserves its identity',()=>{
   const g=guard('target',1.5);let shattered=0,contact=null;
-  const store=createFoupStore({ports:[],hitFlight:(r,a,b)=>firstSafetyFlightHit(r,a,b,[g]),onShatter:(r,id)=>{shattered++;contact=id;}});
+  const store=createFoupStore({ports:[],hitFlight:(r,a,b)=>firstFoupFlightHit(r,a,b,[g]),onShatter:(r,id)=>{shattered++;contact=id;}});
   const r=store.adopt('local-fixture',point(0,.225));store.pickup(r.id,'thrower');
   store.launch(r,point(0,.9),{x:0,y:3.1,z:150},{shatter:true});
   assert.equal(r.throwerId,'thrower');store.step(.016);

@@ -1,6 +1,6 @@
-import { getEmoButtonPose } from './emo-controls.js?v=bb8913c38810';
-import { findWalkPath, smoothWalkPath, WALK_RADIUS, canWalkSegment } from './walking.js?v=bb8913c38810';
-import { isBlocked, bays } from './layout.js?v=bb8913c38810';
+import { getEmoButtonPose } from './emo-controls.js?v=cd6ea967d28e';
+import { findWalkPath, smoothWalkPath, WALK_RADIUS, canWalkSegment } from './walking.js?v=cd6ea967d28e';
+import { isBlocked, bays } from './layout.js?v=cd6ea967d28e';
 
 export const EMO_REACH_SECONDS = .48;
 export const EMO_HOLD_SECONDS = .75;

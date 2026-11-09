@@ -1,7 +1,7 @@
-import { ports } from './layout.js?v=bb8913c38810';
-import { reservedPortIds } from './network-transport.js?v=bb8913c38810';
+import { ports } from './layout.js?v=cd6ea967d28e';
+import { reservedPortIds } from './network-transport.js?v=cd6ea967d28e';
 export const PROTOCOL = 20;
-export { MAX_VISITORS } from './room-population.js?v=bb8913c38810';
+export { MAX_VISITORS } from './room-population.js?v=cd6ea967d28e';
 export const initialSharedPorts = ports.filter(p => !reservedPortIds.has(p.id) && (p.machineId + p.index) % 4 !== 0).map(p => p.id);
 export const round = n => Math.round(n * 1000) / 1000;
 export function actorPacket(p) {

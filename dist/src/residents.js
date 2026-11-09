@@ -1,19 +1,19 @@
-import { machines, bays, ports, BAY_CENTERS } from './layout.js?v=bb8913c38810';
-import { NPC_WALK_SPEED, NPC_REPAIR_SPEED } from './locomotion.js?v=bb8913c38810';
-import { findWalkPath } from './walking.js?v=bb8913c38810';
-import {stepNpc,rerouteNpc,npcDestination} from './npc-navigation.js?v=bb8913c38810';
-import { getEmoApproach } from './emo-interaction.js?v=bb8913c38810';
-import { findRestHeading } from './posture.js?v=bb8913c38810';
-import { createVisitorName, createVisitorBadge } from './visitor-name.js?v=bb8913c38810';
-import {npcDestructionTitle} from './destruction-titles.js?v=bb8913c38810';
-import { createAvatar } from './avatar.js?v=bb8913c38810';
-import {createAvatarAppearance} from './avatar-appearance.js?v=bb8913c38810';
-import {npcOutfit} from './npc-outfits.js?v=bb8913c38810';
-import { floorSpot } from './foup-play.js?v=bb8913c38810';
-import { reservedPortIds } from './network-transport.js?v=bb8913c38810';
-import {isEventBay,avoidsEventBay} from './safety-team.js?v=bb8913c38810';
+import { machines, bays, ports, BAY_CENTERS } from './layout.js?v=cd6ea967d28e';
+import { NPC_WALK_SPEED, NPC_REPAIR_SPEED } from './locomotion.js?v=cd6ea967d28e';
+import { findWalkPath } from './walking.js?v=cd6ea967d28e';
+import {stepNpc,rerouteNpc,npcDestination} from './npc-navigation.js?v=cd6ea967d28e';
+import { getEmoApproach } from './emo-interaction.js?v=cd6ea967d28e';
+import { findRestHeading } from './posture.js?v=cd6ea967d28e';
+import { createVisitorName, createVisitorBadge } from './visitor-name.js?v=cd6ea967d28e';
+import {npcDestructionTitle} from './destruction-titles.js?v=cd6ea967d28e';
+import { createAvatar } from './avatar.js?v=cd6ea967d28e';
+import {createAvatarAppearance} from './avatar-appearance.js?v=cd6ea967d28e';
+import {npcOutfit} from './npc-outfits.js?v=cd6ea967d28e';
+import { floorSpot } from './foup-play.js?v=cd6ea967d28e';
+import { reservedPortIds } from './network-transport.js?v=cd6ea967d28e';
+import {isEventBay,avoidsEventBay} from './safety-team.js?v=cd6ea967d28e';
 
-import { RESIDENT_ROLES } from './room-population.js?v=bb8913c38810';
+import { RESIDENT_ROLES } from './room-population.js?v=cd6ea967d28e';
 export { RESIDENT_ROLES };
 export const REPAIR_STOCK=Object.freeze({minimum:50,target:60,repairGraceSeconds:45});
 const distance = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -88,7 +88,7 @@ export function createResidentSimulation({ fleet, store, destruction, detachCarg
     }
   }
   function reserveCart(actor){
-    if(!people.includes(actor)||actor.cartTask||actor.penalty||actor.caughtLeft>0||actor.vehicleId!=null||store.getCarried(actor.id)||!['idle','patrol','rest'].includes(actor.phase))return false;
+    if(!people.includes(actor)||actor.cartTask||actor.penalty||actor.caughtLeft>0||actor.dizzyLeft>0||actor.vehicleId!=null||store.getCarried(actor.id)||!['idle','patrol','rest'].includes(actor.phase))return false;
     release(actor);actor.cartTask=true;actor.posture='stand';actor.y=0;actor.speed=0;return true;
   }
   function releaseCart(actor){delete actor.cartTask;release(actor);actor.wait=3;actor.speed=0;}
@@ -218,6 +218,7 @@ export function createResidentSimulation({ fleet, store, destruction, detachCarg
     for (const actor of people) {
       if(actor.cartTask)continue;
       if(inEventBay(actor))evacuate(actor);
+      if(actor.dizzyLeft>0){actor.speed=0;continue;}
       actor.time += dt; actor.wait = Math.max(0, actor.wait - dt); actor.speed = 0;
       if (actor.role === 'rider') {
         if(actor.eventVehicle!==undefined){
@@ -298,7 +299,7 @@ export function createResidentSimulation({ fleet, store, destruction, detachCarg
     }
     // At most one path search per rendered frame, regardless of population.
     const next=people[planner++ % people.length];
-    if(!next.cartTask&&!rerouteNpc(next,neighbors,elapsed,{canTraverse}))think(next);
+    if(!next.cartTask&&!next.dizzyLeft&&!rerouteNpc(next,neighbors,elapsed,{canTraverse}))think(next);
   }
   return { people, update, yieldMachine, beginSafetyLap, reserveCart, releaseCart,setEventBays,
     get state() { return { total: people.length, simulated: true, roles: { ...RESIDENT_ROLES }, actions: { ...totals },

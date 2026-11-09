@@ -88,7 +88,7 @@ export function createResidentSimulation({ fleet, store, destruction, detachCarg
     }
   }
   function reserveCart(actor){
-    if(!people.includes(actor)||actor.cartTask||actor.penalty||actor.caughtLeft>0||actor.vehicleId!=null||store.getCarried(actor.id)||!['idle','patrol','rest'].includes(actor.phase))return false;
+    if(!people.includes(actor)||actor.cartTask||actor.penalty||actor.caughtLeft>0||actor.dizzyLeft>0||actor.vehicleId!=null||store.getCarried(actor.id)||!['idle','patrol','rest'].includes(actor.phase))return false;
     release(actor);actor.cartTask=true;actor.posture='stand';actor.y=0;actor.speed=0;return true;
   }
   function releaseCart(actor){delete actor.cartTask;release(actor);actor.wait=3;actor.speed=0;}
@@ -218,6 +218,7 @@ export function createResidentSimulation({ fleet, store, destruction, detachCarg
     for (const actor of people) {
       if(actor.cartTask)continue;
       if(inEventBay(actor))evacuate(actor);
+      if(actor.dizzyLeft>0){actor.speed=0;continue;}
       actor.time += dt; actor.wait = Math.max(0, actor.wait - dt); actor.speed = 0;
       if (actor.role === 'rider') {
         if(actor.eventVehicle!==undefined){
@@ -298,7 +299,7 @@ export function createResidentSimulation({ fleet, store, destruction, detachCarg
     }
     // At most one path search per rendered frame, regardless of population.
     const next=people[planner++ % people.length];
-    if(!next.cartTask&&!rerouteNpc(next,neighbors,elapsed,{canTraverse}))think(next);
+    if(!next.cartTask&&!next.dizzyLeft&&!rerouteNpc(next,neighbors,elapsed,{canTraverse}))think(next);
   }
   return { people, update, yieldMachine, beginSafetyLap, reserveCart, releaseCart,setEventBays,
     get state() { return { total: people.length, simulated: true, roles: { ...RESIDENT_ROLES }, actions: { ...totals },

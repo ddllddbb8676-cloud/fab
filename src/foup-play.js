@@ -166,12 +166,12 @@ export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () 
     if (record.owner) hands.delete(record.owner); delete record.owner;
     Object.assign(record, pose, { mode: 'flying', portId: null, vx: velocity.x, vy: velocity.y, vz: velocity.z, bounce: 0, shatter }); onChange(); return true;
   }
-  function breakFoup(record, silent = false, guardId = null) {
+  function breakFoup(record, silent = false, targetId = null) {
     const spot = floorSpot(record, .48) ?? floorSpot(record, .24);
     if (spot) Object.assign(record, spot);
     Object.assign(record, {mode:'broken',y:.035,damageAge:silent?2:0,breakSeq:(record.breakSeq||0)+1,shatter:false,cleaner:null,cleanProgress:0});
     delete record.goal;
-    if (!silent) onShatter(record,guardId);
+    if (!silent) onShatter(record,targetId);
     delete record.throwerId;
     onChange();
   }
@@ -361,7 +361,7 @@ export function createFoupStore({ ports, initialPortIds = [], hideOriginal = () 
       record.vy -= 9.8 * h; record.y += record.vy * h; record.yaw += h * 5;
       if(previous){
         const hit=hitFlight(record,previous,record);
-        if(hit){Object.assign(record,hit.point);breakFoup(record,false,hit.guardId);continue;}
+        if(hit){Object.assign(record,hit.point);breakFoup(record,false,hit.targetId);continue;}
       }
       if (record.y <= .225) {
         if(record.shatter){breakFoup(record);continue;}

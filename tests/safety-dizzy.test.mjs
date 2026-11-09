@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import {createRoom} from '../server/room-engine.js';
-import {markSafetyDizzy,SAFETY_DIZZY_SECONDS,SAFETY_DIZZY_COOLDOWN,SAFETY_DIZZY_RADIUS} from '../src/safety-dizzy.js';
+import {markFoupDizzy,SAFETY_DIZZY_SECONDS,SAFETY_DIZZY_COOLDOWN,SAFETY_DIZZY_RADIUS} from '../src/safety-dizzy.js';
 import {canCatch,createSafetyPatrols} from '../src/safety-team.js';
 import {safetyProximity} from '../src/safety-proximity.js';
 import {actorPacket,actorFromPacket} from '../src/shared-protocol.js';
@@ -60,11 +60,11 @@ test('human safety players cannot move or start an action while dizzy, without c
 });
 
 test('repeat impacts cannot extend the two seconds or bypass the ten-second immunity',()=>{
-  const g=guard(),impact={x:0,z:4};assert.ok(markSafetyDizzy(g,impact,12));
+  const g=guard(),impact={x:0,z:4};assert.ok(markFoupDizzy(g,impact,12));
   const until=g.dizzyUntil,sequence=g.emoteSeq;
-  assert.equal(markSafetyDizzy(g,impact,13),false);assert.equal(g.dizzyUntil,until);assert.equal(g.emoteSeq,sequence);
-  g.dizzyLeft=0;assert.equal(markSafetyDizzy(g,impact,21.99),false);
-  assert.ok(markSafetyDizzy(g,impact,12+SAFETY_DIZZY_COOLDOWN));assert.equal(g.emoteSeq,sequence+1);
+  assert.equal(markFoupDizzy(g,impact,13),false);assert.equal(g.dizzyUntil,until);assert.equal(g.emoteSeq,sequence);
+  g.dizzyLeft=0;assert.equal(markFoupDizzy(g,impact,21.99),false);
+  assert.ok(markFoupDizzy(g,impact,12+SAFETY_DIZZY_COOLDOWN));assert.equal(g.emoteSeq,sequence+1);
 });
 
 test('drops, intact contest-style throws and restored shattering flights do not stun',()=>{
@@ -77,18 +77,18 @@ test('drops, intact contest-style throws and restored shattering flights do not 
   assert.equal(restored.room.store.records.get(interrupted.id).mode,'broken');assert.equal(restored.g.dizzyLeft||0,0);
 });
 
-test('impact range excludes civilians, hidden or elevated guards, paused events and barriers',()=>{
+test('impact range excludes busy, hidden or elevated actors, paused events and barriers',()=>{
   const impact={x:0,z:4};
-  for(const override of [{role:'visitor'},{hidden:true},{y:.8},{phase:'climb'},{phase:'riding'},{phase:'cart-riding'},{phase:'event-rest'},{x:SAFETY_DIZZY_RADIUS+.01}]){
-    assert.equal(markSafetyDizzy({...guard(),...override},impact,5),false,JSON.stringify(override));
+  for(const override of [{posture:'sit'},{phase:'repair'},{hidden:true},{y:.8},{phase:'climb'},{phase:'riding'},{phase:'cart-riding'},{phase:'event-rest'},{x:SAFETY_DIZZY_RADIUS+.01}]){
+    assert.equal(markFoupDizzy({...guard(),...override},impact,5),false,JSON.stringify(override));
   }
-  assert.ok(markSafetyDizzy({...guard(),x:SAFETY_DIZZY_RADIUS},impact,5));
-  const m=machines[0];assert.equal(markSafetyDizzy({...guard(),x:m.x,z:m.z},{x:m.x,z:m.z+.2},5),false,'no hit through an equipment cabinet');
+  assert.ok(markFoupDizzy({...guard(),x:SAFETY_DIZZY_RADIUS},impact,5));
+  const m=machines[0];assert.equal(markFoupDizzy({...guard(),x:m.x,z:m.z},{x:m.x,z:m.z+.2},5),false,'no hit through an equipment cabinet');
 });
 
 test('NPC route planning stays frozen even if a visitor comes close while dizzy',()=>{
   const patrol=createSafetyPatrols({random:()=>.5}),g=patrol.people[0];Object.assign(g,guard(),{id:g.id});
-  assert.ok(markSafetyDizzy(g,{x:0,z:4},1));g.path=[{x:0,z:7}];g.nextThink=0;
+  assert.ok(markFoupDizzy(g,{x:0,z:4},1));g.path=[{x:0,z:7}];g.nextThink=0;
   for(let i=0;i<8;i++)patrol.update(.1,[{role:'visitor',x:0,z:5}],1.1+i*.1);
   assert.equal(g.x,0);assert.equal(g.z,4);assert.equal(g.speed,0);assert.equal(g.chasingId,null);
 });

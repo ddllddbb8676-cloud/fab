@@ -1,4 +1,4 @@
-import {isSafetyHitTarget} from '../src/safety-dizzy.js';
+import {isFoupHitTarget} from '../src/safety-dizzy.js';
 import {canWalkSegment} from '../src/walking.js';
 
 // Body width plus the FOUP half-width, with a little touch-control tolerance.
@@ -27,14 +27,14 @@ function entryFraction(from,to,guard){
 
 // Check the whole traveled segment, not just its end, so a fast carrier cannot
 // skip a body between server ticks. Only the first body stops this FOUP.
-export function firstSafetyFlightHit(record,from,to,guards){
+export function firstFoupFlightHit(record,from,to,actors){
   if(!record.shatter)return null;
   let first=null,fraction=Infinity;
-  for(const guard of guards){
-    if(guard.id===record.throwerId||!isSafetyHitTarget(guard))continue;
-    const t=entryFraction(from,to,guard);
-    if(t===null||t>=fraction||!canWalkSegment(from,guard))continue;
-    fraction=t;first={guardId:guard.id,point:{x:from.x+(to.x-from.x)*t,y:from.y+(to.y-from.y)*t,z:from.z+(to.z-from.z)*t}};
+  for(const actor of actors){
+    if(actor.id===record.throwerId||!isFoupHitTarget(actor))continue;
+    const t=entryFraction(from,to,actor);
+    if(t===null||t>=fraction||!canWalkSegment(from,actor))continue;
+    fraction=t;first={targetId:actor.id,point:{x:from.x+(to.x-from.x)*t,y:from.y+(to.y-from.y)*t,z:from.z+(to.z-from.z)*t}};
   }
   return first;
 }
