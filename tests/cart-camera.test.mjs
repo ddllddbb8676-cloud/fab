@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import {createExplorer} from '../src/explorer.js';
 import {createCartControls} from '../src/cart-controls.js';
-import {cartPoint,cartSeatPose,CART_SIZE} from '../src/cart-layout.js';
+import {cartPoint,cartSeatPose,cartFits,CART_SIZE} from '../src/cart-layout.js';
+import {isBlocked} from '../src/layout.js';
+import {stepWalker} from '../src/walking.js';
 import {applyWalkwayMotion,WALKWAY_LANES} from '../src/moving-walkway.js';
 
 function element(){
@@ -29,6 +31,22 @@ function setup(level){
   carts.frame({carts:[cart]},true);tick();
   return {cart,carts,explorer,camera,events,tick,commands,close(){scene.traverse(o=>{o.geometry?.dispose();o.material?.map?.dispose();o.material?.dispose();});Object.assign(globalThis,old);}};
 }
+
+test('the driver controls keep inward movement when an angled cart meets a cabinet on the moving walkway',()=>{
+  const h=setup(null);try{
+    const cart={...h.cart,x:1.748,z:67.289,yaw:31.143,driver:'rider'},handle=cartPoint(cart,0,0,CART_SIZE.tow);
+    h.carts.frame({t:1,carts:[cart],people:[['rider',handle.x,0,handle.z,cart.yaw]]},true);
+    const chosen={yaw:h.explorer.state.yaw,elevation:h.explorer.state.elevation,distance:h.explorer.state.distance};
+    for(let i=0;i<48;i++){
+      const before=h.explorer.state.position.clone();h.carts.prepare(1/60);
+      const walking=stepWalker(before,-3.2/60,0);h.explorer.state.position.set(walking.x,0,walking.z);
+      applyWalkwayMotion(h.explorer.state,before,1/60);h.carts.update();
+      assert.ok(h.explorer.state.position.x<before.x-.05,'cart controls do not roll the escape input back');assert.ok(cartFits(h.carts.state,isBlocked));
+    }
+    assert.equal(h.carts.state.driver,'rider');assert.ok(Math.hypot(h.carts.state.x-cart.x,h.carts.state.z-cart.z)>1.5);
+    assert.deepEqual({yaw:h.explorer.state.yaw,elevation:h.explorer.state.elevation,distance:h.explorer.state.distance},chosen,'recovery leaves the chosen camera untouched');
+  }finally{h.close();}
+});
 
 test('both cart seats retain a camera drag across render frames and cart movement without moving the rider off the seat',()=>{
   for(const level of [0,1]){

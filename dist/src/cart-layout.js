@@ -1,3 +1,4 @@
+import {walkwayAt} from './moving-walkway.js?v=2cab4ff9c4d9';
 // Two shared, game-scale two-deck trolleys beside the entrance stockers.
 // +Z is the handle end. Keep the first home export for existing callers.
 export const CART_HOMES=Object.freeze([
@@ -29,10 +30,17 @@ export function pullCart(c,from,to,blocked,{maxDistance=4}={}){
     const reversing=length>1e-7&&length<previousLength-1e-7&&handleSide>previousLength*.5;
     if(length>CART_SIZE.tow||reversing){
       const angle=Math.atan2(dx,dz),delta=Math.atan2(Math.sin(angle-next.yaw),Math.cos(angle-next.yaw));
-      // Keep turns gradual, including a player changing direction beside a wall.
-      next.yaw+=Math.max(-.12,Math.min(.12,delta));
-      next.x=x-dx/length*CART_SIZE.tow;next.z=z-dz/length*CART_SIZE.tow;
-      if(!cartFits(next,blocked))return null;
+      // Keep deliberate steering gradual. A belt carrying the handle backwards
+      // must roll the wheels, rather than progressively jackknifing the cart.
+      const turned={...next,yaw:next.yaw+Math.max(-.12,Math.min(.12,delta)),x:x-dx/length*CART_SIZE.tow,z:z-dz/length*CART_SIZE.tow};
+      // Rolling without turning also lets a cart leave a tight cabinet edge.
+      // Both candidates retain the collision sweep and the held handle offset.
+      const straight={...next,x:next.x+stepX,z:next.z+stepZ};
+      const lane=reversing?walkwayAt({x,z}):null;
+      const candidates=lane&&stepZ*lane.direction>0?[straight,turned]:[turned,straight];
+      const accepted=candidates.find(candidate=>cartFits(candidate,blocked));
+      if(!accepted)return null;
+      Object.assign(next,accepted);
     }
   }
   return next;
