@@ -1,4 +1,4 @@
-import {PROTOCOL} from './shared-protocol.js?v=2cab4ff9c4d9';
+import {PROTOCOL} from './shared-protocol.js?v=44e1daec1fd6';
 
 // A fallback for a browser that can reach the room over HTTPS but cannot
 // sustain a WebSocket upgrade. The server still owns the session and wallet.

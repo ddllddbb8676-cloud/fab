@@ -1,4 +1,4 @@
-import {walkwayAt} from './moving-walkway.js?v=2cab4ff9c4d9';
+import {walkwayAt} from './moving-walkway.js?v=44e1daec1fd6';
 // Two shared, game-scale two-deck trolleys beside the entrance stockers.
 // +Z is the handle end. Keep the first home export for existing callers.
 export const CART_HOMES=Object.freeze([

@@ -486,7 +486,7 @@ for(const emote of EMOTE_MENU){
   }
   button.setAttribute('aria-label',emote.label);button.title=emote.label;button.dataset.emote=emote.id;
   button.addEventListener('click',async()=>{
-    if(entry.active||performance.now()-lastEmoteClick<650)return;lastEmoteClick=performance.now();
+    if(entry.active||catchReaction?.dizzy||performance.now()-lastEmoteClick<650)return;lastEmoteClick=performance.now();
     const token=visitorEmote.play(emote.id);
     if(onlineLink){
       try{const result=await onlineLink.command('emote',{id:emote.id});if(!result.ok){visitorEmote.cancel(token);toast(result.message);}}
@@ -684,7 +684,7 @@ destruction = createEquipmentDestruction({ THREE, scene, machines: layoutMachine
 playActions = createPlayActions({ THREE, scene, materials: M, fleet, explorer, avatar, initialPortIds,seedStockers:!connectionConfig,
   hideOriginal(portId) { removedOriginalFoups.add(portId); for (const hide of originalFoupParts.get(portId) ?? []) hide(); },
   showOriginal(portId) { removedOriginalFoups.delete(portId);for(const show of originalFoupParts.get(portId)??[])show(true); },
-  isDestroyed: id => destruction.isDestroyed(id), toast, onCue: motionCue, network:onlineLink, contestPlaying:()=>Boolean(contestUI?.playing), isRestricted: () => Boolean(cartControls?.active)||safetyState.penalty > 0&&!contestUI?.playing, reducedMotion });
+  isDestroyed: id => destruction.isDestroyed(id), toast, onCue: motionCue, network:onlineLink, contestPlaying:()=>Boolean(contestUI?.playing), isRestricted: () => Boolean(cartControls?.active||catchReaction?.active)||safetyState.penalty > 0&&!contestUI?.playing, reducedMotion });
 const nicknameUI=createNicknameUI({command:(...args)=>onlineLink.command(...args),connected:()=>Boolean(onlineLink?.connected),onToggle:open=>{if(open){viewControls.closeAll();directory.close();$('help').classList.add('hidden');$('tool-card').classList.add('hidden');}explorer.lock(open||entry.active||$('google-entry-notice').open);}});
 const googleEntryNotice = createGoogleEntryNotice({dialog: $('google-entry-notice'), enabled: !$('google-account-link').hidden,
   onToggle: open => explorer.lock(open || entry.active || nicknameUI.isOpen)});
@@ -788,8 +788,8 @@ if(!connectionConfig) {
   updateConnectionLabel('offline');
 }
 function updateSafetyState(next) {
-  if(!next)return;catchReaction?.receive(next);const previous=safetyState;
-  if(connectionConfig)visitorEmote.set(next.emote,next.emoteSeq,next.emoteLeft);
+  if(!next)return;if(next.dizzyLeft>0&&!catchReaction?.dizzy)playActions?.clearPending();catchReaction?.receive(next);const previous=safetyState;
+  if(connectionConfig)visitorEmote.set(next.emote,next.emoteSeq,next.emoteLeft,'self',next.dizzyLeft>0);
   if(connectionConfig){updatePersonalStats(next);visitorBadge.setTitle(next.titleId);wardrobe.setTitleProgress(next.brokenCount,next.titleId);}
   safetyState={role:next.role||'visitor',penalty:next.penalty||0,caught:next.safetyCatchCount||0};explorer.state.penalty=safetyState.penalty;
   if(isSafety(safetyState.role)&&explorer.state.emoInteraction)explorer.cancelEmo('safety-duty');

@@ -18,7 +18,7 @@ export function createSafetyName(random=Math.random,excluded=[],preferred='') {
 }
 export function canCatch(guard, person, time) {
   if(guard.id?.startsWith('safety:')&&(guard.avoidBayIds??[guard.avoidBayId]).some(id=>isEventBay(person,id,1)))return false;
-  return isSafety(guard.role) && !guard.hidden && !person.hidden && !isSafety(person.role) && !isRestArea(person) && !isRestArea(guard) &&
+  return isSafety(guard.role) && !(guard.dizzyLeft>0) && !guard.hidden && !person.hidden && !isSafety(person.role) && !isRestArea(person) && !isRestArea(guard) &&
     !person.penalty && time >= (person.safeUntil || 0) && !['repair','riding','climb'].includes(person.phase) &&
     !['riding','climb','repair','event-rest'].includes(guard.phase) && distance(guard,person) < .95 && canWalkSegment(guard,person);
 }
@@ -68,6 +68,7 @@ export function createSafetyPatrols({random=Math.random,excludedNames=[]}={}) {
       leaveEventBay(p,people.indexOf(p));
       if(isRestArea(p,SAFETY_CLEARANCE)){Object.assign(p,restAreaExit(p));p.path=[];p.nextThink=0;}
       p.time+=dt;p.speed=0;
+      if(p.dizzyLeft>0)continue;
       const goal=p.path[0];if(!goal)continue;
       if(!canPatrolTraverse(p,goal)){p.path=[];p.nextThink=0;continue;}
       const d=distance(p,goal);
@@ -75,7 +76,7 @@ export function createSafetyPatrols({random=Math.random,excludedNames=[]}={}) {
       if(distance(p,goal)<.03)p.path.shift();
     }
     // At most one route calculation each tick; each guard replans at most once a second.
-    const p=people[planner++%people.length];if(time<p.nextThink)return;p.nextThink=time+1;
+    const p=people[planner++%people.length];if(p.dizzyLeft>0||time<p.nextThink)return;p.nextThink=time+1;
     if(rerouteNpc(p,neighbors,time,{canTraverse:canPatrolTraverse})){p.nextThink=time+3;return;}
     const candidates=visitors.filter(v=>!inEventBay(v,1)&&!v.hidden&&!isRestArea(v)&&!isSafety(v.role)&&!v.penalty&&time>=(v.safeUntil||0)&&!['repair','riding','climb'].includes(v.phase)&&distance(p,v)<15).sort((a,b)=>distance(p,a)-distance(p,b));
     if(candidates.length){const target=candidates.find(v=>!people.some(other=>other!==p&&other.chasingId===v.id))??candidates[0];p.chasingId=target.id;p.path=findWalkPath(p,target,{canTraverse:canPatrolTraverse})||[];p.phase='chase';}

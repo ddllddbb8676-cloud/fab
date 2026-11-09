@@ -1,4 +1,4 @@
-import {EMOTES,EMOTE_SECONDS,HEART_PATH,HEART_COLOR} from './emotes.js?v=2cab4ff9c4d9';
+import {EMOTES,EMOTE_SECONDS,HEART_PATH,HEART_COLOR} from './emotes.js?v=44e1daec1fd6';
 
 // Small textures are created on demand and shared by all visitors.
 const textures=new Map();let users=0;
@@ -22,7 +22,8 @@ export function createEmoteView(THREE,scene,{self=false}={}){
   const sprite=new THREE.Sprite(material);sprite.name='visitor-emote';sprite.visible=false;sprite.renderOrder=21;scene.add(sprite);
   const cameraPoint=new THREE.Vector3();
   let key='',left=0,preview=null,previewSequence=0,serverSequence=0;
-  function set(id,sequence,remaining=EMOTE_SECONDS,owner='self'){
+  function set(id,sequence,remaining=EMOTE_SECONDS,owner='self',force=false){
+    if(force)preview=null;
     if(Number.isFinite(sequence))serverSequence=sequence;
     const next=`${owner}:${sequence}:${id}`;
     if(preview&&!preview.confirmed&&left>0){

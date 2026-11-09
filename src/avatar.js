@@ -198,6 +198,8 @@ export function createAvatar(THREE) {
     const startled=Math.max(0,Math.min(1,(root.userData.caughtLeft||0)/1.15));
     const flinch=startled>0?Math.sin(Math.PI*(1-startled))**.6:0;
     const catching=Math.sin(Math.PI*Math.max(0,Math.min(1,(root.userData.catchLeft||0)/.65)));
+    const dizzyLeft=Math.max(0,Math.min(2,root.userData.dizzyLeft||0)),dizzyAge=2-dizzyLeft;
+    const dizzy=dizzyLeft>0?Math.min(1,dizzyAge/.12,dizzyLeft/.25):0,sway=Math.sin(dizzyAge*Math.PI*3)*dizzy;
     body.rotation.order = 'YXZ'; body.rotation.set(-Math.PI / 2 * lie, facing, 0, 'YXZ');
     const restShift = .72 * lie - .10 * sit;
     body.position.set(Math.sin(facing) * restShift, .26 * Math.sin(Math.PI / 2 * lie), Math.cos(facing) * restShift);
@@ -216,6 +218,8 @@ export function createAvatar(THREE) {
     upper.position.set(wave * .002 * activity, bob - .37 * sit - duck, 0); upper.rotation.z = wave * .003 * activity;
     upper.rotation.x = cleaning ? .10+.035*Math.cos(cleanTime*8) : working ? .035 + .025 * Math.sin(repairTime * 15) : 0;
     if(flinch>0){upper.rotation.x-=flinch*.12;upper.rotation.z+=Math.sin(startled*18)*flinch*.055;}
+    // Tilt the body only: world position and the player's chosen camera stay put.
+    if(dizzy>0){upper.rotation.z+=sway*.20;upper.rotation.x+=dizzy*(.06+.05*Math.sin(dizzyAge*8));upper.position.x+=sway*.025;}
     if(cleaning){upper.rotation.z=sweep*.045;root.updateMatrixWorld(true);}
     for (const leg of legs) {
       const p = (phase + (leg.side === 1 ? .5 : 0)) % 1, stance = p < .6, q = stance ? p / .6 : (p - .6) / .4;
@@ -241,6 +245,7 @@ export function createAvatar(THREE) {
       if (hanging) { arm.shoulder.y = .95; arm.elbow.set(arm.side * .24, 1.27, .035); arm.wrist.set(arm.side * .20, 1.60, .015); }
       if(catching>0&&arm===rightArm){arm.elbow.lerp(reachElbow.set(.23,.85,.2),catching);arm.wrist.lerp(reachWrist.set(.13,.97,.46),catching);}
       if(flinch>0){arm.elbow.lerp(reachElbow.set(arm.side*.3,1.05,0),flinch);arm.wrist.lerp(reachWrist.set(arm.side*.29,1.43,.05),flinch);}
+      if(dizzy>0&&!carrying){arm.elbow.lerp(reachElbow.set(arm.side*.30,.79,.06),dizzy);arm.wrist.lerp(reachWrist.set(arm.side*.40,.76+sway*arm.side*.06,.12),dizzy);}
       const grip=root.userData.cartGrip;
       if(grip&&!working&&!cleaning&&!hanging){
         root.updateMatrixWorld(true);

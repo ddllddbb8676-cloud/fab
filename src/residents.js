@@ -20,7 +20,7 @@ const distance = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const clamp = n => Math.max(0, Math.min(1, n));
 
 /** World state, separate from rendering: shared cargo identities and per-tool claims. */
-export function createResidentSimulation({ fleet, store, destruction, detachCargo, protectedIds = () => [], getNeighbors=()=>[], onCue = () => {}, random = Math.random, excludedNames = [] }) {
+export function createResidentSimulation({ fleet, store, destruction, detachCargo, protectedIds = () => [], getNeighbors=()=>[], getSafetyThrow=()=>null, refreshSafetyThrow=()=>false, onCue = () => {}, random = Math.random, excludedNames = [] }) {
   const reservedNames = [...excludedNames];
   const people = [], claims = new Map(), portMap = new Map(ports.map(p => [p.id, p]));
   const totals = { throws: 0, repairs: 0, breaks: 0, pickups: 0, placements: 0 };
@@ -158,7 +158,10 @@ export function createResidentSimulation({ fleet, store, destruction, detachCarg
       const target = floorSpot({ x: previous.x, z: previous.z + .55 });
       if (target && go(actor, target, 'retrieve')) return;
     }
-    if (previous && ['flying', 'carried', 'broken', 'cleared'].includes(previous.mode)) { actor.wait = 2; return; }
+    if (previous && ['flying', 'carried', 'broken', 'cleared'].includes(previous.mode)) {
+      if(previous.mode==='broken'&&refreshSafetyThrow(actor))actor.recordId=null;
+      else {actor.wait=2;return;}
+    }
     const candidates = ports.filter(p => !reservedPortIds.has(p.id) && !reserved(p.machineId) && store.atPort(p.id)&&!store.atPort(p.id).gold&&!people.some(other=>other!==actor&&other.recordId===store.atPort(p.id).id))
       .sort((a,b) => distance(actor, a) - distance(actor,b)).slice(0, 12);
     const p = choose(candidates);
@@ -277,8 +280,15 @@ export function createResidentSimulation({ fleet, store, destruction, detachCarg
           // Turn from the loadport toward its open aisle before throwing.
           actor.heading = p?.sign === 1 ? 0 : Math.PI;
           if (actor.time >= 1.3) {
+            const demo=!record.gold&&getSafetyThrow(actor);
+            let speed=2.8;
+            if(demo){
+              actor.heading=Math.atan2(demo.x-actor.x,demo.z-actor.z);
+              const flight=(3.2+Math.sqrt(3.2**2+2*9.8*(.9-.225)))/9.8;
+              speed=Math.max(0,(distance(actor,demo)-.4)/flight);
+            }
             store.launch(record, { x: actor.x + Math.sin(actor.heading) * .4, y: .9, z: actor.z + Math.cos(actor.heading) * .4, yaw: actor.heading },
-              { x: Math.sin(actor.heading) * 2.8, y: 3.2, z: Math.cos(actor.heading) * 2.8 }, {shatter:true});
+              { x: Math.sin(actor.heading) * speed, y: 3.2, z: Math.cos(actor.heading) * speed }, {shatter:true});
             totals.throws++; actor.actions++; cue(actor,'throw'); actor.phase = 'idle'; actor.wait = 2.5;
           }
         } else { actor.phase = 'idle'; actor.wait = 1; }

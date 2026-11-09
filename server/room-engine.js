@@ -22,6 +22,8 @@ import {createRoomSpeech} from './owner-speech.js';
 import {createFoupCarts} from './foup-carts.js';
 import {createCartReturner} from './cart-returner.js';
 import {markCatch} from '../src/catch-reaction.js';
+import {markSafetyDizzy} from '../src/safety-dizzy.js';
+import {createSafetyThrowDemo} from './safety-throw-demo.js';
 import {canSelectTitle,restoreTitlePreference,destructionTitle,npcDestructionTitle,OPERATOR_TITLE} from '../src/destruction-titles.js';
 import {isRestArea,canSafetyTraverse,restAreaExit,SAFETY_CLEARANCE} from '../src/rest-area.js';
 import {createWorldEvents} from './world-events.js';
@@ -82,7 +84,10 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
       for(const p of players.values())if(!p.hidden&&distance(p,r)<=20)return false;
       return true;
     },
-    onImpact:r=>emit('bounce',r),onShatter:r=>emit('shatter',r),onStockerOut:p=>emit('stocker-out',p),onChange:record=>{
+    onImpact:r=>emit('bounce',r),onShatter:r=>{
+      emit('shatter',r);
+      for(const guard of [...safety.people,...players.values()])if(markSafetyDizzy(guard,r,time)&&players.has(guard.id))release(guard);
+    },onStockerOut:p=>emit('stocker-out',p),onChange:record=>{
       if(record)worldEvents?.contest.moved(record);
       if(foupReady)onFoupChange(store.checkpoint());
     }});
@@ -98,7 +103,10 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
     fleet.detachCargo(v.id);
     if(!s.parked)store.launch(r,{...s.foup},{x:0,y:.6,z:(boardingMachine(s.car)?.sign??1)*2.2});
   }
-  const residents=createResidentSimulation({fleet,store,destruction,detachCargo,random,getNeighbors:()=>safety.people,
+  const safetyThrowDemo=createSafetyThrowDemo({now:()=>time,random,guards:()=>safety.people,viewers:()=>players.values(),paused:()=>{
+    const active=worldEvents?.view();return Boolean(active?.golden||worldEvents?.bayRunning()||worldEvents?.contest.live()||active?.lastResult);
+  }});
+  const residents=createResidentSimulation({fleet,store,destruction,detachCargo,random,getNeighbors:()=>safety.people,getSafetyThrow:safetyThrowDemo.aim,refreshSafetyThrow:safetyThrowDemo.refresh,
     protectedIds:()=>[...leases.keys(),...(worldEvents?.protectedIds()??[]),...(worldEvents?.contest.live()?contestMachineIds:[])],onCue:emit});
   const safety=createSafetyPatrols({random,excludedNames:residents.people.map(p=>p.name)});
   const cartReturner=createCartReturner({store,carts,residents,players,now:()=>time,canRun:()=>!worldEvents?.contest.live()&&!worldEvents?.bayRunning()&&!worldEvents?.view().lastResult,onCue:emit});
@@ -259,8 +267,8 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
       const position=isRestArea(p,SAFETY_CLEARANCE)?restAreaExit(p):p;
       if(!canSafetyTraverse(position,data))data={...data,x:position.x,y:0,z:position.z,speed:0};
     }
+    if(p.caughtLeft>0||p.dizzyLeft>0)data={...data,x:p.x,y:p.y,z:p.z,heading:p.heading,speed:0,posture:'stand'};
     data=carts.pose(p,data);
-    if(p.caughtLeft>0)data={...data,x:p.x,y:p.y,z:p.z,heading:p.heading,speed:0,posture:'stand'};
     Object.assign(p,{x:data.x,y:data.y,z:data.z,heading:data.heading,speed:finite(data.speed,0,5)?data.speed:0,
       posture:(!p.penalty||isRestArea(data))&&['stand','sit','lie'].includes(data.posture)?data.posture:'stand',hidden:Boolean(data.hidden),lastSeen:time});
     if(v?.passenger)Object.assign(p,{x:v.state.car.x,y:2.16,z:v.state.car.z,heading:v.state.car.yaw,phase:'riding'});
@@ -364,6 +372,7 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
     }
     if(['purchase','equip','unequip'].includes(kind)){const result=wardrobeCommand(p,kind,data);if(result.ok){changed(p);rosterChanged();}return result;}
     if(kind==='emote'){
+      if(p.dizzyLeft>0)return fail('헤롱헤롱… 잠깐만요!');
       if(!isEmote(data.id)||p.hidden)return fail('입장 후 감정을 표현해 주세요');
       if(time<(p.nextEmoteAt??0))return fail('잠시 후 다시 눌러주세요');
       p.emote=data.id;p.emoteSeq=(p.emoteSeq||0)+1;p.emoteUntil=time+EMOTE_SECONDS;p.emoteLeft=EMOTE_SECONDS;p.nextEmoteAt=time+.6;
@@ -375,6 +384,7 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
     }
     if(kind==='cart-leave')return carts.command(p,kind,data);
     if(p.caughtLeft>0&&kind!=='cancel')return fail('들켰다! 잠깐만요');
+    if(p.dizzyLeft>0&&kind!=='cancel')return fail('헤롱헤롱… 잠깐만요!');
     if(carts.membership(id)&&kind!=='cancel')return fail('카트에서 내리거나 손잡이를 놓은 뒤 해주세요');
     if(isSafety(p.role)&&(kind==='press'||kind==='explode'||kind==='claim'&&data.kind==='emo'))return fail(SAFETY_NO_EMO_MESSAGE);
     const contestMove=worldEvents.contest.playing(id)&&['pickup','throw','place','stocker','cart-load','cart-take','cart-pull','cart-board'].includes(kind);
@@ -479,7 +489,11 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
   }
   function step(dt) {
     dt=Math.min(.1,Math.max(0,dt));time+=dt;
-    for(const p of [...players.values(),...residents.people,...safety.people]){p.caughtLeft=Math.max(0,(p.caughtLeft||0)-dt);p.catchLeft=Math.max(0,(p.catchLeft||0)-dt);}
+    for(const p of [...players.values(),...residents.people,...safety.people]){
+      p.caughtLeft=Math.max(0,(p.caughtLeft||0)-dt);p.catchLeft=Math.max(0,(p.catchLeft||0)-dt);
+      p.dizzyLeft=Math.max(0,(p.dizzyUntil||0)-time);
+      p.emoteLeft=Math.max(0,(p.emoteUntil||0)-time);if(!p.emoteLeft)p.emote='';
+    }
     for(const p of players.values())if(time-p.lastSeen>40)remove(p.id);
     worldEvents.update();fleet.step(dt);store.step(dt);residents.update(dt);cartReturner.update(dt);carts.step();
     for(const [id,l] of leases)if(time>l.expires){const p=players.get(l.owner);if(p)release(p);else leases.delete(id);}

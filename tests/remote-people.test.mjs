@@ -16,6 +16,22 @@ function harness(maxDetailed=32,cartPose){
   return {view,scene,camera,rows,heads,actor,dispose(){view.dispose();reference.dispose();globalThis.document=oldDocument;}};
 }
 
+test('remote safety avatars show angry and sway through instanced bodies without lending the reaction to another visitor',()=>{
+  const h=harness();try{
+    h.camera.position.set(0,2,3);h.camera.lookAt(0,1,0);
+    const g=h.rows[1];Object.assign(g,{role:'safety-orange',dizzyLeft:2,emote:'angry',emoteSeq:1,emoteLeft:2});
+    h.view.synchronize(h.rows);const xs=[];
+    for(let i=0;i<55;i++){
+      h.view.update(1/30,h.camera);xs.push(h.heads().find(p=>p.x>0).x);
+      assert.ok(h.heads().find(p=>p.x<0).y<.6,'other visitor keeps their ordinary pose');
+    }
+    assert.ok(Math.max(...xs)>1.1&&Math.min(...xs)<.9,'shared instanced suit sways both ways');
+    assert.ok(h.scene.children.some(o=>o.name==='visitor-emote'&&o.visible&&o.material.map.image.draws.includes('😡')));
+    Object.assign(g,{dizzyLeft:0,emote:'',emoteLeft:0});h.view.synchronize(h.rows);h.view.update(.1,h.camera);
+    assert.ok(Math.abs(h.heads().find(p=>p.x>0).x-1)<.001);assert.equal(h.scene.children.some(o=>o.name==='visitor-emote'&&o.visible),false);
+  }finally{h.dispose();}
+});
+
 test('a stationary lying visitor stays lying as distance order changes at mobile frame rates',()=>{
   for(const hz of [20,30,60]){const h=harness();try{
     h.camera.position.set(-.2,2,3);for(let i=0;i<hz*2;i++)h.view.update(1/hz,h.camera);

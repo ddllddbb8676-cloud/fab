@@ -6,7 +6,7 @@ export function safetyProximity(person,guards,previous=false){
   if(person.hidden||person.penalty||isSafety(person.role)||isRestArea(person)||protectedPhases.includes(person.phase))return {near:false,strength:0};
   let distance=Infinity;
   for(const guard of guards){
-    if(guard.id===person.id||!isSafety(guard.role)||guard.hidden||protectedPhases.includes(guard.phase))continue;
+    if(guard.id===person.id||!isSafety(guard.role)||guard.hidden||guard.dizzyLeft>0||protectedPhases.includes(guard.phase))continue;
     distance=Math.min(distance,Math.hypot(guard.x-person.x,guard.z-person.z));
   }
   const near=distance<(previous?10.5:8.5);

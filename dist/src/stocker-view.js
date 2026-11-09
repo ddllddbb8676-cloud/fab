@@ -1,4 +1,4 @@
-import {stockers,stockerPoint,STOCKER_SIZE,STOCKER_TRANSFER_SECONDS} from './stocker-layout.js?v=2cab4ff9c4d9';
+import {stockers,stockerPoint,STOCKER_SIZE,STOCKER_TRANSFER_SECONDS} from './stocker-layout.js?v=44e1daec1fd6';
 
 // Shared boxes keep six tall cabinets inexpensive on mobile. The narrow front
 // and long, panelled sides follow carrier-stockers, not a tool's wide EFEM.

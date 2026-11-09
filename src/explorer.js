@@ -71,7 +71,7 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
   function endJoystick() { state.joystickActive = false; state.joystick = { x: 0, y: 0 }; stickSpeed = 0; state.speed = 0; }
   function clearInput() { pointers.clear(); endJoystick(); state.speed = 0; pathSpeed = 0; }
   function beginJoystick() {
-    if (state.locked || document.hidden || !$('help').classList.contains('hidden') || scriptedPose || !['walk', 'tour', 'blast'].includes(state.mode)) return false;
+    if (state.locked || state.reactionFrozen || document.hidden || !$('help').classList.contains('hidden') || scriptedPose || !['walk', 'tour', 'blast'].includes(state.mode)) return false;
     cancelEmo('movement'); onManualMove();
     if (state.mode !== 'walk') setMode('walk');
     state.path = []; pathSpeed = 0; targetRing.visible = false; state.posture = 'stand';
@@ -103,7 +103,7 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
       holdProgress: Math.min(1, s.held / EMO_HOLD_SECONDS), button: s.plan.button, destination: s.plan.destination };
   }
   function approachEmo(machine, { onPress, onCancel, isValid = () => true, kind = 'emo', onStart, onProgress } = {}) {
-    if (state.locked || typeof onPress !== 'function') return false;
+    if (state.locked || state.reactionFrozen || typeof onPress !== 'function') return false;
     if (emoSession && emoSession.plan.id === machine?.id && emoSession.kind === kind) return true;
     cancelEmo('replaced');
     if (!isValid()) return false;
@@ -333,15 +333,15 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
       return;
     }
     const helpVisible = !$('help').classList.contains('hidden');
-    if (state.joystickActive && (state.locked || helpVisible || document.hidden)) endJoystick();
+    if (state.joystickActive && (state.locked || state.reactionFrozen || helpVisible || document.hidden)) endJoystick();
     if (emoSession && (state.locked || helpVisible || document.hidden)) cancelEmo(state.locked ? 'locked' : helpVisible ? 'help' : 'hidden');
     if (!state.locked) state.speed = 0;
     const groundStart = { x:state.position.x, z:state.position.z, routed:state.path.length>0 };
-    if (!state.locked && !helpVisible) {
+    if (!state.locked && !state.reactionFrozen && !helpVisible) {
       if (state.mode === 'walk' && !Number.isFinite(state.cleaningTime) && state.posture === 'stand' && !avatar.root.userData.resting && (!emoSession || emoSession.phase === 'approach')) walk(dt);
       if (state.mode === 'tour' && !pointers.size) tour(dt);
     }
-    if (!state.locked && !helpVisible && !document.hidden && !emoSession && !avatar.root.userData.resting) onGroundMotion(state,groundStart,dt);
+    if (!state.locked && !state.reactionFrozen && !helpVisible && !document.hidden && !emoSession && !avatar.root.userData.resting) onGroundMotion(state,groundStart,dt);
     updateEmo(dt);
     const repairing = emoSession?.phase === 'repair';
     const repairTarget = repairing ? { ...emoSession.plan.button, y: .96 + .16 * Math.sin(emoSession.elapsed * 15), z: emoSession.plan.button.z + emoSession.plan.button.sign * .09 } : null;
@@ -385,7 +385,7 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
     }
   }
   function tap(event) {
-    if (state.locked || (state.mode !== 'walk' && state.mode !== 'tour')) return;
+    if (state.locked || state.reactionFrozen || (state.mode !== 'walk' && state.mode !== 'tour')) return;
     const r = canvas.getBoundingClientRect(); cast.setFromCamera(new THREE.Vector2((event.clientX - r.left) / r.width * 2 - 1, -(event.clientY - r.top) / r.height * 2 + 1), camera);
     // The accepted interaction owns its approach path (FOUP/OHT as well as EMO).
     if (onActionTap(cast.ray) === true) return;
@@ -487,7 +487,7 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
   }
   function setPosture(posture) {
     if (state.penalty && !isRestArea(state.position) && posture !== 'stand') { onToast(`장비를 ${state.penalty}대 더 수리해 주세요`); return false; }
-    if (state.locked || !['stand', 'sit', 'lie'].includes(posture) || !['walk', 'tour'].includes(state.mode)) return false;
+    if (state.locked || state.reactionFrozen || !['stand', 'sit', 'lie'].includes(posture) || !['walk', 'tour'].includes(state.mode)) return false;
     const heading = posture === 'stand' ? state.heading : findRestHeading(state.position, state.heading, posture);
     if (heading === null) { onToast('바로 옆 통로에 조금만 여유를 두고 다시 눌러주세요'); return false; }
     cancelEmo('posture');
@@ -506,7 +506,7 @@ export function createExplorer({ THREE, camera, scene, canvas, avatar, orbit, co
     moveJoystick(x, y) { if (state.joystickActive) state.joystick = stickVector(x, y); },
     setScriptedPose(pose) { scriptedPose = pose; if (!pose) { scriptedCameraActive=false;state.position.y = 0; cameraSnap = false; } },
     walkTo(point) {
-      if (state.locked) return false;
+      if (state.locked || state.reactionFrozen) return false;
       const path = findWalkPath(state.position, point,{canTraverse}); if (!path) return false;
       setMode('walk'); state.path = path; targetRing.position.set(point.x, .012, point.z); targetRing.visible = true; return true;
     },

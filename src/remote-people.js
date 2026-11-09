@@ -33,12 +33,12 @@ export function createRemotePeople({THREE,scene,store,fleet=null,maxDetailed=40,
   function setViewerPrivileges(privileges){identifyNpcs=privileges?.unlimitedChips===true;for(const slot of pool)updateNpcMarker(slot);}
   function synchronize(rows) {
     const live=new Set(rows.map(r=>r.id));for(const id of actors.keys())if(!live.has(id))actors.delete(id);
-    for(const row of rows){let a=actors.get(row.id);if(!a){a={...row,...roster.get(row.id)};actors.set(row.id,a);}if(a.phase!==row.phase&&row.phase?.startsWith('cart-'))a.time=row.time;a.goal=row;Object.assign(a,{role:row.role,phase:row.phase,posture:row.posture,targetId:row.targetId,vehicleId:row.vehicleId,carrying:row.carrying,hidden:row.hidden,caughtLeft:row.caughtLeft||0,catchLeft:row.catchLeft||0,titleId:row.titleId??npcDestructionTitle(row.id,row.role)?.id??''});}
+    for(const row of rows){let a=actors.get(row.id);if(!a){a={...row,...roster.get(row.id)};actors.set(row.id,a);}if(a.phase!==row.phase&&row.phase?.startsWith('cart-'))a.time=row.time;a.goal=row;Object.assign(a,{role:row.role,phase:row.phase,posture:row.posture,targetId:row.targetId,vehicleId:row.vehicleId,carrying:row.carrying,hidden:row.hidden,caughtLeft:row.caughtLeft||0,catchLeft:row.catchLeft||0,dizzyLeft:row.dizzyLeft||0,titleId:row.titleId??npcDestructionTitle(row.id,row.role)?.id??''});}
   }
   function update(dt,camera,overview=false) {
     const f=1-Math.exp(-dt*14),visible=[];
     for(const a of actors.values()) {
-      a.caughtLeft=Math.max(0,(a.caughtLeft||0)-dt);a.catchLeft=Math.max(0,(a.catchLeft||0)-dt);
+      a.caughtLeft=Math.max(0,(a.caughtLeft||0)-dt);a.catchLeft=Math.max(0,(a.catchLeft||0)-dt);a.dizzyLeft=Math.max(0,(a.dizzyLeft||0)-dt);
       if(a.goal){for(const k of ['x','y','z','speed','time'])a[k]+=(a.goal[k]-a[k])*f;a.heading+=Math.atan2(Math.sin(a.goal.heading-a.heading),Math.cos(a.goal.heading-a.heading))*f;}
       const car=a.phase==='riding'&&fleet?.vehicles[a.vehicleId]?.state.car;
       if(car)Object.assign(a,{x:car.x,y:2.16,z:car.z,heading:car.yaw,speed:0});
@@ -67,7 +67,7 @@ export function createRemotePeople({THREE,scene,store,fleet=null,maxDetailed=40,
       slot.badge.setTitle(a.titleId);
       slot.clock+=dt;const near=a.distance<14;
       if(slot.clock>=(near?1/30:1/15)){
-        const avatar=slot.avatar;avatar.root.position.set(a.x,a.y,a.z);avatar.root.userData.cartGrip=cartGrip(a.id);avatar.root.userData.caughtLeft=a.caughtLeft;avatar.root.userData.catchLeft=a.catchLeft;avatar.root.userData.cartUnload=a.phase==='cart-unload'?Math.min(1,a.time/.8):a.phase==='cart-stow'?Math.max(0,1-a.time/.5):0;
+        const avatar=slot.avatar;avatar.root.position.set(a.x,a.y,a.z);avatar.root.userData.cartGrip=cartGrip(a.id);avatar.root.userData.caughtLeft=a.caughtLeft;avatar.root.userData.catchLeft=a.catchLeft;avatar.root.userData.dizzyLeft=a.dizzyLeft;avatar.root.userData.cartUnload=a.phase==='cart-unload'?Math.min(1,a.time/.8):a.phase==='cart-stow'?Math.max(0,1-a.time/.5):0;
         const working=a.phase==='repair',pressing=a.phase==='press',plan=Number.isInteger(a.targetId)?getEmoApproach(machines[a.targetId]):null;
         const target=plan&&(working?{...plan.button,y:.96+.16*Math.sin(a.time*15),z:plan.button.z+plan.button.sign*.09}:pressing?plan.button:null);
         avatar.update(Math.min(.1,slot.clock),{speed:a.speed,heading:a.heading,posture:a.posture,hanging:a.phase==='riding'||a.role==='rider',carrying:a.carrying,snap:slot.resetPose,
