@@ -1,5 +1,5 @@
-import {createRoomChannel,roomSocketURL} from './room-channel.js?v=a6e059616081';
-export {roomSocketURL} from './room-channel.js?v=a6e059616081';
+import {createRoomChannel,roomSocketURL} from './room-channel.js?v=67abbb4d1e8e';
+export {roomSocketURL} from './room-channel.js?v=67abbb4d1e8e';
 export const WELCOME_TIMEOUT_MS=8000;
 
 // Start the same cookie-authenticated room connection before 3D construction.

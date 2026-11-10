@@ -1,9 +1,9 @@
-import {createAllAccessories} from './accessories.js?v=a6e059616081';
-import {DEFAULT_OUTFIT,findItem,suitColor} from './cosmetics-catalog.js?v=a6e059616081';
-import {isSafety,safetyColor} from './safety-team.js?v=a6e059616081';
-import {getCollectionItem,isPatternedSuit} from './collection-catalog.js?v=a6e059616081';
-import {createCollectionAccessory,updateCollectionAccessory} from './collection-accessories.js?v=a6e059616081';
-import {createPatternedSuitPool} from './patterned-suits.js?v=a6e059616081';
+import {createAllAccessories} from './accessories.js?v=67abbb4d1e8e';
+import {DEFAULT_OUTFIT,findItem,suitColor} from './cosmetics-catalog.js?v=67abbb4d1e8e';
+import {isSafety,safetyColor} from './safety-team.js?v=67abbb4d1e8e';
+import {getCollectionItem,isPatternedSuit} from './collection-catalog.js?v=67abbb4d1e8e';
+import {createCollectionAccessory,updateCollectionAccessory} from './collection-accessories.js?v=67abbb4d1e8e';
+import {createPatternedSuitPool} from './patterned-suits.js?v=67abbb4d1e8e';
 const pools=new WeakMap();
 export function createAvatarAppearance(THREE,avatar,{scene=null,external=false}={}) {
   let pool=pools.get(THREE);

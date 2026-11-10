@@ -1,4 +1,4 @@
-import {collectionItems,collectionSuitColors} from './collection-catalog.js?v=a6e059616081';
+import {collectionItems,collectionSuitColors} from './collection-catalog.js?v=67abbb4d1e8e';
 export const items = [
   { id: 'helmet-white', name: '흰색 헬멧', slot: 'head', price: null },
   { id: 'helmet-orange', name: '주황 헬멧', slot: 'head', price: null },

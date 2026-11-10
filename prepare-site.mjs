@@ -57,6 +57,8 @@ for (const name of ['controls/OrbitControls.js', 'environments/RoomEnvironment.j
 await copyFile(new URL('node_modules/three/LICENSE', root), new URL('vendor/three/LICENSE.txt', dist));
 await copyFile(new URL('docs/capacity-plan.html', root), new URL('docs/capacity-plan.html', dist));
 await copyFile(new URL('connection-check.html', root), new URL('connection-check.html', dist));
+await mkdir(new URL('assets/social/',dist),{recursive:true});
+for(const name of ['fab-share-20261110.jpg','fab-icon.svg'])await copyFile(new URL('assets/social/'+name,root),new URL('assets/social/'+name,dist));
 await mkdir(new URL('admin/',dist),{recursive:true});
 await copyFile(new URL('admin.html',root),new URL('admin.html',dist));
 for(const name of ['admin.js','admin.css','growth.js','events.js','rankings.js'])await copyFile(new URL('admin/'+name,root),new URL('admin/'+name,dist));
