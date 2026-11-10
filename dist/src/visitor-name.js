@@ -25,4 +25,4 @@ export function createVisitorName(random = Math.random, excluded = [], preferred
   return createUniqueNickname(VISITOR_NAMES, random, excluded, preferred);
 }
 
-export { createAvatarNameplate as createVisitorBadge } from './avatar-nameplate.js?v=2cbe557a8370';
+export { createAvatarNameplate as createVisitorBadge } from './avatar-nameplate.js?v=a6e059616081';

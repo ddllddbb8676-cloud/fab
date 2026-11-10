@@ -6,8 +6,8 @@
   <meta name="robots" content="noindex,nofollow">
   <meta name="color-scheme" content="light">
   <title>FAB 운영 현황</title>
-  <link rel="stylesheet" href="/admin/admin.css">
-  <script type="module" src="/admin/admin.js?v=retention-20261106"></script>
+  <link rel="stylesheet" href="/admin/admin.css?v=rankings-20261110">
+  <script type="module" src="/admin/admin.js?v=rankings-20261110"></script>
 </head>
 <body>
   <main class="dashboard">
@@ -44,11 +44,24 @@
         <a class="section-note" href="#growth-panel" id="today-return-link">오늘 일반 계정 재방문율 보기 ↓</a>
       </section>
       <section class="panel live-users-panel" aria-labelledby="live-users-heading">
+        <a id="ranking-link" class="ranking-shortcut" href="#ranking-panel">전체 랭킹 보기 ↓</a>
         <div class="section-heading"><h2 id="live-users-heading">지금 접속 중인 닉네임</h2><span id="live-users-count" class="muted">—</span></div>
         <ul id="live-users" class="live-users" aria-label="접속 중인 실제 계정 닉네임"></ul>
         <p id="live-users-status" class="section-note">닉네임 목록을 불러오는 중이에요.</p>
         <p id="live-visit-status" class="visit-status" role="status" aria-live="polite" hidden></p>
       </section>
+      <details id="ranking-panel" class="panel ranking-panel">
+        <summary><strong>전체 랭킹</strong><span id="ranking-total" class="muted">50명씩 보기</span></summary>
+        <p class="section-note">누적 파괴 수가 많은 순서예요. 운영자와 오프라인 계정을 포함하고 NPC·검증 계정은 제외해요.</p>
+        <nav class="ranking-pages" aria-label="전체 랭킹 페이지">
+          <button id="ranking-prev" type="button" disabled>이전 50명</button><span id="ranking-page"></span><button id="ranking-next" type="button" disabled>다음 50명</button><button id="ranking-refresh" type="button">다시 불러오기</button>
+        </nav>
+        <p id="ranking-status" class="section-note" role="status" aria-live="polite">펼치면 전체 랭킹을 불러와요.</p>
+        <div id="ranking-scroll" class="table-scroll ranking-scroll" tabindex="0" role="region" aria-label="전체 랭킹 표, 좌우와 아래로 스크롤" aria-describedby="ranking-note">
+          <table class="ranking-table"><caption class="sr-only">파괴 순위와 계정별 누적 기록</caption><thead><tr><th scope="col">랭킹</th><th scope="col">아이디 · 닉네임</th><th scope="col">부순 장비 수</th><th scope="col">고친 장비 수</th><th scope="col">가입일</th><th scope="col">접속 횟수*</th><th scope="col">구글 연동</th></tr></thead><tbody id="ranking-rows"></tbody></table>
+        </div>
+        <p id="ranking-note" class="section-note"></p>
+      </details>
       <section class="panel live-users-panel" aria-labelledby="google-links-heading">
         <div class="section-heading"><h2 id="google-links-heading">구글 연동 계정</h2><strong id="google-links-count" class="muted">—</strong></div>
         <ul id="google-links-names" class="live-users" aria-labelledby="google-links-heading"></ul>

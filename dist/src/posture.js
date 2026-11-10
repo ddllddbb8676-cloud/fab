@@ -1,4 +1,4 @@
-import { isBlocked } from './layout.js?v=2cbe557a8370';
+import { isBlocked } from './layout.js?v=a6e059616081';
 
 // Rest in the current spot, rotating along a narrow aisle when necessary.
 // This capsule includes the hood, boots and relaxed arms, not just the feet.

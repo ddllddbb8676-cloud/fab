@@ -14,6 +14,7 @@ import {rejectOutdatedRoom} from './room-version.js';
 import {serveEntry,pendingFirstVisit} from './entry-response.js';
 import {HttpRoomPeer,HTTP_IDLE_MS,connectionOrder,readRoomBody} from './http-room-peer.js';
 import {ADMIN_HEADERS,isAdmin,adminDenied,metricExclusions} from './admin-access.js';
+import {createAdminRanking} from './admin-ranking.js';
 import {createProfileMetrics} from './profile-metrics.js';
 import {createActivityMetrics} from './activity-metrics.js';
 import {items as cosmeticItems} from '../src/cosmetics-catalog.js';
@@ -72,9 +73,10 @@ export default {
       const denied=await visitAccess(request,env);if(denied)return denied;
       return env.FAB_ROOM.getByName('FAB-A-v20').fetch(request);
     }
-    if(['/admin','/admin/','/admin.html','/api/admin/metrics'].includes(url.pathname)){
+    if(['/admin','/admin/','/admin.html','/api/admin/metrics','/api/admin/rankings'].includes(url.pathname)){
       if(!await isAdmin(request,env))return url.pathname.startsWith('/api/')?httpResult(403):adminDenied();
       if(request.method!=='GET')return httpResult(405);
+      if(url.pathname==='/api/admin/rankings')return env.FAB_ROOM.getByName('FAB-A-v20').fetch(request);
       if(url.pathname==='/api/admin/metrics'){
         const legacy=env.FAB_ROOM.getByName('FAB-A-v20').fetch(request);
         let timer;
@@ -139,10 +141,11 @@ export class FabRoom extends DurableObject {
   constructor(ctx,env) {
     super(ctx,env);this.adminEnv=env;this.sockets=new Map();this.rosterDirty=false;
     const excludedIds=metricExclusions(env);this.metricExcludedIds=new Set(excludedIds);
+    this.adminRanking=createAdminRanking({excludedIds});
     this.growthMetrics=createGrowthRelay({binding:env.FAB_ANALYTICS,waitUntil:p=>ctx.waitUntil(p),ownerId:env.FAB_OWNER_VISITOR_ID,excludedIds});this.lastGrowthPresence=0;
     this.activityMetrics=createActivityMetrics({excludedIds});this.profileMetrics=createProfileMetrics({ownerId:env.FAB_OWNER_VISITOR_ID,excludedIds});
     this.metricProfiles=new Map();this.paidItems=new Set(cosmeticItems.filter(item=>item.price>0).map(item=>item.id));this.lastMetricsFlush=Date.now();
-    this.profiles=createProfileStore(ctx.storage,{ownerId:env.FAB_OWNER_VISITOR_ID,onProfileObserved:p=>this.observeProfile(p),onProfileRemoved:id=>{this.room?.forgetContestProfile(id);this.profileMetrics.remove(id);this.metricProfiles.delete(id);}});
+    this.profiles=createProfileStore(ctx.storage,{ownerId:env.FAB_OWNER_VISITOR_ID,onProfileObserved:p=>this.observeProfile(p),onProfileRemoved:id=>{this.room?.forgetContestProfile(id);this.profileMetrics.remove(id);this.metricProfiles.delete(id);this.adminRanking.remove(id);}});
     this.httpPeers=new Map();this.connectionOrders=new Map();
     this.resettingProfiles=new Set();
     this.accounts=createGoogleAccounts(ctx.storage,{profile:id=>this.room.profile(id)||this.profiles.get(id),resetting:id=>this.resettingProfiles.has(id),onRewardDue:id=>this.payGoogleLink(id)});
@@ -150,6 +153,7 @@ export class FabRoom extends DurableObject {
       for(const [ws,s] of this.sockets)if(s.id===event.guardId)this.send(ws,{type:'safety-catch',...event});
     }});this.timer=null;this.tickCount=0;this.previous=Date.now();
     ctx.blockConcurrencyWhile(async()=>{
+      try{await this.adminRanking.load(ctx.storage);}catch{console.error('Admin visit metadata unavailable');}
       try{
         let startAfter;const records=new Map();
         do{const page=await ctx.storage.list({prefix:'metrics:v1:',limit:500,...(startAfter?{startAfter}:{})});for(const [key,value] of page)records.set(key,value);if(page.size<500)break;startAfter=[...page.keys()].at(-1);}while(startAfter);
@@ -170,6 +174,7 @@ export class FabRoom extends DurableObject {
       for(const ws of ctx.getWebSockets()) {
         const {id,order,auth}=ws.deserializeAttachment()||{},saved=id?await this.profiles.get(id):null;
         if(id&&this.sessionValid(id,auth)&&this.room.join(id,saved).ok){
+          this.adminRanking.connect(id,{existing:Boolean(saved),restored:true});
           const reward=this.payGoogleLinkOnEntry(id);
           if(reward){await this.checkpoint();this.accounts.closeReward(id);}
           this.sockets.set(ws,{id,auth,rate:0,at:Date.now()});this.connectionOrders.set(id,{order:order??0,at:Date.now()});
@@ -190,6 +195,7 @@ export class FabRoom extends DurableObject {
     this.trackGrowth(()=>this.growthMetrics.presence([...this.room.players.values()].map(p=>({id:p.id,hidden:p.hidden,phase:p.phase,role:p.role,penalty:p.penalty}))));
   }
   observeProfile(p){
+    this.adminRanking.observe(p);
     this.room?.rememberContestProfile(p);
     this.trackGrowth(()=>this.growthMetrics.observeProfile(p));
     try{
@@ -200,11 +206,13 @@ export class FabRoom extends DurableObject {
     }catch{this.profileMetricsUnavailable=true;}
   }
   async flushMetrics(force=false){
-    if(this.metricsUnavailable)return;
     if(this.flushingMetrics){if(force){await this.flushingMetrics;return this.flushMetrics(true);}return;}
     if(!force&&Date.now()-this.lastMetricsFlush<60000)return;
     this.lastMetricsFlush=Date.now();
-    this.flushingMetrics=(async()=>{try{await this.activityMetrics.flush(this.ctx.storage);this.metricsWriteDelayed=false;}catch{this.metricsWriteDelayed=true;}})();
+    this.flushingMetrics=(async()=>{
+      if(!this.metricsUnavailable)try{await this.activityMetrics.flush(this.ctx.storage);this.metricsWriteDelayed=false;}catch{this.metricsWriteDelayed=true;}
+      try{this.adminRanking.sync(this.room.players.keys());await this.adminRanking.flush(this.ctx.storage);this.rankingWriteDelayed=false;}catch{this.rankingWriteDelayed=true;}
+    })();
     try{await this.flushingMetrics;}finally{this.flushingMetrics=null;}
   }
   pose(id,data){
@@ -222,6 +230,21 @@ export class FabRoom extends DurableObject {
   }
   async checkpoint(){do{await this.profiles.flush();}while(this.profiles.hasPending);}
   googleLinkCount(){return this.accounts.linkedCount(this.metricExcludedIds);}
+  async rankingReport(page){
+    const data=this.adminRanking.page(page),ids=data.rows.map(p=>p.id);
+    let linked=null,dates=[],timer;
+    try{linked=new Set(this.accounts.linkedProfiles(ids));}catch{}
+    if(ids.length&&data.rows.some(p=>!p.joinedDate)&&this.adminEnv.FAB_ANALYTICS){
+      try{dates=await Promise.race([this.adminEnv.FAB_ANALYTICS.getByName('FAB-ANALYTICS-v1').registrationDates(ids),new Promise(resolve=>{timer=setTimeout(()=>resolve([]),1500);})]);}
+      catch{}finally{clearTimeout(timer);}
+    }
+    this.adminRanking.rememberDates(ids,dates);
+    this.ctx.waitUntil(this.adminRanking.flush(this.ctx.storage).catch(()=>{this.rankingWriteDelayed=true;}));
+    return {...data,generatedAt:Date.now(),visitCountsLimited:Boolean(this.rankingWriteDelayed),rows:data.rows.map((p,i)=>{
+      const {id,...publicRow}=p;
+      return {...publicRow,joinedDate:p.joinedDate||(typeof dates?.[i]==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(dates[i])?dates[i]:null),googleLinked:linked?linked.has(id):null};
+    })};
+  }
   activityReport(){
     this.track(()=>this.activityMetrics.sync(this.room.players.keys()));
     return this.metricsUnavailable?null:this.activityMetrics.snapshot();
@@ -268,6 +291,12 @@ export class FabRoom extends DurableObject {
       if(target.id===this.adminEnv.FAB_OWNER_VISITOR_ID)return httpResult(409,{message:'내 캐릭터에게는 이동할 수 없어요.'});
       if(target.hidden||!Number.isFinite(target.y)||target.y>.3||['climb','climbing','riding'].includes(target.phase))return httpResult(409,{message:'입장 중이거나 OHT에 있는 이용자예요. 바닥에 내려오면 다시 선택해 주세요.'});
       return Response.json({target:{id:target.id,name:target.civilianName||target.name},expiresAt:Date.now()+120000},{headers:ADMIN_HEADERS});
+    }
+    if(new URL(request.url).pathname==='/api/admin/rankings'){
+      if(!await isAdmin(request,this.adminEnv,this.accounts))return httpResult(403);
+      if(request.method!=='GET')return httpResult(405);
+      try{return Response.json(await this.rankingReport(Number(new URL(request.url).searchParams.get('page'))),{headers:ADMIN_HEADERS});}
+      catch{return Response.json({message:'전체 랭킹을 잠시 불러오지 못했어요.'},{status:503,headers:ADMIN_HEADERS});}
     }
     if(new URL(request.url).pathname==='/api/admin/metrics'){
       if(!await isAdmin(request,this.adminEnv,this.accounts))return httpResult(403);
@@ -359,6 +388,7 @@ export class FabRoom extends DurableObject {
     try{await this.checkpoint();if(googleReward)this.accounts.closeReward(id);}
     catch(error){try{peer.close(1013,'Try again');}catch{}this.close(peer);throw error;}
     if(!this.sockets.has(peer))return;
+    this.adminRanking.connect(id,{existing:Boolean(current)});
     this.welcome(peer,id,googleReward);session.ready=true;session.walletRevision=this.room.players.get(id).wallet.revision;this.broadcastRoster();this.start();
     this.track(()=>{this.activityMetrics.sync(this.room.players.keys());this.activityMetrics.connect(id,peer instanceof HttpRoomPeer?'https':'websocket');});
     this.trackGrowth(()=>this.growthMetrics.connect(id,{existing:Boolean(current),transport:peer instanceof HttpRoomPeer?'https':'websocket',profile:this.room.profile(id)}));this.updateGrowthPresence(true);

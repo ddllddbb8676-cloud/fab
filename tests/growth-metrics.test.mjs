@@ -277,3 +277,9 @@ test('shop observations arriving before the delayed server connect survive check
   assert.equal(row(next.metrics).funnel.shopOpen,1);assert.equal(row(next.metrics).funnel.tryOn,1);assert.equal(row(next.metrics).visits.newAccounts,1);
   await next.metrics.flush(storage);assert.ok([...storage.data.values()].filter(v=>v.kind==='page').every(v=>!v.pending));
 });
+
+test('private registration lookup preserves unknown legacy dates and returns only dates for at most fifty requested accounts',()=>{
+ const now=Date.parse('2026-11-10T04:00:00Z'),fresh='visitor:'+'1'.repeat(64),legacy='visitor:'+'2'.repeat(64),owner='visitor:'+'3'.repeat(64),r=createGrowthMetrics({now:()=>now,ownerId:owner});
+ r.connect(fresh,{existing:false});r.connect(legacy,{existing:true});r.connect(owner,{existing:false});
+ assert.deepEqual(r.registrationDates([fresh,legacy,owner,'invalid']),['2026-11-10',null,null,null]);assert.equal(r.registrationDates(Array(60).fill(fresh)).length,50);
+});

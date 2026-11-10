@@ -49,6 +49,10 @@ export function createGoogleAccounts(storage, {profile, resetting = () => false,
     for (const table of ['google_nonces','google_tickets','google_devices']) sql.exec('DELETE FROM '+table+' WHERE expires <= ?',clock());
   }
   function linked(id) { return exists() && Boolean(row('SELECT 1 FROM google_links WHERE profile=?',id)); }
+  function linkedProfiles(ids) {
+    if(!exists()||!ids.length)return [];
+    return sql.exec('SELECT profile FROM google_links WHERE profile IN (SELECT value FROM json_each(?))',JSON.stringify(ids.slice(0,50))).toArray().map(row=>row.profile);
+  }
   function linkedCount(excluded) {
     if (!exists()) return 0;
     const {n}=row('SELECT COUNT(*) AS n FROM google_links');
@@ -267,7 +271,7 @@ export function createGoogleAccounts(storage, {profile, resetting = () => false,
     });
   }
   const handoff=createBrowserHandoff({sql,init,row,view,linked,linkedProfile,saveLink,newTicket,clock,fail,transaction:fn=>storage.transactionSync(fn),sourceForCode,resetting});
-  return {start,verified,linked,linkedCount,linkedNames,rewardEntitled,closeReward,claimEntryNotice,restoredSession,view,issueCharacterCode,discardCharacterCode,
+  return {start,verified,linked,linkedProfiles,linkedCount,linkedNames,rewardEntitled,closeReward,claimEntryNotice,restoredSession,view,issueCharacterCode,discardCharacterCode,
     useCode:args=>useCode(args).then(settle),signIn:args=>signIn(args).then(settle),recover:args=>recover(args).then(settle),
     handoff:{...handoff,verify:(...args)=>handoff.verify(...args).then(settle)},
     forgetDevice(device) { if (exists()) sql.exec('DELETE FROM google_devices WHERE device=?',device); }

@@ -1,8 +1,10 @@
 import {createGrowthDashboard} from './growth.js?v=retention-20261106';
 import {createEventControls} from './events.js';
+import {createRankingDashboard} from './rankings.js?v=rankings-20261110';
 const $=id=>document.getElementById(id);
 const growthDashboard=createGrowthDashboard(document);
 const eventControls=createEventControls(document);
+const rankingDashboard=createRankingDashboard(document);
 const integer=new Intl.NumberFormat('ko-KR',{maximumFractionDigits:0});
 const decimal=new Intl.NumberFormat('ko-KR',{maximumFractionDigits:1});
 const localDate=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit'});
@@ -212,6 +214,7 @@ async function refresh(page=googlePage){
     if(response.status===401||response.status===403){
       lastData=null;lastUpdated=0;$('report').hidden=true;
       growthDashboard.clear();
+      rankingDashboard.clear();
       renderGoogleLinks(null);googlePage=1;
       activeVisit?.controller.abort();activeVisit=null;visitButtons=[];visitStatus('');
       $('live-users').replaceChildren();text('live-users-count','—');text('live-users-status','');
@@ -230,12 +233,14 @@ $('refresh').addEventListener('click',()=>refresh());
 $('google-links-prev').addEventListener('click',()=>refresh(googlePage-1));
 $('google-links-next').addEventListener('click',()=>refresh(googlePage+1));
 $('refresh').addEventListener('click',()=>eventControls.refresh());
+$('refresh').addEventListener('click',()=>rankingDashboard.refresh());
 $('hourly-day').addEventListener('change',()=>{selectedDay=$('hourly-day').value;if(lastData)hourly(lastData);});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&Date.now()-lastUpdated>=60000)refresh();});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)eventControls.refresh();});
 setInterval(()=>{if(!document.hidden)eventControls.refresh();},15000);
 setInterval(()=>{if(!document.hidden)eventControls.paint();},1000);
 setInterval(()=>{if(!document.hidden)refresh();},60000);
+setInterval(()=>{if(!document.hidden)rankingDashboard.refresh();},60000);
 globalThis.addEventListener?.('resize',()=>{if(lastData&&!document.hidden)daily(lastData);});
 refresh();
 eventControls.refresh();

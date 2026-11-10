@@ -147,6 +147,9 @@ export function createGrowthMetrics({now=Date.now,ownerId='',excludedIds=[]}={})
       startedAt=new Date(clock).toISOString();mark(PREFIX+'meta');hydrate(records);prune(clock);
     },
     restorePage(records){hydrate(records);},
+    registrationDates(ids){
+      return (Array.isArray(ids)?ids:[]).slice(0,50).map(id=>{const value=accounts.get(fp(id))?.firstConnected;return Number.isSafeInteger(value)?label(value):null;});
+    },
     connect(id,{existing=true,transport='websocket'}={}){
       const f=fp(id);if(!f)return false;const t=tick();prune(t);let a=accounts.get(f);
       if(!a){if(accounts.size>=GROWTH_LIMITS.accounts){limited('account-cap');return false;}a={version:1,kind:'account',fp:f,firstObserved:day(t),firstConnected:existing?null:day(t),legacy:Boolean(existing),lastSeen:t,days:[]};accounts.set(f,a);}

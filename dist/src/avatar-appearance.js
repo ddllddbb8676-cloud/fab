@@ -1,9 +1,9 @@
-import {createAllAccessories} from './accessories.js?v=2cbe557a8370';
-import {DEFAULT_OUTFIT,findItem,suitColor} from './cosmetics-catalog.js?v=2cbe557a8370';
-import {isSafety,safetyColor} from './safety-team.js?v=2cbe557a8370';
-import {getCollectionItem,isPatternedSuit} from './collection-catalog.js?v=2cbe557a8370';
-import {createCollectionAccessory,updateCollectionAccessory} from './collection-accessories.js?v=2cbe557a8370';
-import {createPatternedSuitPool} from './patterned-suits.js?v=2cbe557a8370';
+import {createAllAccessories} from './accessories.js?v=a6e059616081';
+import {DEFAULT_OUTFIT,findItem,suitColor} from './cosmetics-catalog.js?v=a6e059616081';
+import {isSafety,safetyColor} from './safety-team.js?v=a6e059616081';
+import {getCollectionItem,isPatternedSuit} from './collection-catalog.js?v=a6e059616081';
+import {createCollectionAccessory,updateCollectionAccessory} from './collection-accessories.js?v=a6e059616081';
+import {createPatternedSuitPool} from './patterned-suits.js?v=a6e059616081';
 const pools=new WeakMap();
 export function createAvatarAppearance(THREE,avatar,{scene=null,external=false}={}) {
   let pool=pools.get(THREE);

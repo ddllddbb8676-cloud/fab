@@ -45,7 +45,7 @@ async function fixture(db){
 
 test('only server configured owner cookie opens admin or metrics; unauthorized requests never wake room',async()=>{
   let calls=0;const env={FAB_OWNER_VISITOR_ID:owner,FAB_ROOM:{getByName(){calls++;throw Error('Must not reach storage');}}};
-  for(const path of ['/admin','/admin/','/admin.html','/api/admin/metrics']){
+  for(const path of ['/admin','/admin/','/admin.html','/api/admin/metrics','/api/admin/rankings']){
     for(const cookie of ['',ordinaryToken])assert.equal((await worker.fetch(request(path,cookie),env)).status,403);
   }
   assert.equal(calls,0);
@@ -272,4 +272,30 @@ test('owner start is persisted before success, duplicate requests replay once, a
   assert.equal((await worker.fetch(eventRequest({...input,bayCount:1}),f.env)).status,409);
   for(const key of [...before.keys()].filter(k=>k.startsWith('profile:')))assert.deepEqual(f.records.get(key),before.get(key));
   assert.equal(f.room.room.players.size,0);
+});
+
+test('private ranking pages contain fifty offline profiles and no credentials, use batched Google checks and never rescan',async t=>{
+  const db=new DatabaseSync(':memory:');t.after(()=>db.close());const f=await fixture(db);
+  f.room.accounts.start(ordinary);db.prepare('INSERT INTO google_links VALUES (?,?)').run('private-google-subject',ordinary);
+  for(let i=1000;i<1101;i++)f.room.profiles.save({id:'visitor:'+i.toString(16).padStart(64,'0'),name:'유저'+i,brokenCount:i%11,repairedCount:i%7});
+  f.env.FAB_ANALYTICS={getByName:()=>({registrationDates:async ids=>{assert.ok(ids.length<=50);return ids.map(id=>id===ordinary?'2026-11-04':null);}})};
+  const before=structuredClone(f.records),reads=f.reads();
+  const page=async n=>{const res=await worker.fetch(request('/api/admin/rankings?page='+n,token),f.env);assert.equal(res.status,200);assert.match(res.headers.get('cache-control'),/private, no-store/);return res.json();};
+  const a=await page(1),b=await page(2),c=await page(999);assert.equal(a.total,103);assert.equal(a.rows.length,50);assert.equal(b.rows.length,50);assert.equal(c.rows.length,3);assert.equal(c.page,3);
+  const all=[...a.rows,...b.rows,...c.rows],p=all.find(r=>r.name==='기록보존');assert.equal(p.googleLinked,true);assert.equal(p.joinedDate,'2026-11-04');assert.equal(p.visitCount,0);assert.ok(all.some(r=>r.name==='FAB짱 세미'));assert.ok(!all.some(r=>r.name==='검증'));
+  for(const secret of [owner,ordinary,probe,token,'private-google-subject','wallet','subject'])assert.ok(!JSON.stringify(all).includes(secret));
+  assert.equal(f.reads(),reads);assert.equal(f.room.room.players.size,0);
+  for(const [key,value] of before)if(key.startsWith('profile:'))assert.deepEqual(f.records.get(key),value);
+  assert.equal((await worker.fetch(request('/api/admin/rankings',token,'POST'),f.env)).status,405);
+  assert.equal((await f.room.fetch(request('/api/admin/rankings',ordinaryToken))).status,403);
+  await Promise.all(f.pending);
+});
+
+test('ranking failure stays independent of admission; automatic reconnection does not inflate new visit counts',async()=>{
+  const f=await fixture(),p=peer();await f.room.admit(p,ordinary,1);await f.room.admit(peer(),ordinary,2);
+  f.env.FAB_ANALYTICS={getByName:()=>({registrationDates:async()=>{throw Error('offline');}})};
+  const res=await worker.fetch(request('/api/admin/rankings',token),f.env),data=await res.json();assert.equal(res.status,200);assert.equal(data.rows.find(p=>p.name==='기록보존').visitCount,1);
+  const put=f.storage.put;f.storage.put=async batch=>{if(Object.keys(batch).some(k=>k.startsWith('admin:visits:')))throw Error('analytics storage unavailable');return put(batch);};
+  await f.room.flushMetrics(true);assert.equal(f.room.rankingWriteDelayed,true);const peer2=peer();await f.room.admit(peer2,ordinary,3);assert.ok(peer2.packets.some(p=>p.type==='welcome'));
+  f.storage.put=put;await Promise.all(f.pending);await f.room.flushMetrics(true);
 });

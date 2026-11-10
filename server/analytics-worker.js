@@ -43,6 +43,7 @@ export class FabAnalytics extends DurableObject{
       return value;
     });
   }
+  registrationDates(ids){return this.enqueue(()=>this.metrics.registrationDates(ids));}
   async fetch(request){
     const url=new URL(request.url);
     if(url.hostname==='fab-analytics.internal'&&url.pathname==='/ingest'&&request.method==='POST'){
