@@ -16,7 +16,7 @@ W,H,FPS=1080,1920,30
 NAVY='#123d46';DARK='#092b35';MINT='#dfff68';WHITE='#ffffff'
 FONT='C:/Windows/Fonts/malgunbd.ttf'
 TARGETS=json.loads((OUT/'targets.json').read_text(encoding='utf-8'))
-GROUPS={'old':OLD,'update':UPDATE,'new':NEW}
+GROUPS={'old':OLD,'update':UPDATE,'new':NEW,'oht':OUT/'oht-boarding'}
 @functools.lru_cache(80)
 def font(n):return ImageFont.truetype(FONT,n)
 def fit(text,n=44,width=930):
@@ -104,7 +104,7 @@ def hud(canvas,s,t):
     text(d,(837,1661),'앉기',36);text(d,(975,1661),'눕기',36)
     if s['id']=='throw':
         button(d,(460,1452,745,1557),'바닥에 놓기',size=32);button(d,(758,1452,1053,1557),'던지기 ↗',True,34)
-    if s['id']=='oht':button(d,(779,1452,1053,1557),'내리기 ↓',size=34)
+    if s['id']=='oht' and meta('oht','boarding')['phases'][min(119,round(t*30))]=='riding':button(d,(779,1452,1053,1557),'내리기 ↓',size=34)
     if s['id'] in ('cartpull','cartload','cartride','walkway'):
         label='카트 놓기' if s['id'] in ('cartpull','walkway') and t>1.65 else '카트 타기' if s['id']=='cartride' else '카트'
         button(d,(785,1452,1053,1557),label,size=34)
@@ -166,9 +166,13 @@ def annotate(canvas,s,t,g,c,f,m):
         if t>2.0:badge(canvas,'사람은 위아래 한 명씩',y=1170)
     elif id=='walkway':badge(canvas,'×2 SPEED · 카트도 OK',y=1090)
     elif id=='oht':
-        if t<1.5:
-            st=f/30;marker(canvas,project([-30.4+st*2.1,3.71,-2.985],shot),t,'천장 차량 터치',(-130,170))
-        elif t>2.7:marker(canvas,(920,1504),t,'내리기',(-100,-150))
+        phase=m['phases'][f]
+        if t<.45:marker(canvas,project(m['targets'][f],shot),t,'빈 차량 터치',(150,170))
+        elif phase=='climb':badge(canvas,'장비를 딛고 → 점프!',y=1240)
+        elif phase=='riding':
+            if t>2.6:marker(canvas,(920,1504),t,'내리기',(-100,-150))
+            else:badge(canvas,'매달려서 같이 이동!',y=1240)
+        elif t>3.2:badge(canvas,'내려와서 다시 걷기',y=1020)
     elif id=='emoji':
         if t<1.3:marker(canvas,(80,1800),t,'터치!',(220,-200))
         else:

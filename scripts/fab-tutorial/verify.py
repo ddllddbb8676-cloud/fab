@@ -13,7 +13,7 @@ samples={}
 for s in SCENES:
     t=.95 if s['id'] in ('emo','repair','cartpull','cartload') else s['duration']*.55
     samples[round((s['start']+t)*30)]=f'{s["number"]:02}-{s["id"]}'
-for id,t in [('look',.45),('emo',.35),('repair',.35),('out',.45),('out',2.65),('in',.45),('cartpull',.4),('cartload',2.35),('oht',.35),('emoji',.35),('shop',.45),('shop',3.5),('bay',.45),('contest',.45),('photo',.35),('google',.45)]:
+for id,t in [('look',.45),('emo',.35),('repair',.35),('out',.45),('out',2.65),('in',.45),('cartpull',.4),('cartload',2.35),('oht',.35),('oht',.75),('oht',1.45),('oht',3.25),('oht',3.96),('emoji',.35),('shop',.45),('shop',3.5),('bay',.45),('contest',.45),('photo',.35),('google',.45)]:
     s=next(s for s in SCENES if s['id']==id)
     samples[round((s['start']+t)*30)]=f'tap-{s["number"]:02}-{id}-{round(t*100):03}'
 
@@ -43,5 +43,6 @@ audio=np.frombuffer(raw,dtype='<f4');assert np.isfinite(audio).all()
 peak=float(np.max(np.abs(audio)));assert peak<.999,peak
 seconds=audio.size/2/48000;assert abs(seconds-90)<.05,seconds
 report={'checkedAt':datetime.now(timezone.utc).isoformat(),'file':TARGET.name,'bytes':TARGET.stat().st_size,'sha256':hashlib.sha256(TARGET.read_bytes()).hexdigest(),'durationSeconds':metadata['duration'],'width':1080,'height':1920,'fps':metadata['fps'],'decodedFrames':count,'footerContrastPassFrames':count-len(bad_footer),'audioRate':48000,'audioChannels':2,'decodedAudioPeakDbFS':round(20*math.log10(peak),3),'decodedAudioSeconds':seconds,'extractedReviewFrames':len(samples),'gameSourceRevision':json.loads((OUT/'new-shots/timeline.json').read_text())['sourceRevision'],'method':'Offline game-model rendering, source-checked enlarged instructional UI, two cropped saved local QA shop screenshots, local Korean TTS, original music and game effects. Not a recording of live play.','physicalPhonePlaybackTested':False,'browserPlaybackTested':False,'visualReviewComplete':False}
+report['ohtBoarding']=json.loads((OUT/'oht-boarding/verification.json').read_text(encoding='utf-8'))
 (OUT/'verification.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
 print(json.dumps(report,ensure_ascii=False,indent=2),flush=True)

@@ -46,8 +46,12 @@ imageio-ffmpeg, Windows 맑은 고딕/Segoe UI Emoji/Microsoft Heami Desktop이�
 1. `python -X utf8 scripts/fab-tutorial/story.py`
 2. `node scripts/fab-tutorial/prepare-ui.mjs`
 3. `node scripts/fab-tutorial/export-shots.mjs`
+   이어서 `node scripts/fab-tutorial/export-oht.mjs`로 실제 로컬 게임의 OHT 탑승
+   제어기와 차량 이동을 별도의 asset index로 export한다.
 4. Blender 명령:
    `blender --background --factory-startup --python scripts/fab-promo/render-film.py -- move,look,pickup,walkway,social,cartload --root=outputs/tutorial-20261112/new-shots --samples=12`
+   OHT는 별도 루트로 렌더한다:
+   `blender --background --factory-startup --python scripts/fab-promo/render-film.py -- boarding --root=outputs/tutorial-20261112/oht-boarding --samples=12`
 5. `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/fab-tutorial/narrate.ps1`
 6. `python -X utf8 scripts/fab-tutorial/edit.py --audio`
 7. `python -X utf8 scripts/fab-tutorial/edit.py --preview` 후 미리보기 검토.
@@ -60,18 +64,38 @@ export한다. 공유 geometry index가 있으므로 다른 export의 JSON/bin을
 버전 폴더로 보존한 뒤 새로 렌더한다.
 
 `verify.py`는 최종 MP4의 2,700프레임을 디코딩해 화면 크기·프레임수·지속 URL
-대비·음성 길이와 클리핑을 확인하고 43개 장면/클릭 검토 프레임을 추출한다.
+대비·음성 길이와 클리핑을 확인하고 47개 장면/클릭 검토 프레임을 추출한다.
 시각 검토 후에만 `verification.json`의 `visualReviewComplete`를 true로 표시한다.
 
 최종 파일은 `FAB-controls-90s.mp4`, 편집용 자막은 `FAB-controls-90s.ko.srt`,
 세부검증은 `verification.json`, 음성별 길이는 `audio-report.json`이다.
 
-완성본 검증: 90.00초, 1080×1920, 30fps, 22,701,378바이트.
-2,700프레임 디코딩과 URL 대비 검사 통과, 최종 추출 43장 시각 검토 완료.
+OHT 교체 완성본 검증: 90.00초, 1080×1920, 30fps, 21,821,382바이트.
+2,700프레임 디코딩과 URL 대비 검사 통과. 최종 검토 프레임 47장 추출,
+새 OHT 탑승·점프·이동·내리기·착지와 클릭 표시 시각 검토 완료.
 스테레오 48kHz AAC를 디코딩한 최대치는 -2.182dBFS로 클리핑이 없다.
 음성 27구간은 각 장면의 끝을 넘지 않는다.
-SHA-256: `564a2d55a341dd124cd947e83b847264e6fdfbb37c26a7671449bf9fe185ff73`.
+SHA-256: `f3b4024a5c5c24e9eb4c2ca4a224322e67f017d4b9edbd48d00bb8c7b9e791be`.
 원본 게임 소스 기준: `c740858afea458fd72be68c0a0410aafacaedf08`.
+
+### OHT 탑승 장면 교체
+
+사용자 요청에 따라 46–50초를 이미 매달린 인물들의 연출에서 **빈 차량 터치 →
+장비를 딛고 올라감 → 점프 → 매달려 이동 → 내리기 → 바닥 착지**로 교체했다.
+`export-oht.mjs`는 `createPlayActions`, `createExplorer`, `createFleet`,
+`createAvatar`를 그대로 실행한다. 실제 게임의 상태 전환을 60Hz로 계산하고
+2배속으로 편집했다. 임의 보간으로 탑승 동작을 새로 만들지 않는다.
+검사된 이동 거리는 6.42m이며 마지막 위치는 충돌 없는 바닥이다.
+운영 서버 접속이나 브라우저 녹화는 아니다.
+
+- 새 장면의 소스 기준: `c2d413a752a16b4ec8c01fce3c21a7bf36293e03`.
+- `oht-boarding/verification.json`에 실제 단계와 탑승 이동 거리 기록.
+- 기존 완성본에서 이 구간만 교체하려면 `python -X utf8 scripts/fab-tutorial/replace-oht.py`.
+  최초 영상과 검증은 `*-before-oht.*`로 보존한다. 그 파일을 기준으로만 교체하므로
+  이후 별개 장면을 수정한 영상의 부분 편집에 그대로 재사용하지 않는다.
+- 전체 재인코딩은 30fps를 명시한다. 음성은 AAC stream copy하며 전후 오디오 해시
+  일치를 확인했다. 장면 길이와 나머지 구간 배치는 유지한다.
+- 확인 페이지의 영상 주소에 MP4 해시를 붙여 브라우저가 이전 파일을 재사용하지 않게 한다.
 
 ## 휴대폰 확인 페이지
 
@@ -80,9 +104,9 @@ SHA-256: `564a2d55a341dd124cd947e83b847264e6fdfbb37c26a7671449bf9fe185ff73`.
 11/2 58초, 11/9 30초 광고를 보존한다. 새 영상에는 25개 구간 이동 버튼과
 MP4/자막 다운로드를 제공한다.
 
-11/12 10:28 KST owner-private 배포 완료. Sites의 최종 상태는 `succeeded`다.
-- 배포: `appgdep_6af51626bb9c819188ee4d811778301d`
-- 영상 페이지 소스: `b7d78edcbe6c0bb31da478e5c14dde30b5436b00`
+11/12 10:40 KST OHT 교체본 owner-private 배포 완료. Sites의 최종 상태는 `succeeded`다.
+- 배포: `appgdep_6af518fc05c08191ad132e84affe9524`
+- 영상 페이지 소스: `4923a3c73c4e4596bb473d7507a9075aa3aadd38`
 - 영상: https://fab-promo-film.ddllddbb8676.chatgpt.site/FAB-controls-90s.mp4
 - 이전 영상 2편과 HTML 페이지 2개 보존, MP4 복사 해시 일치,
   25개 구간 버튼 및 모든 로컬 파일 참조 검사 통과.
