@@ -9,7 +9,7 @@ import {createEmoControls} from '../../src/emo-controls.js';
 
 // Reuse the shipped cabinet/FOUP/OHT builders verbatim in a separate film scene.
 // This module never imports the live main entry point or contacts a game server.
-export async function createFilmWorld({bayIds=[3,4,5,13]}={}) {
+export async function createFilmWorld({bayIds=[3,4,5,13],omitPortIds=[]}={}) {
   const source=await readFile(new URL('../../src/main.js',import.meta.url),'utf8');
   const slice=(a,b)=>{const start=source.indexOf(a),end=source.indexOf(b,start);if(start<0||end<0)throw new Error('Game builder boundary changed: '+a);return source.slice(start,end);};
   const scene=new THREE.Group(),roots=new Map();
@@ -30,6 +30,11 @@ export async function createFilmWorld({bayIds=[3,4,5,13]}={}) {
       foup(){const p=new THREE.Group();const o=movingFoup(p);return o;},oht(){currentRoot=scene;createOHT({state:{car:{x:0,z:0}}});const v=vehicles.pop();v.root.removeFromParent();v.foup.removeFromParent();return v.root;}};`;
   const model=new Function('THREE','scene','machines','TOOL_SCALE_X','SEATED_FOUP_Y','VEHICLE_Y','reservedPortIds','processFamilies','buildEquipmentCatalog',code)(THREE,scene,machines,TOOL_SCALE_X,SEATED_FOUP_Y,VEHICLE_Y,reservedPortIds,processFamilies,buildEquipmentCatalog);
   for(const m of machines.filter(m=>bayIds.includes(m.bayId))){const root=model.build(m);roots.set(m.id,root);const emo=createEmoControls({THREE,scene:root,machines:[m]});root.userData.emo=emo;}
+  // A filming-only empty slot lets a separately animated, original FOUP model
+  // leave its port without leaving a duplicate in the static set.
+  const omitted=new Set(omitPortIds),removePortParts=[];
+  if(omitted.size)scene.traverse(o=>{if(omitted.has(o.userData.portId))removePortParts.push(o);});
+  for(const o of removePortParts)o.removeFromParent();
   scene.updateMatrixWorld(true);
   // Merge static parts by material inside each cabinet. Whole cabinets can still
   // disappear independently when the original destruction animation takes over.

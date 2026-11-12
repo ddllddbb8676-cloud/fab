@@ -1,5 +1,12 @@
 # FAB promotional films
 
+## Controls tutorial — 2026-11-12
+
+The new 90-second Korean narrated controls tutorial covers 27 scenes with exact
+click/gesture guidance. Its reproducible workflow and verification are in
+[scripts/fab-tutorial/README.md](../fab-tutorial/README.md). It uses this film
+pipeline and isolated game-model scenes; production gameplay is unchanged.
+
 ## Update film — 2026-11-09
 
 The 30-second portrait update film focuses on bay destruction, black/white FOUP
