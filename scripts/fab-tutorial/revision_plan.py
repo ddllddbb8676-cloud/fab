@@ -1,5 +1,5 @@
-"""Pending native-UI revision; retain the rejected first edit for comparison."""
-import json
+"""Native-UI revision timeline; retain the first edit for comparison."""
+import hashlib,json
 from story import SCENES, OUT
 
 REVISION=OUT/'ui-revision'
@@ -44,16 +44,26 @@ assert DURATION==92
 
 def write_plan():
     REVISION.mkdir(parents=True,exist_ok=True)
-    plan=dict(duration=DURATION,fps=30,narration=False,scenes=SCENES_V2,
+    proof=REVISION/'verification.json'
+    verification=json.loads(proof.read_text(encoding='utf-8')) if proof.exists() else {}
+    movie=REVISION/verification.get('file','unverified.mp4')
+    complete=bool(verification.get('visualReviewComplete') and movie.is_file() and
+                  hashlib.sha256(movie.read_bytes()).hexdigest()==verification.get('sha256'))
+    provenance=REVISION/'native/provenance.json'
+    native=json.loads(provenance.read_text(encoding='utf-8')) if provenance.exists() else {}
+    captured=bool(native.get('states')) and all((REVISION/'native'/f'{state}-{matte}.jpg').exists()
+                 for state in native.get('states',[]) for matte in ('black','white'))
+    scenes=[{**s,'captureStatus':'native-ui-captured' if captured else 'pending-native-ui'} for s in SCENES_V2]
+    plan=dict(duration=DURATION,fps=30,narration=False,scenes=scenes,
               ui='Use original game DOM/CSS and actual button positions. No drawn replacement buttons.',
               overlays='Only click rings, brief arrows and short captions; never obscure the clicked native control.',
               hitEligibility='On foot, standing/walking, outside rest zones; working, cart/OHT riding and caught states excluded.',
               oht='Keep verified controller sequence: click, approach, climb, jump, hang/travel, dismount, land.',
-              status='prepared; native UI capture pending browser availability',
-              finalVideoComplete=False)
+              status='verified final media' if complete else 'native UI captured; final media verification pending' if captured else 'native UI capture pending',
+              finalVideoComplete=complete)
     (REVISION/'plan.json').write_text(json.dumps(plan,ensure_ascii=False,indent=2),encoding='utf-8')
     return plan
 
 if __name__=='__main__':
-    write_plan()
-    print(f'Prepared {len(SCENES_V2)} scenes, {DURATION} seconds, no narration. Native UI capture pending.')
+    plan=write_plan()
+    print(f'{len(SCENES_V2)} scenes, {DURATION} seconds, no narration. {plan["status"]}.')

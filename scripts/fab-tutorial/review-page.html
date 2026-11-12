@@ -4,29 +4,58 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#092b35">
 <meta name="robots" content="noindex,nofollow">
-<title>팹뿌 · 90초 조작법</title>
+<title>팹뿌 · 92초 조작법</title>
 <style>
 *{box-sizing:border-box}body{margin:0;background:#092b35;color:#fff;font-family:system-ui,-apple-system,"Malgun Gothic",sans-serif}main{max-width:620px;margin:auto;padding:max(20px,env(safe-area-inset-top)) 16px max(30px,env(safe-area-inset-bottom))}header{display:flex;align-items:baseline;justify-content:space-between;gap:12px}h1{font-size:24px;letter-spacing:-.6px;margin:0 0 10px}.format,.note{color:#b9d2cf;font-size:13px;line-height:1.7}.format{white-space:nowrap}video{display:block;width:100%;max-height:72svh;aspect-ratio:9/16;object-fit:contain;border-radius:16px;background:#061e25;border:1px solid #45636c}.listen{color:#dfff68;font-size:14px;margin:14px 0}.actions{display:flex;gap:10px}.actions a{display:flex;align-items:center;justify-content:center;flex:1;padding:13px 8px;min-height:48px;border-radius:13px;font-weight:700;text-decoration:none;font-size:14px;color:#fff;border:1px solid #88aaa7}.actions a:first-child{background:#dfff68;color:#123d46;border:none}details{margin:22px 0}summary{font-weight:700;cursor:pointer;padding:10px 0}.chapters{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}.chapters button{display:flex;gap:8px;text-align:left;border:1px solid #45636c;background:#143d47;color:#fff;font:inherit;font-size:13px;padding:11px;border-radius:10px;min-height:46px;cursor:pointer}.chapters time{color:#dfff68;font-variant-numeric:tabular-nums}.archive{display:flex;gap:18px;flex-wrap:wrap;margin-top:18px}.archive a{color:#c9dddd;font-size:13px}a:focus-visible,button:focus-visible,summary:focus-visible{outline:3px solid #dfff68;outline-offset:4px}@media(max-width:360px){header{display:block}.format{margin-top:0}}
 </style>
 <main>
-  <header><h1>팹뿌 90초 조작법</h1><span class="format">세로 · 한국어 음성</span></header>
-  <video id="tutorial" controls playsinline preload="metadata" poster="tutorial-poster.jpg" aria-label="팹뿌 주요 기능과 클릭 위치를 설명하는 90초 안내영상">
-    <source src="FAB-controls-90s.mp4?v={{VIDEO_REVISION}}" type="video/mp4">
-    <track kind="captions" src="FAB-controls-90s.ko.vtt" srclang="ko" label="한국어 설명">
+  <header><h1>팹뿌 92초 조작법</h1><span class="format">실제 조작창 · 자막</span></header>
+  <video id="tutorial" controls playsinline preload="metadata" poster="tutorial-native-poster.jpg" aria-label="팹뿌 주요 기능과 클릭 위치를 설명하는 92초 안내영상">
+    <source src="FAB-controls-92s-native.mp4?v={{VIDEO_REVISION}}" type="video/mp4">
+    <track kind="captions" src="FAB-controls-92s-native.ko.vtt" srclang="ko" label="한국어 설명">
     아래 MP4 다운로드 버튼을 눌러 영상을 받아보세요.
   </video>
-  <p class="listen">소리를 켜고 보세요. 누를 곳은 연두색으로 표시했어요.</p>
-  <div class="actions"><a href="FAB-controls-90s.mp4?v={{VIDEO_REVISION}}" download="FAB-controls-90s.mp4">영상 다운로드</a><a href="https://fab.semitoon.com/" target="_blank" rel="noopener">팹뿌 하러 가기 ↗</a></div>
+  <p class="listen">누를 곳은 연두색으로! 자막만 보고 따라 할 수 있어요.</p>
+  <p id="seek-status" class="note" role="status" hidden></p>
+  <div class="actions"><a href="FAB-controls-92s-native.mp4?v={{VIDEO_REVISION}}" download="FAB-controls-92s-native.mp4">영상 다운로드</a><a href="https://fab.semitoon.com/" target="_blank" rel="noopener">팹뿌 하러 가기 ↗</a></div>
   <details open><summary>필요한 조작만 다시 보기</summary><div class="chapters">{{CHAPTERS}}</div></details>
-  <p class="note">게임 모델과 동작으로 조작 순서를 재현한 안내영상입니다.<br>빠르게 보고, 헷갈린 부분은 위에서 골라 다시 보세요.</p>
-  <nav class="archive" aria-label="이전 영상"><a href="2026-11-09.html">30초 업데이트 광고</a><a href="2026-11-02.html">58초 첫 광고</a><a href="FAB-controls-90s.ko.srt" download>한국어 자막 파일</a></nav>
+  <p class="note">게임 조작창 촬영과 게임 모델 시연을 합친 안내영상입니다.<br>내레이션 없이 짧은 자막·음악·효과음으로 설명해요.<br>헷갈린 부분은 위에서 골라 다시 보세요.</p>
+  <nav class="archive" aria-label="이전 영상"><a href="2026-11-09.html">30초 업데이트 광고</a><a href="2026-11-02.html">58초 첫 광고</a><a href="FAB-controls-92s-native.ko.srt" download>한국어 자막 파일</a></nav>
 </main>
 <script>
 const video=document.querySelector('#tutorial');
-document.querySelectorAll('[data-seek]').forEach(button=>button.addEventListener('click',()=>{
-  video.currentTime=Number(button.dataset.seek);
-  video.play().catch(()=>{});
+const chapterButtons=[...document.querySelectorAll('[data-seek]')],seekStatus=document.querySelector('#seek-status');
+let seekableFile=null,prepareFile=null;
+// Some static hosts return 200 for byte-range requests. A local Blob permits
+// reliable seeking in that case; retain one in memory only, never persist it.
+async function prepareSeeking(){
+  if(seekableFile)return;
+  if(!prepareFile)prepareFile=(async()=>{
+    const response=await fetch(video.querySelector('source').src,{credentials:'same-origin'});
+    if(!response.ok)throw new Error('video download failed');
+    const data=await response.blob();
+    const loaded=new Promise((resolve,reject)=>{
+      const cleanup=()=>{video.removeEventListener('loadedmetadata',ok);video.removeEventListener('error',fail);};
+      const ok=()=>{cleanup();resolve();},fail=()=>{cleanup();reject(new Error('video load failed'));};
+      video.addEventListener('loadedmetadata',ok);video.addEventListener('error',fail);
+    });
+    seekableFile=URL.createObjectURL(new Blob([data],{type:'video/mp4'}));
+    video.src=seekableFile;video.load();await loaded;
+  })().catch(error=>{prepareFile=null;seekableFile=null;throw error;});
+  await prepareFile;
+}
+chapterButtons.forEach(button=>button.addEventListener('click',async()=>{
+  const position=Number(button.dataset.seek);
+  chapterButtons.forEach(b=>b.disabled=true);video.pause();
+  seekStatus.hidden=false;seekStatus.textContent='선택한 장면을 준비하고 있어요…';
   video.scrollIntoView({behavior:'smooth',block:'start'});
+  try{
+    if(!seekableFile&&(!video.seekable.length||video.seekable.end(video.seekable.length-1)<position))await prepareSeeking();
+    video.currentTime=position;
+    try{await video.play();seekStatus.hidden=true;}
+    catch{seekStatus.textContent='선택한 장면으로 이동했어요. 영상의 재생 버튼을 눌러주세요.';}
+  }catch{seekStatus.textContent='영상을 불러오지 못했어요. 다시 누르거나 아래에서 다운로드해 주세요.';}
+  finally{chapterButtons.forEach(b=>b.disabled=false);}
 }));
 </script>
 </html>
