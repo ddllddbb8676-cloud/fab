@@ -1,5 +1,5 @@
-import {suitColor} from './cosmetics-catalog.js?v=67abbb4d1e8e';
-import {getCollectionItem} from './collection-catalog.js?v=67abbb4d1e8e';
+import {suitColor} from './cosmetics-catalog.js?v=9fb917d1ff19';
+import {getCollectionItem} from './collection-catalog.js?v=9fb917d1ff19';
 
 export function itemIcon(id) {
   if(getCollectionItem(id))return `<svg viewBox="0 0 48 48" aria-hidden="true"><image href="/assets/cosmetics/${id}-v1.webp" x="0" y="-6" width="48" height="60"/></svg>`;

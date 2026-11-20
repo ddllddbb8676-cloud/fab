@@ -29,6 +29,6 @@ export function createWardrobeView(THREE,canvas,name) {
     else if(animate)wasAnimating=true;
   }
   const observer=new ResizeObserver(draw);observer.observe(canvas);draw();frame=requestAnimationFrame(refresh);
-  return {setOutfit(outfit){appearance.setOutfit(outfit);wasAnimating=appearance.needsAnimation;draw();},setTitle(id){badge.setTitle(id);draw();},setSlot(slot){focus=slot==='beauty';angle=slot==='bag'?Math.PI-.3:-.25;draw();},rotate(){angle+=Math.PI/4;draw();},
+  return {setOutfit(outfit){appearance.setOutfit(outfit);wasAnimating=appearance.needsAnimation;draw();},setTitle(id){badge.setTitle(id);draw();},setRank(rank){badge.setRank(rank);draw();},setSlot(slot){focus=slot==='beauty';angle=slot==='bag'?Math.PI-.3:-.25;draw();},rotate(){angle+=Math.PI/4;draw();},
     dispose(){cancelAnimationFrame(frame);observer.disconnect();badge.dispose();appearance.dispose();avatar.dispose();floor.geometry.dispose();floor.material.dispose();renderer.dispose();}};
 }

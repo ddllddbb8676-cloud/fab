@@ -1,6 +1,6 @@
-import {createAvatar} from './avatar.js?v=67abbb4d1e8e';
-import {createAvatarAppearance} from './avatar-appearance.js?v=67abbb4d1e8e';
-import {createAvatarNameplate} from './avatar-nameplate.js?v=67abbb4d1e8e';
+import {createAvatar} from './avatar.js?v=9fb917d1ff19';
+import {createAvatarAppearance} from './avatar-appearance.js?v=9fb917d1ff19';
+import {createAvatarNameplate} from './avatar-nameplate.js?v=9fb917d1ff19';
 export function createWardrobeView(THREE,canvas,name) {
   const renderer=new THREE.WebGLRenderer({canvas,antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));renderer.outputColorSpace=THREE.SRGBColorSpace;
   const scene=new THREE.Scene();scene.background=new THREE.Color('#e8f0f0');
@@ -29,6 +29,6 @@ export function createWardrobeView(THREE,canvas,name) {
     else if(animate)wasAnimating=true;
   }
   const observer=new ResizeObserver(draw);observer.observe(canvas);draw();frame=requestAnimationFrame(refresh);
-  return {setOutfit(outfit){appearance.setOutfit(outfit);wasAnimating=appearance.needsAnimation;draw();},setTitle(id){badge.setTitle(id);draw();},setSlot(slot){focus=slot==='beauty';angle=slot==='bag'?Math.PI-.3:-.25;draw();},rotate(){angle+=Math.PI/4;draw();},
+  return {setOutfit(outfit){appearance.setOutfit(outfit);wasAnimating=appearance.needsAnimation;draw();},setTitle(id){badge.setTitle(id);draw();},setRank(rank){badge.setRank(rank);draw();},setSlot(slot){focus=slot==='beauty';angle=slot==='bag'?Math.PI-.3:-.25;draw();},rotate(){angle+=Math.PI/4;draw();},
     dispose(){cancelAnimationFrame(frame);observer.disconnect();badge.dispose();appearance.dispose();avatar.dispose();floor.geometry.dispose();floor.material.dispose();renderer.dispose();}};
 }

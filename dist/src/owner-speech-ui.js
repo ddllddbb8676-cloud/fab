@@ -1,4 +1,4 @@
-import {readSpeech, SPEECH_DURATION_MS, SPEECH_LIMIT} from './owner-speech.js?v=67abbb4d1e8e';
+import {readSpeech, SPEECH_DURATION_MS, SPEECH_LIMIT} from './owner-speech.js?v=9fb917d1ff19';
 
 export function createSpeechComposer({button, menuButton, command, canOpen, onToggle, toast, doc=document}) {
   let allowed=false, dialog, input, counter, submit, status, opener, composing=false, pending=false, generation=0;

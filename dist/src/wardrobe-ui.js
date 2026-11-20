@@ -1,9 +1,9 @@
-import {items,DEFAULT_OUTFIT} from './cosmetics-catalog.js?v=67abbb4d1e8e';
-import {itemIcon} from './icons.js?v=67abbb4d1e8e';
-import {createWardrobeView} from './wardrobe-view.js?v=67abbb4d1e8e';
-import {NICKNAME_TICKET_PRICE} from './nickname-policy.js?v=67abbb4d1e8e';
-import {SAFETY_PASS_PRICE,safetyPassCount} from './safety-pass.js?v=67abbb4d1e8e';
-import {createTitlePicker} from './title-picker.js?v=67abbb4d1e8e';
+import {items,DEFAULT_OUTFIT} from './cosmetics-catalog.js?v=9fb917d1ff19';
+import {itemIcon} from './icons.js?v=9fb917d1ff19';
+import {createWardrobeView} from './wardrobe-view.js?v=9fb917d1ff19';
+import {NICKNAME_TICKET_PRICE} from './nickname-policy.js?v=9fb917d1ff19';
+import {SAFETY_PASS_PRICE,safetyPassCount} from './safety-pass.js?v=9fb917d1ff19';
+import {createTitlePicker} from './title-picker.js?v=9fb917d1ff19';
 function recordUsageEvent(kind, details) {
   try { window.__fabTelemetry?.record(kind, details); } catch {}
 }
@@ -11,7 +11,7 @@ export function createWardrobe({THREE,button,command,connected,getName,onOpen,on
   const dialog=document.createElement('dialog');dialog.className='wardrobe';dialog.setAttribute('aria-labelledby','wardrobe-title');
   dialog.innerHTML=`<header><h2 id="wardrobe-title">꾸미기</h2><strong class="wardrobe-balance">연결 중</strong><button class="wardrobe-close" type="button" aria-label="꾸미기 닫기">×</button></header><div class="wardrobe-preview"><canvas aria-label="내 캐릭터 시착 모습"></canvas><button class="wardrobe-rotate" type="button">돌려보기 ↻</button><span class="wardrobe-trial"></span></div><nav class="wardrobe-modes" aria-label="상점과 내 옷장"><button type="button" data-mode="shop">상점</button><button type="button" data-mode="wardrobe">내 옷장</button></nav><nav class="wardrobe-slots" aria-label="꾸미기 부위">${Object.entries({head:'머리',face:'안경',bag:'가방',suit:'방진복',beauty:'눈'}).map(([id,name])=>`<button type="button" data-slot="${id}">${name}</button>`).join('')}</nav><div class="wardrobe-items"></div><footer><p class="wardrobe-message" role="status">시착은 무료예요. 구매 후 착용할 수 있어요.</p><div><button type="button" class="wardrobe-remove">벗기</button><button type="button" class="wardrobe-buy">아이템 선택</button></div><small>파괴 5 · 수리 3 · FOUP 던지기 1 · 실제 OHT 탑승 10초마다 1칩</small></footer>`;
   const ticketRow=document.createElement('section');ticketRow.className='wardrobe-nickname';ticketRow.innerHTML='<div><b>닉네임 변경권</b><small class="wardrobe-nickname-note"></small></div><button type="button" class="wardrobe-nickname-buy"></button>';dialog.querySelector('footer').append(ticketRow);
-  const titleTab=document.createElement('button');titleTab.type='button';titleTab.dataset.mode='titles';titleTab.textContent='칭호';dialog.querySelector('.wardrobe-modes').append(titleTab);
+  const titleTab=document.createElement('button');titleTab.type='button';titleTab.dataset.mode='titles';titleTab.textContent='직급 · 칭호';dialog.querySelector('.wardrobe-modes').append(titleTab);
   const passRow=document.createElement('section');passRow.className='wardrobe-nickname wardrobe-safety-pass';passRow.innerHTML='<div><b>안전팀 패널티 해제 쿠폰</b><small class="wardrobe-pass-note"></small></div><button type="button" class="wardrobe-pass-buy">30칩 · 1장 구매</button>';ticketRow.before(passRow);
   const itemTab=document.createElement('button');itemTab.type='button';itemTab.dataset.slot='items';itemTab.textContent='아이템';dialog.querySelector('.wardrobe-slots').append(itemTab);
   const itemRoot=document.createElement('section');itemRoot.className='wardrobe-supplies';itemRoot.hidden=true;itemRoot.setAttribute('aria-label','쿠폰과 변경권');
@@ -19,11 +19,11 @@ export function createWardrobe({THREE,button,command,connected,getName,onOpen,on
   itemRoot.append(passRow,ticketRow,itemEmpty);dialog.querySelector('footer').before(itemRoot);
   dialog.querySelector('#wardrobe-title').textContent='상점 · 옷장';dialog.querySelector('.wardrobe-close').setAttribute('aria-label','상점 · 옷장 닫기');
   dialog.querySelector('[data-mode="wardrobe"]').textContent='옷장';dialog.querySelector('.wardrobe-slots').setAttribute('aria-label','상품 종류');
-  dialog.querySelector('.wardrobe-modes').setAttribute('aria-label','상점과 내 옷장, 칭호');
+  dialog.querySelector('.wardrobe-modes').setAttribute('aria-label','상점과 내 옷장, 직급과 칭호');
   const titleRoot=document.createElement('section');titleRoot.className='wardrobe-titles';titleRoot.hidden=true;dialog.querySelector('footer').before(titleRoot);
   document.body.append(dialog);const $=selector=>dialog.querySelector(selector);
   let wallet=null,nickname=null,outfit={...DEFAULT_OUTFIT},slot='head',mode='shop',selected=null,busy=false,view=null;
-  const titlePicker=createTitlePicker({root:titleRoot,command,connected,onChange:id=>view?.setTitle(id)});
+  const titlePicker=createTitlePicker({root:titleRoot,command,connected,onChange:(id,rank)=>{view?.setTitle(id);view?.setRank(rank);}});
   function message(text){$('.wardrobe-message').textContent=text;}
   function refresh(){
     $('.wardrobe-balance').textContent=wallet?(wallet.unlimited?'∞ 칩':`${wallet.chips.toLocaleString('ko-KR')} 칩`):'연결 중';
@@ -62,7 +62,7 @@ export function createWardrobe({THREE,button,command,connected,getName,onOpen,on
   }
   async function transact(kind,data){if(busy||!wallet)return;busy=true;refresh();try{const r=await command(kind,data);if(r.wallet)wallet=r.wallet;if(r.ok){outfit={...wallet.equipped};message(kind==='purchase'?'구매·착용했어요. 내 옷장에도 저장했어요.':'착용 상태를 저장했어요.');}else message(r.message||'잠시 후 다시 시도해 주세요.');}finally{busy=false;refresh();}}
   function close(){if(!dialog.open)return;dialog.close();view?.dispose();view=null;document.body.classList.remove('wardrobe-open');onClose();button.focus({preventScroll:true});}
-  button.addEventListener('click',()=>{if(onOpen()===false)return;outfit={...(wallet?.equipped||DEFAULT_OUTFIT)};selected=outfit[slot];dialog.showModal();document.body.classList.add('wardrobe-open');view=createWardrobeView(THREE,$('canvas'),getName());view.setSlot(mode==='titles'?'titles':slot);view.setTitle(titlePicker.titleId);refresh();if(mode==='shop')recordUsageEvent('shop_open');$('.wardrobe-close').focus();});
+  button.addEventListener('click',()=>{if(onOpen()===false)return;outfit={...(wallet?.equipped||DEFAULT_OUTFIT)};selected=outfit[slot];dialog.showModal();document.body.classList.add('wardrobe-open');view=createWardrobeView(THREE,$('canvas'),getName());view.setSlot(mode==='titles'?'titles':slot);view.setTitle(titlePicker.titleId);view.setRank(titlePicker.rank);refresh();if(mode==='shop')recordUsageEvent('shop_open');$('.wardrobe-close').focus();});
   $('.wardrobe-close').addEventListener('click',close);dialog.addEventListener('cancel',e=>{e.preventDefault();close();});
   $('.wardrobe-rotate').addEventListener('click',()=>view?.rotate());
   function tabMessage(){message(slot==='items'?(mode==='shop'?'구매한 아이템은 보관돼요. 필요한 때 사용하세요.':'보유 아이템이에요. 해제 쿠폰은 패널티 안내에서 사용하세요.'):(mode==='shop'?'미구매 아이템도 자유롭게 입어보세요.':'보유한 아이템만 모았어요. 무료로 갈아입으세요.'));}
@@ -85,5 +85,5 @@ export function createWardrobe({THREE,button,command,connected,getName,onOpen,on
     try{const r=await command('nickname-ticket-buy',{purchaseCount:nickname.purchaseCount});if(r.wallet)wallet=r.wallet;if(r.nickname)nickname=r.nickname;purchased=r.ok;message(r.ok?'닉네임 변경권을 구매했어요.':'변경권 구매: '+(r.message||'잠시 후 다시 시도해 주세요.'));}finally{busy=false;refresh();}
     if(purchased&&dialog.open){close();onChangeName();}
   });
-  return {setWallet(next){wallet=next;refresh();},setNickname(next){nickname=next;refresh();},setTitles:next=>titlePicker.setState(next),setTitleProgress:(count,id)=>titlePicker.setProgress(count,id),refresh,close,get isOpen(){return dialog.open;}};
+  return {setWallet(next){wallet=next;refresh();},setNickname(next){nickname=next;refresh();},setTitles:next=>titlePicker.setState(next),setTitleProgress:(count,id,repaired)=>titlePicker.setProgress(count,id,repaired),refresh,close,get isOpen(){return dialog.open;}};
 }

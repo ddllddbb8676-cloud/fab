@@ -1,13 +1,14 @@
-import {createAvatarAppearance} from './avatar-appearance.js?v=67abbb4d1e8e';
-import {suitColor} from './cosmetics-catalog.js?v=67abbb4d1e8e';
-import {isSafety} from './safety-team.js?v=67abbb4d1e8e';
-import { createAvatar } from './avatar.js?v=67abbb4d1e8e';
-import { createVisitorBadge } from './visitor-name.js?v=67abbb4d1e8e';
-import { getEmoApproach } from './emo-interaction.js?v=67abbb4d1e8e';
-import { machines } from './layout.js?v=67abbb4d1e8e';
-import { safetyColor, isSuitMesh } from './safety-team.js?v=67abbb4d1e8e';
-import {createEmoteView} from './emote-view.js?v=67abbb4d1e8e';
-import {npcDestructionTitle} from './destruction-titles.js?v=67abbb4d1e8e';
+import {createAvatarAppearance} from './avatar-appearance.js?v=9fb917d1ff19';
+import {suitColor} from './cosmetics-catalog.js?v=9fb917d1ff19';
+import {isSafety} from './safety-team.js?v=9fb917d1ff19';
+import { createAvatar } from './avatar.js?v=9fb917d1ff19';
+import { createVisitorBadge } from './visitor-name.js?v=9fb917d1ff19';
+import { getEmoApproach } from './emo-interaction.js?v=9fb917d1ff19';
+import { machines } from './layout.js?v=9fb917d1ff19';
+import { safetyColor, isSuitMesh } from './safety-team.js?v=9fb917d1ff19';
+import {createEmoteView} from './emote-view.js?v=9fb917d1ff19';
+import {repairRank} from './repair-ranks.js?v=9fb917d1ff19';
+import {npcDestructionTitle} from './destruction-titles.js?v=9fb917d1ff19';
 
 // A shared pool of articulated bodies; distant visitors use two tiny instances.
 export function createRemotePeople({THREE,scene,store,fleet=null,maxDetailed=40,cartPose=()=>null,cartGrip=()=>null}) {
@@ -33,7 +34,7 @@ export function createRemotePeople({THREE,scene,store,fleet=null,maxDetailed=40,
   function setViewerPrivileges(privileges){identifyNpcs=privileges?.unlimitedChips===true;for(const slot of pool)updateNpcMarker(slot);}
   function synchronize(rows) {
     const live=new Set(rows.map(r=>r.id));for(const id of actors.keys())if(!live.has(id))actors.delete(id);
-    for(const row of rows){let a=actors.get(row.id);if(!a){a={...row,...roster.get(row.id)};actors.set(row.id,a);}if(a.phase!==row.phase&&row.phase?.startsWith('cart-'))a.time=row.time;a.goal=row;Object.assign(a,{role:row.role,phase:row.phase,posture:row.posture,targetId:row.targetId,vehicleId:row.vehicleId,carrying:row.carrying,hidden:row.hidden,caughtLeft:row.caughtLeft||0,catchLeft:row.catchLeft||0,dizzyLeft:row.dizzyLeft||0,titleId:row.titleId??npcDestructionTitle(row.id,row.role)?.id??''});}
+    for(const row of rows){let a=actors.get(row.id);if(!a){a={...row,...roster.get(row.id)};actors.set(row.id,a);}if(a.phase!==row.phase&&row.phase?.startsWith('cart-'))a.time=row.time;a.goal=row;Object.assign(a,{role:row.role,phase:row.phase,posture:row.posture,targetId:row.targetId,vehicleId:row.vehicleId,carrying:row.carrying,hidden:row.hidden,caughtLeft:row.caughtLeft||0,catchLeft:row.catchLeft||0,dizzyLeft:row.dizzyLeft||0,repairedCount:row.repairedCount||0,titleId:row.titleId??npcDestructionTitle(row.id,row.role)?.id??''});}
   }
   function update(dt,camera,overview=false) {
     const f=1-Math.exp(-dt*14),visible=[];
@@ -65,6 +66,7 @@ export function createRemotePeople({THREE,scene,store,fleet=null,maxDetailed=40,
       slot.appearance.setOutfit(a.outfit,a.role);
       if(slot.badge.name!==a.name)slot.badge.rename(a.name??'방문자');
       slot.badge.setTitle(a.titleId);
+      slot.badge.setRank(/^visitor:/.test(a.id)?repairRank(a.repairedCount,a.titleId==='operator'):null);
       slot.clock+=dt;const near=a.distance<14;
       if(slot.clock>=(near?1/30:1/15)){
         const avatar=slot.avatar;avatar.root.position.set(a.x,a.y,a.z);avatar.root.userData.cartGrip=cartGrip(a.id);avatar.root.userData.caughtLeft=a.caughtLeft;avatar.root.userData.catchLeft=a.catchLeft;avatar.root.userData.dizzyLeft=a.dizzyLeft;avatar.root.userData.cartUnload=a.phase==='cart-unload'?Math.min(1,a.time/.8):a.phase==='cart-stow'?Math.max(0,1-a.time/.5):0;

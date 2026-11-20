@@ -2,7 +2,7 @@ import {findTitle} from './destruction-titles.js';
 // A transparent, camera-facing name that clears the visible head and headwear.
 export function createAvatarNameplate(THREE, scene, name, { resident = false, screenLabel = false } = {}) {
   const canvas = document.createElement('canvas'); canvas.width = 512; canvas.height = 96;
-  const context = canvas.getContext('2d');let title=null,npcMarker=false,texture=makeTexture();
+  const context = canvas.getContext('2d');let title=null,rank=null,npcMarker=false,texture=makeTexture();
   function makeTexture(){const value=new THREE.CanvasTexture(canvas);value.colorSpace=THREE.SRGBColorSpace;value.minFilter=THREE.LinearFilter;value.generateMipmaps=false;return value;}
   const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: resident, depthWrite: false, toneMapped: false, fog: false });
   const sprite = new THREE.Sprite(material); sprite.name = 'visitor-nickname'; sprite.renderOrder = 20;
@@ -11,16 +11,28 @@ export function createAvatarNameplate(THREE, scene, name, { resident = false, sc
   const label=screenLabel?document.createElement('span'):null;let visible=false;
   if(label){label.className='visitor-nickname-label';label.hidden=true;label.setAttribute('aria-hidden','true');document.body.append(label);}
   function rename(next) {
-    name = next;const band=title?80:0,width=npcMarker?768:512;
+    name = next;const band=title?80:0,width=npcMarker||rank?768:512;
     if(canvas.height!==96+band||canvas.width!==width){canvas.width=width;canvas.height=96+band;texture.dispose();texture=makeTexture();material.map=texture;material.needsUpdate=true;}
     context.clearRect(0, 0, canvas.width, canvas.height);
-    if(label){label.textContent=name;label.setAttribute('data-title',title?`〈${title.name}〉`:'');label.style.setProperty('--title-color',title?.color||'#204e55');}
+    if(label){
+      label.textContent=name;
+      if(rank){const badge=document.createElement('span');badge.className='visitor-rank';badge.textContent=rank.name;label.prepend(badge);}
+      label.setAttribute('data-title',title?`〈${title.name}〉`:'');label.style.setProperty('--title-color',title?.color||'#204e55');
+    }
     context.textAlign = 'center'; context.textBaseline = 'middle';
     context.lineJoin = 'round'; context.lineWidth = 5; context.strokeStyle = '#f4fbf8';
     if(title){context.font='700 38px "Noto Sans KR", system-ui, sans-serif';context.strokeText(`〈${title.name}〉`,width/2,36,480);context.fillStyle=title.color;context.fillText(`〈${title.name}〉`,width/2,36,480);}
     context.font = '700 48px "Noto Sans KR", system-ui, sans-serif';
-    context.strokeText(name, width/2, 48+band, 480);
-    context.fillStyle = '#204e55'; context.fillText(name, width/2, 48+band, 480);
+    const nameWidth=rank?Math.min(480,context.measureText(name).width):0;
+    const rankWidth=rank?rank.name.length*32+24:0,rankGap=rank?16:0;
+    const nameX=width/2+(rankWidth+rankGap)/2;
+    context.strokeText(name, nameX, 48+band, 480);
+    context.fillStyle = '#204e55'; context.fillText(name, nameX, 48+band, 480);
+    if(rank){
+      const x=width/2-(nameWidth+rankWidth+rankGap)/2;
+      context.beginPath();context.roundRect(x,24+band,rankWidth,48,10);context.fillStyle='#e1ebef';context.fill();
+      context.font='700 32px "Noto Sans KR", system-ui, sans-serif';context.fillStyle='#405d68';context.fillText(rank.name,x+rankWidth/2,49+band);
+    }
     if(npcMarker){
       // Extra transparent space keeps the name/title centered at their original size.
       const x=width/2+Math.min(480,context.measureText(name).width)/2+12;
@@ -31,6 +43,7 @@ export function createAvatarNameplate(THREE, scene, name, { resident = false, sc
   }
   rename(name);
   return { rename, sprite,
+    setRank(next){if(next===rank)return;rank=next;rename(name);},
     setTitle(id){const next=findTitle(id);if(next===title)return;title=next;rename(name);},
     setNpcMarker(enabled){const next=enabled===true&&!label;if(next===npcMarker)return;npcMarker=next;rename(name);},
     update(avatar, posture, { headwear = [], camera = null, viewportHeight = globalThis.innerHeight||844 } = {}) {

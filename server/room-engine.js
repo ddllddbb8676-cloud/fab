@@ -290,7 +290,7 @@ export function createRoom({random=Math.random,onCatch=()=>{},onProfileChange=()
   function titleState(id) {
     const p=players.get(id);if(!p)return null;
     const operator=hasUnlimitedChips(id,ownerId);
-    return {preference:p.titlePreference,brokenCount:p.brokenCount,operator,titleId:(operator?OPERATOR_TITLE:destructionTitle(p.brokenCount,p.titlePreference))?.id??''};
+    return {preference:p.titlePreference,brokenCount:p.brokenCount,repairedCount:p.repairedCount,operator,titleId:(operator?OPERATOR_TITLE:destructionTitle(p.brokenCount,p.titlePreference))?.id??''};
   }
   function nicknameState(id) {
     const p=players.get(id);if(!p)return null;

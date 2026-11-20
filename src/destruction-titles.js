@@ -10,6 +10,10 @@ export const DESTRUCTION_TITLES = Object.freeze([
   {id:'break-500', count:500, name:'팹의 재앙', color:'#a64b17'},
   {id:'break-1000', count:1000, name:'전설의 파괴왕', color:'#886015'},
   {id:'break-3000', count:3000, name:'FAB 파괴신', color:'#b5253c'},
+  {id:'break-5000', count:5000, name:'FAB 멸망신', color:'#9b234b'},
+  {id:'break-10000', count:10000, name:'양산의 종말', color:'#822b68'},
+  {id:'break-15000', count:15000, name:'실리콘 문명 파괴자', color:'#67328b'},
+  {id:'break-20000', count:20000, name:'반도체 아포칼립스', color:'#52218b'},
 ].map(Object.freeze));
 export const OPERATOR_TITLE = Object.freeze({id:'operator', name:'운영자', color:'#b02d78'});
 const titles = new Map([...DESTRUCTION_TITLES, OPERATOR_TITLE].map(title=>[title.id,title]));

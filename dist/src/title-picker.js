@@ -1,17 +1,20 @@
-import {DESTRUCTION_TITLES,OPERATOR_TITLE,findTitle,destructionTitle,destructionCount} from './destruction-titles.js?v=67abbb4d1e8e';
+import {repairRank,nextRepairRank,repairCount,REPAIR_RANKS} from './repair-ranks.js?v=9fb917d1ff19';
+import {DESTRUCTION_TITLES,OPERATOR_TITLE,findTitle,destructionTitle,destructionCount} from './destruction-titles.js?v=9fb917d1ff19';
 
 export function createTitlePicker({root,command,connected,onChange=()=>{}}) {
   let state=null,busy=false,notice='';
-  root.innerHTML='<p class="title-progress"></p><div class="title-options"></div><div class="title-choices"></div><p class="title-message" role="status"></p>';
+  root.innerHTML='<p class="rank-progress"></p><details class="rank-guide"><summary>직급 기준 보기</summary><p>'+REPAIR_RANKS.map(r=>r.name+' '+r.count.toLocaleString('ko-KR')+'대').join(' · ')+' · 회장: 세미 전용</p></details><p class="title-progress"></p><div class="title-options"></div><div class="title-choices"></div><p class="title-message" role="status"></p>';
   const $=selector=>root.querySelector(selector);
   const number=n=>n.toLocaleString('ko-KR');
   function refresh() {
     if(root.hidden)return;
     const ready=Boolean(state&&connected()),count=destructionCount(state?.brokenCount),next=DESTRUCTION_TITLES.find(t=>t.count>count);
     $('.title-progress').textContent=!state?'칭호 정보를 불러오는 중이에요.':state.operator?'FAB짱 세미 전용 칭호예요.':`누적 파괴 ${number(count)}대 · ${next?next.name+'까지 '+number(next.count-count)+'대':'모든 파괴 칭호를 모았어요!'}`;
+    const repaired=repairCount(state?.repairedCount),rank=repairRank(repaired,state?.operator),nextRank=nextRepairRank(repaired);
+    $('.rank-progress').textContent=!state?'직급 정보를 불러오는 중이에요.':state.operator?'회장 · FAB짱 세미 전용':`${rank.name} · 누적 수리 ${number(repaired)}대 · ${nextRank?nextRank.name+'까지 '+number(nextRank.count-repaired)+'대':'최고 직급 달성'}`;
     const disabled=busy||!ready?' disabled':'';
     const current=destructionTitle(count);
-    $('.title-options').innerHTML=state?.operator?'':`<button type="button" data-title="auto" aria-pressed="${state?.preference==='auto'}"${disabled}>최고 칭호 자동 표시<small>${current?.name??'1대부터 첫 칭호 획득'}</small></button><button type="button" data-title="hidden" aria-pressed="${state?.preference==='hidden'}"${disabled}>칭호 숨기기<small>닉네임만 표시</small></button>`;
+    $('.title-options').innerHTML=state?.operator?'':`<button type="button" data-title="auto" aria-pressed="${state?.preference==='auto'}"${disabled}>최고 칭호 자동 표시<small>${current?.name??'1대부터 첫 칭호 획득'}</small></button><button type="button" data-title="hidden" aria-pressed="${state?.preference==='hidden'}"${disabled}>칭호 숨기기<small>직급과 닉네임 표시</small></button>`;
     const choices=state?.operator?[OPERATOR_TITLE]:DESTRUCTION_TITLES;
     $('.title-choices').innerHTML=choices.map(title=>{
       const unlocked=Boolean(state)&&(state.operator||count>=title.count),shown=state?.titleId===title.id;
@@ -21,8 +24,8 @@ export function createTitlePicker({root,command,connected,onChange=()=>{}}) {
   }
   function setState(next) {
     if(!next)return;
-    if(state&&state.preference===next.preference&&state.brokenCount===next.brokenCount&&state.titleId===next.titleId&&state.operator===next.operator)return;
-    state={...next};notice='';onChange(state.titleId);refresh();
+    if(state&&state.preference===next.preference&&state.brokenCount===next.brokenCount&&state.titleId===next.titleId&&state.operator===next.operator&&state.repairedCount===next.repairedCount)return;
+    state={...next};notice='';onChange(state.titleId,repairRank(state.repairedCount,state.operator));refresh();
   }
   root.addEventListener('click',async event=>{
     const button=event.target.closest('[data-title]');
@@ -37,5 +40,5 @@ export function createTitlePicker({root,command,connected,onChange=()=>{}}) {
     } catch {notice='연결을 확인한 뒤 다시 골라 주세요.';}
     finally {busy=false;refresh();}
   });
-  return {refresh,setState,setProgress(brokenCount,titleId){setState({...state,preference:state?.preference??'auto',operator:state?.operator??titleId==='operator',brokenCount,titleId:titleId||''});},get titleId(){return state?.titleId||'';}};
+  return {refresh,setState,setProgress(brokenCount,titleId,repairedCount=state?.repairedCount??0){setState({...state,preference:state?.preference??'auto',operator:state?.operator??titleId==='operator',brokenCount,repairedCount,titleId:titleId||''});},get rank(){return state?repairRank(state.repairedCount,state.operator):null;},get titleId(){return state?.titleId||'';}};
 }

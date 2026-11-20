@@ -16,6 +16,20 @@ function harness(maxDetailed=32,cartPose){
   return {view,scene,camera,rows,heads,actor,dispose(){view.dispose();reference.dispose();globalThis.document=oldDocument;}};
 }
 
+test('pooled badges show live repair promotions and clear chairman when reused by another human',()=>{
+  const h=harness(1);try{
+    const rows=[{...h.actor('visitor:owner',-1,'stand'),titleId:'operator'}, {...h.actor('visitor:guest',1,'stand'),repairedCount:499,titleId:'break-20000'}];
+    h.view.setRoster(rows.map(a=>[a.id,a.name,a.role]));h.view.synchronize(rows);
+    h.camera.position.set(-4,2,3);h.view.update(1/30,h.camera);
+    const draws=()=>h.scene.children.find(o=>o.name==='visitor-nickname').material.map.image.draws;
+    assert.ok(draws().includes('회장'));
+    h.camera.position.set(4,2,3);h.view.update(1/30,h.camera);
+    assert.ok(!draws().includes('회장'));assert.ok(draws().includes('대리'));
+    rows[1].repairedCount=500;h.view.synchronize(rows);h.view.update(1/30,h.camera);
+    assert.ok(draws().includes('책임'));assert.ok(!draws().includes('대리'));
+  }finally{h.dispose();}
+});
+
 test('remote safety avatars show angry and sway through instanced bodies without lending the reaction to another visitor',()=>{
   const h=harness();try{
     h.camera.position.set(0,2,3);h.camera.lookAt(0,1,0);
@@ -118,7 +132,8 @@ test('pooled NPC markers are removed before the same body draws a human or becom
       const npc=i%2===0;h.camera.position.set(npc?-4:4,2,3);h.view.update(1/60,h.camera);
       const badge=h.scene.children.find(o=>o.name==='visitor-nickname');
       assert.equal(badge.material.map.image.draws.includes('NPC'),npc);
-      assert.equal(badge.material.map.image.width,npc?768:512);
+      assert.equal(badge.material.map.image.draws.includes('인턴'),!npc);
+      assert.equal(badge.material.map.image.width,768);
     }
     h.camera.position.set(-4,2,3);h.view.update(1/60,h.camera);
     const badge=h.scene.children.find(o=>o.name==='visitor-nickname');assert.ok(badge.material.map.image.draws.includes('NPC'));

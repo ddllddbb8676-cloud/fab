@@ -12,6 +12,7 @@ import {npcOutfit} from './npc-outfits.js';
 import {createWardrobeNotice,WARDROBE_NOTICE,WARDROBE_NOTICE_DURATION} from './wardrobe-notice.js';
 import {createAvatarAppearance} from './avatar-appearance.js';
 import {createWardrobe} from './wardrobe-ui.js';
+import {repairRank} from './repair-ranks.js';
 import {destructionTitle,findTitle} from './destruction-titles.js';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -499,9 +500,12 @@ function toast(text,duration=3200) { lastToastAt=performance.now(); $('zone-toas
 function updatePersonalStats(next) {
   const broken=next.brokenCount||0,repaired=next.repairedCount||0;
   if(personalStatsLoaded&&broken===personalStats.brokenCount&&repaired===personalStats.repairedCount)return;
+  const previousRank=repairRank(personalStats.repairedCount);
+  if(personalStatsLoaded&&repaired>personalStats.repairedCount&&visitorBadge.titleId!=='operator'&&repairRank(repaired)!==previousRank)toast(`승진! ${repairRank(repaired).name}이 되었습니다 🎉`);
   personalStatsLoaded=true;
   personalStats.brokenCount=broken;personalStats.repairedCount=repaired;
   if(!connectionConfig)visitorBadge.setTitle(destructionTitle(broken)?.id);
+  visitorBadge.setRank(repairRank(repaired,visitorBadge.titleId==='operator'));
   $('personal-broken').textContent=String(broken);$('personal-repaired').textContent=String(repaired);
   $('personal-stats').setAttribute('aria-label',`내 기록: 부순 장비 ${broken}대, 고친 장비 ${repaired}대`);
 }
@@ -730,7 +734,7 @@ const speechBubble=createSpeechBubbles({THREE,getAnchor:(speaker,point)=>{
   return remotePeople?.speechAnchor(speaker,point,mode==='overview'||eventCamera?.active);
 }});
 function applyNickname(nickname){wardrobe.setNickname(nickname);nicknameUI.sync(nickname);}
-function applyTitles(titles){wardrobe.setTitles(titles);visitorBadge.setTitle(titles.titleId);}
+function applyTitles(titles){wardrobe.setTitles(titles);visitorBadge.setTitle(titles.titleId);visitorBadge.setRank(repairRank(titles.repairedCount,titles.operator));}
 eventCamera=createEventCamera({camera,bays,onOverview:open=>{
   const top=open||mode==='overview';roof.visible=walls.visible=!top;airShower.root.visible=!top;
   bayLighting.setOverview(top);restAreaView.setOverview(top);bayWhiteMask.setOverview(top);railOverview.visible=top;scene.fog.density=top?.0015:.0063;
@@ -790,7 +794,7 @@ if(!connectionConfig) {
 function updateSafetyState(next) {
   if(!next)return;if(next.dizzyLeft>0&&!catchReaction?.dizzy)playActions?.clearPending();catchReaction?.receive(next);const previous=safetyState;
   if(connectionConfig)visitorEmote.set(next.emote,next.emoteSeq,next.emoteLeft,'self',next.dizzyLeft>0);
-  if(connectionConfig){updatePersonalStats(next);visitorBadge.setTitle(next.titleId);wardrobe.setTitleProgress(next.brokenCount,next.titleId);}
+  if(connectionConfig){updatePersonalStats(next);visitorBadge.setTitle(next.titleId);visitorBadge.setRank(repairRank(next.repairedCount,next.titleId==='operator'));wardrobe.setTitleProgress(next.brokenCount,next.titleId,next.repairedCount);}
   safetyState={role:next.role||'visitor',penalty:next.penalty||0,caught:next.safetyCatchCount||0};explorer.state.penalty=safetyState.penalty;
   if(isSafety(safetyState.role)&&explorer.state.emoInteraction)explorer.cancelEmo('safety-duty');
   if(isSafety(safetyState.role)&&explorer.state.position.y<.5&&isRestArea(explorer.state.position,SAFETY_CLEARANCE)){
